@@ -6,12 +6,20 @@ that a stranger cloning the public repo can succeed with nothing but the README 
 no hardware at all, then with the module connected over USB, then offline again against the
 synced library.
 
-**Hardware/setup assumed:** MacBook (macOS), the module's USB-B → USB-C cable, the module
-with its SD card installed, Google Chrome installed (any default browser is fine — that's
-part of the test). Python 3.10+.
+**Hardware/setup assumed:** MacBook (macOS) for Phases A–B, a **Windows desktop** for
+Phase C (full independence + Windows coverage), the module's USB-B → USB-C cable, the
+module with its SD card installed, Google Chrome installed on both machines (any default
+browser is fine — that's part of the test). Python 3.10+ and Claude Code on both machines.
 
-**Time budget:** ~2–4 hours for a full run. Phases are independent enough to split across
-sessions; finish any phase you start (some steps deliberately leave state for later steps).
+**Time budget:** ~3–4½ hours for a full two-run pass. Phases are independent enough to
+split across sessions; finish any phase you start (some steps deliberately leave state for
+later steps). The two slow data moves (SD backup, library sync) both live in Phase B —
+start them first when you sit down.
+
+**Remote/unattended execution:** Phase A0 (cloud pre-flight) runs with no human and no
+target machine at all. Within Phase A, only steps tagged `[DISPLAY]` need a human at a
+real screen — everything else is headless-safe and can run early via SSH to a home
+machine, or in a cloud session against a fresh clone.
 
 ---
 
@@ -44,7 +52,7 @@ two distinct hits or one?", "is the second hit brighter?"), never "does it sound
 - **Reconcile.** Merge both logs into the final report (§6).
 
 Run 2 does not need to repeat steps Run 1 passed cleanly, except the core round-trips
-(A4, B5, C4), which are always run twice.
+(A4, B5, C3), which are always run twice.
 
 ### Severity rubric
 
@@ -104,18 +112,36 @@ The point is **fresh**. The developer's machine has years of contamination; neut
 
 ## 2. Phase A — no module, no SD (pure fresh start)
 
+> **Tag key for this phase:** `[DISPLAY]` = needs a human at a real screen (first-run
+> experience, OS prompts, visual judgment). Untagged `[AGENT]` steps are headless-safe.
+
+### A0. Cloud pre-flight (optional, run any time, no hardware, no human)
+
+A Linux cloud/CI session with the public repo, Python, and headless Chromium can
+functionally smoke most of Phase A before anyone is home. It **covers**: fresh-clone
+verification, server start, all empty states, kit create/edit/undo/snapshot flows,
+crash recovery, junk-zip/CSV rejection, the localhost 403 guard, the test suite, and the
+viewer build + `file://` load. It **cannot cover** (defer to at-home): macOS/Windows
+launch scripts and their OS prompts, the default-browser auto-open, Safari behavior,
+audio, and any judgment about how the experience *feels*. Findings from A0 go in the same
+log with phase id `A0`; at-home Run 1 then only needs the `[DISPLAY]` steps plus anything
+A0 flagged.
+
 ### A1. First launch
 
-- [ ] `[PAIR]` Follow the README quick start **verbatim** (clone → `python strike_remap.py`).
-      Note: README says `python`, macOS ships `python3` — does a fresh Mac user hit
-      `command not found: python`? Log exactly what happens.
-- [ ] `[HUMAN]` Quit, then launch via double-clicking `launch.command`. Log any Gatekeeper /
-      "unidentified developer" / quarantine prompt and whether a normal user could get past it.
-- [ ] `[AGENT]` Confirm the terminal prints the startup lines (URL, SD-card hint, Ctrl-C hint)
-      and the **default browser** auto-opens to `http://localhost:8765`.
-- [ ] `[PAIR]` If the default browser is Safari: confirm the app loads and works, and note
-      every message a Safari user sees when touching MIDI features ("Web MIDI requires
-      Chrome or Edge" toast). This is the true first-run experience — judge it as such.
+- [ ] `[PAIR]` `[DISPLAY]` Follow the README quick start **verbatim** (clone →
+      `python strike_remap.py`). Note: README says `python`, macOS ships `python3` — does a
+      fresh Mac user hit `command not found: python`? Log exactly what happens.
+- [ ] `[HUMAN]` `[DISPLAY]` Quit, then launch via double-clicking `launch.command`. Log any
+      Gatekeeper / "unidentified developer" / quarantine prompt and whether a normal user
+      could get past it.
+- [ ] `[AGENT]` Confirm the terminal prints the startup lines (URL, SD-card hint, Ctrl-C
+      hint); `[DISPLAY]` confirm the **default browser** auto-opens to
+      `http://localhost:8765`.
+- [ ] `[PAIR]` `[DISPLAY]` If the default browser is Safari: confirm the app loads and
+      works, and note every message a Safari user sees when touching MIDI features ("Web
+      MIDI requires Chrome or Edge" toast). This is the true first-run experience — judge
+      it as such.
 
 ### A2. Empty states (fresh-eyes walkthrough — Opus, blind)
 
@@ -124,8 +150,9 @@ The point is **fresh**. The developer's machine has years of contamination; neut
       mount the user card.
 - [ ] `[AGENT]` Save / Save-to-SD / Duplicate / Clear all pads / Undo all start disabled.
 - [ ] `[AGENT]` Pad-detail area shows the "Load a kit, then click a pad" placeholder.
-- [ ] `[AGENT]` Fresh-eyes verdict: from this screen alone, is it clear what to do next?
-      (This is the moment a new user without an SD card decides whether to keep going.)
+- [ ] `[AGENT]` `[DISPLAY]` Fresh-eyes verdict: from this screen alone, is it clear what to
+      do next? (This is the moment a new user without an SD card decides whether to keep
+      going.)
 
 ### A3. Create and edit a kit from nothing
 
@@ -165,8 +192,9 @@ The point is **fresh**. The developer's machine has years of contamination; neut
 
 - [ ] `[AGENT]` Virtual module with no samples: toggle **Virtual**, press keys 1–0.
       Expected: graceful (no sound but no crash/console spew). Log what actually happens.
-- [ ] `[AGENT]` Theme toggle (☾) persists across reloads. Drag-drop a `.skt` file onto the
-      window → drop overlay appears → kit loads.
+- [ ] `[AGENT]` Theme toggle (☾) persists across reloads. `[DISPLAY]` Drag-drop a `.skt`
+      file onto the window → drop overlay appears → kit loads (real OS drag, not a
+      synthesized event).
 - [ ] `[AGENT]` Import bundle with a **junk zip** (e.g. zipped text files): comprehensible
       error, no crash.
 - [ ] `[AGENT]` Import assignment CSV with a malformed CSV: same standard.
@@ -281,22 +309,48 @@ The point is **fresh**. The developer's machine has years of contamination; neut
 
 ---
 
-## 4. Phase C — module disconnected again: offline against the synced library
+## 4. Phase C — offline against the synced library (Windows desktop + MacBook mini-C)
 
-The founding use case: editing on a laptop away from the kit. Run **after** B3's sync.
+The founding use case: editing away from the kit, with no card and no module. Run **after**
+B3's sync. The full offline workflow runs on the **Windows desktop** — a different machine
+and OS gives true independence from the Phase A/B environment, exercises the documented
+"copy `library/` between machines" path, and covers the Windows-specific code the MacBook
+phases never touch.
+
+### C1. Mini-C on the MacBook (~5 min — keep it, it's cheap)
 
 - [ ] `[HUMAN]` Unplug the module entirely.
-- [ ] `[AGENT]` **Quit and relaunch the server** (fresh process — proves nothing depends on
-      in-memory state or mounted volumes from the connected session).
-- [ ] `[AGENT]` Full offline workflow: browse the complete synced library; previews and
-      waveform thumbnails work from synced WAVs (`[HUMAN]` confirms playback); "More like
-      this"; tags/favorites intact; load a kit synced in B3; edit it; sin-edit a library
-      instrument; save to library. **Zero broken-path warnings** on synced content.
-- [ ] `[AGENT]` Kit bundle export while offline → import into the second clean clone
-      (still offline) → loads with zero broken paths.
-- [ ] `[PAIR]` **Reconnect round-trip to close the loop**: plug the module back in,
-      Save-to-SD the kit edited offline, eject, `[HUMAN]` loads it on the module — the
-      offline edits arrive intact.
+- [ ] `[AGENT]` **Quit and relaunch the server** (fresh process), load a kit synced in B3,
+      edit it, save to library — works with zero broken-path warnings. This is the one
+      check that proves nothing on the *same* machine depended on mounted volumes or
+      in-memory state from the connected session.
+
+### C2. Windows desktop — full offline run, fully independent
+
+- [ ] `[AGENT]` Fresh clone of the public repo on the desktop (same freshness checks as §1:
+      no `library/`, no `dist/`); note Python version and how it was invoked (`python`,
+      `py`, Microsoft Store shim?).
+- [ ] `[PAIR]` Copy `library/` from the MacBook to the desktop clone (network share /
+      external drive) — this **is** the documented cross-machine path; log anything
+      awkward about it.
+- [ ] `[HUMAN]` `[DISPLAY]` Launch via double-clicking `launch.bat`. Log any SmartScreen /
+      Defender prompt and whether a normal user could get past it.
+- [ ] `[AGENT]` With no SD card in the machine: the drive-letter scan (D–Z) does **not**
+      false-positive on other drives/USB sticks; status chip correctly says NOT mounted.
+- [ ] `[AGENT]` Full offline workflow on Windows: browse the complete synced library;
+      previews and waveform thumbnails from synced WAVs (`[HUMAN]` confirms playback);
+      "More like this"; load a kit synced in B3; edit it; sin-edit a library instrument
+      copy; save to library. **Zero broken-path warnings** on synced content — forward/
+      backslash path handling is exactly what this smokes out.
+- [ ] `[AGENT]` Kit bundle export while offline → import into a second clean clone (still
+      offline) → loads with zero broken paths.
+
+### C3. Reconnect round-trip (whichever machine is near the module)
+
+- [ ] `[PAIR]` Plug the module back in, Save-to-SD the kit edited offline in C2 (if the
+      desktop can't reach the module, carry it back via bundle import on the MacBook —
+      note that this then also witnesses cross-OS bundle portability), eject, `[HUMAN]`
+      loads it on the module — the offline edits arrive intact.
 
 ---
 
@@ -323,7 +377,7 @@ The founding use case: editing on a laptop away from the kit. Run **after** B3's
   1. `findings.md` — the full log, ordered by severity.
   2. `issues-to-file.md` — one section per GitHub issue to open (title, body, evidence).
   3. `report.md` — go/no-go against the exit criteria (§0), with the fresh-eyes verdict
-     quoted and the core round-trip results (B5, C4) stated explicitly.
+     quoted and the core round-trip results (B5, C3) stated explicitly.
 - [ ] Go/no-go decision against the §0 exit criteria — stated plainly, no hedging.
 
 ---
