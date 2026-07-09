@@ -2,7 +2,7 @@
 
 Community reverse-engineering reference for the Alesis Strike / Strike Pro module's kit
 (`.skt`) and instrument (`.sin`) file formats. Maintained as part of
-[strike_remap](README.md); verified against the module's 116 factory preset kits and
+[Strike Pro Remapper](README.md); verified against the module's 116 factory preset kits and
 1,749 factory instruments via byte-for-byte round-trip tests.
 
 **Confidence legend:**

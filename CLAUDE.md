@@ -110,10 +110,10 @@ LA_LEVEL_OFF    = 6    # uint8  — level 0-127
 LA_PAN_OFF      = 7    # int8   — pan -50 to +50  ✅ CONFIRMED (hard-left → 0xce = -50)
 LA_DECAY_OFF    = 8    # uint8  — Decay 0-99  ✅ CONFIRMED (screenshot: K1H Decay=99=payload[8])
 # off 9–10       — unknown
-LA_PITCH_OFF    = 11   # int8   — pitch semitones -12 to +12  ✅ STRONG EVIDENCE
+LA_PITCH_OFF    = 11   # int8   — pitch semitones -12 to +12  ✅ CONFIRMED via hex diff
 LA_FINE_OFF     = 12   # int8   — fine pitch -50 to +50 cents  ✅ CONFIRMED via hex diff
-LA_FCUT_OFF     = 13   # uint8  — Filter Cutoff 0-99  [LIKELY: SEVEN REC diff]
-LA_FFLAG_OFF    = 14   # uint8  — Filter Enable flag 0/1  [LIKELY]
+LA_FCUT_OFF     = 13   # uint8  — Filter Cutoff 0-99  ✅ CONFIRMED via hex diff
+LA_FFLAG_OFF    = 14   # uint8  — Filter Enable flag 0/1  ✅ CONFIRMED via hex diff
 LA_VEL_DEC_OFF  = 15   # uint8  — Velocity→Decay 0-127   ✅ CONFIRMED via hex diff
 LA_VEL_PCH_OFF  = 16   # uint8  — Velocity→Pitch 0-127   ✅ CONFIRMED via hex diff
 LA_VEL_FLT_OFF  = 17   # uint8  — Velocity→Filter 0-127  ✅ CONFIRMED via hex diff
@@ -121,17 +121,17 @@ LA_VEL_VOL_OFF  = 18   # uint8  — Velocity→Volume 0-127  ✅ CONFIRMED (scre
 # off 19–20      — unknown (off 20 = 127 in all kits seen)
 LA_LOOP_OFF     = 21   # uint8  — Loop mode 0=Off, 1=On  ✅ CONFIRMED via hex diff
 # off 22–23      — unknown
-LA_VEL_MIN_OFF  = 19   # uint8  — Layer A vel range min 0-127  [STRONG: mirrors LB off 39=XFADE_VEL]
-LA_VEL_MAX_OFF  = 20   # uint8  — Layer A vel range max 0-127  [STRONG: mirrors LB off 40=always 127]
+LA_VEL_MIN_OFF  = 19   # uint8  — Layer A vel range min 0-127  ✅ CONFIRMED (mirrors LB off 39=XFADE_VEL)
+LA_VEL_MAX_OFF  = 20   # uint8  — Layer A vel range max 0-127  ✅ CONFIRMED (mirrors LB off 40=always 127)
 LAYER_B_IDX_OFF = 24   # uint16 LE
 LB_LEVEL_OFF    = 26   # uint8
 LB_PAN_OFF      = 27   # int8   ✅ CONFIRMED (mirrors off 7)
 LB_DECAY_OFF    = 28   # uint8  — Decay 0-99  ✅ CONFIRMED (mirrors off 8)
 # off 29–30      — unknown
-LB_PITCH_OFF    = 31   # int8   ✅ STRONG EVIDENCE (mirrors off 11)
+LB_PITCH_OFF    = 31   # int8   ✅ CONFIRMED (mirrors off 11)
 LB_FINE_OFF     = 32   # int8   — fine pitch -50 to +50 cents  ✅ CONFIRMED (mirrors off 12)
-LB_FCUT_OFF     = 33   # uint8  [mirrors off 13]
-LB_FFLAG_OFF    = 34   # uint8  [mirrors off 14]
+LB_FCUT_OFF     = 33   # uint8  ✅ CONFIRMED (mirrors off 13)
+LB_FFLAG_OFF    = 34   # uint8  ✅ CONFIRMED (mirrors off 14)
 LB_VEL_DEC_OFF  = 35   # uint8  — Velocity→Decay  ✅ CONFIRMED by +20 symmetry from LA
 LB_VEL_PCH_OFF  = 36   # uint8  — Velocity→Pitch  ✅ CONFIRMED by symmetry
 LB_VEL_FLT_OFF  = 37   # uint8  — Velocity→Filter ✅ CONFIRMED by symmetry
@@ -525,11 +525,10 @@ CSS) is inlined; the bundle makes **zero** relative fetches (so `file://`'s fetc
 Everything in PLANNED.md easy/medium categories is done. See PLANNED.md for the full list.
 
 **Hardware-blocked items** (need module connected for hex diff verification):
-- Confirm pitch (off 11/31), decay (off 18/38), filter (off 13/14) by setting values on module
-  → save kit → `python tools/hex_explorer.py kit.skt <pad>` → compare bytes
-- Verify mute group encoding at off 56 (currently assumed 0x00–0x08 = groups 1–9)
-- Hunt unknown offsets: fine pitch, playback mode, MIDI channel, gate time, FX sends,
-  velocity-to-* params (Volume/Filter/Decay/Tune × 2 layers)
+- Enumerate the remaining reverb type indices (only 2=Big Gate, 3=Close Mic named) and
+  confirm the inferred FX type enum beyond the three hex-diff anchors (0, 1, 3)
+- Enumerate the EQ LF/HF frequency tables (only 4 index→Hz points known)
+- All per-pad and kit-FX offsets are already hardware-confirmed (May 2026) — see FORMAT.md
 
 ## SD card setup
 

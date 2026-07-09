@@ -862,6 +862,9 @@ function renderTrigModal() {
       Trigger settings (sensitivity, scan time, xTalk, trigger→MIDI mapping) live in the module's
       firmware — not on the SD card. This backs them up via MIDI SysEx and can restore them later.
       <b>Chrome/Edge only; module connected via USB.</b>
+      Capture and save are read-only and always safe. <b>Restore to module is experimental</b> —
+      it replays a captured dump verbatim; capture a known-good .syx backup first and only
+      restore dumps taken from your own module.
     </div>
     ${!connected ? `
       <button class="btn-primary" style="margin-top:10px;align-self:flex-start;" onclick="trigConnect()">Connect MIDI (SysEx)</button>`
