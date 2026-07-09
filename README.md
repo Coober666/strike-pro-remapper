@@ -1,9 +1,11 @@
 # Strike Pro Remapper
 
-![CI](https://github.com/Coober666/strike_remap/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml/badge.svg)
 
 **An offline kit and instrument editor for the Alesis Strike / Strike Pro drum module.**
-No module connection required. No install. One Python file.
+No module connection required. No install. No dependencies. One Python file.
+
+![Strike Pro Remapper — drum map, pad editor, and instrument browser](docs/screenshot.png)
 
 The official Strike Editor hasn't been updated since January 2018, requires the module
 plugged in via USB for every edit, and never worked reliably on modern macOS. This tool
@@ -13,7 +15,53 @@ everything it doesn't touch.
 
 > ⚠️ **Unofficial.** Not affiliated with Alesis or inMusic. The `.skt`/`.sin` formats are
 > reverse-engineered. Back up your SD card before writing to it. See
-> [Format status](#format-status) for what's hardware-confirmed vs. statistically inferred.
+> [Safety](#safety) and [Format status](#format-status) for exactly what is
+> hardware-confirmed and how your files are protected.
+
+## Quick start
+
+Requirements: **Python 3.10+**. Standard library only — there is nothing to `pip install`.
+
+```
+git clone https://github.com/Coober666/strike-pro-remapper
+cd strike-pro-remapper
+python strike_remap.py        # opens http://localhost:8765 in your browser
+```
+
+Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
+
+**With your SD card:** insert it and the app finds your kits and instruments automatically
+(volumes named `NO NAME` / `NO NAME 1`, or one folder level deep for Ventoy-style setups).
+Use **Sync full library from SD** to copy everything into `library/` so you can edit with
+no SD card present — e.g. on a laptop away from your kit.
+
+**Without an SD card:** the app runs entirely against a local `library/` folder
+(`kits/`, `instruments/`, `samples/`).
+
+Saving writes to the library and/or directly to the SD card; put the card back in the
+module and load the kit. (Live USB sync to the module is not supported — that protocol
+is still unmapped. See `RESEARCH.md`.)
+
+**Just want to look, not install anything?** Grab the read-only
+[Web Viewer](#web-viewer-read-only-zero-install) — a single HTML file that runs from a
+double-click.
+
+## How it compares to the official Strike Editor
+
+| | Official Strike Editor | Strike Pro Remapper |
+|---|---|---|
+| Works without the module connected | ❌ USB connection required for every edit | ✅ fully offline against SD card or local library |
+| Platform | Windows/macOS desktop app, last updated Jan 2018, unreliable on modern macOS | Anything that runs Python 3.10+ and a browser |
+| Startup | Multi-pass SD scan on every launch (notoriously slow) | Loads instantly; full-library sync is one click, in the background |
+| Undo | None | 20-step labeled undo **plus** a persistent kit time machine (snapshot, diff, restore) |
+| Velocity editing | Numeric 0–99 knobs | Visual velocity-zone lane and draggable response curves |
+| Copy / batch operations | None — set three toms one at a time | Copy/swap pads, batch edit, batch assign from CSV |
+| Broken sample paths | "Path not found," no remedy | Relink wizard with exact + fuzzy matching |
+| Kit sharing | Bare files with absolute paths that break on other machines | Self-contained bundles (kit + instruments + samples); also imports official-editor and commercial pack zips |
+| Finding sounds | Scroll the folder list | Search, tags, favorites, waveform thumbnails, audition at any velocity, **audio similarity search** |
+| Hear your kit while editing | Only by writing to SD and reloading the module | **Virtual module**: play the kit from the real pads (or keyboard) via Web MIDI + Web Audio |
+| Trigger settings backup | Not possible in any official tool | SysEx capture/save/restore over Web MIDI |
+| Format documentation | Closed | Open spec in [FORMAT.md](FORMAT.md), round-trip tested |
 
 ## Features
 
@@ -121,8 +169,10 @@ everything it doesn't touch.
 - **Trigger settings backup** (Tools menu) — the module's trigger config (sensitivity,
   scan time, xTalk, trigger→MIDI mapping) lives in firmware, not on the SD card, and no
   official tool can back it up. Press Send on the module and the app captures the SysEx
-  dump over Web MIDI; save/load it as `.syx` and restore it to the module verbatim.
-  Includes a hex inspector (xTalk RCV decoded; the rest awaits mapping). Chromium only.
+  dump over Web MIDI; save/load it as `.syx`. Capture and save are read-only and always
+  safe; **restore-to-module is experimental** — it replays a captured dump verbatim, so
+  keep a known-good backup and only restore dumps taken from your own module. Includes a
+  hex inspector (xTalk RCV decoded; the rest awaits mapping). Chromium only.
 - Dark/light theme, keyboard shortcuts, drag-and-drop kit loading
 
 **Web Viewer (read-only, zero-install)**
@@ -135,43 +185,31 @@ everything it doesn't touch.
   server for the read paths). No editing, no saving, no audio in v1 — stage 1 of the
   planned pure-browser port (see `PLANNED.md` § Architectural direction).
 
-## Quick start
+## Safety
 
-Requirements: **Python 3.10+**. No dependencies — standard library only.
+Reverse-engineered formats deserve paranoia. Here is how your files are protected:
 
-```
-git clone https://github.com/Coober666/strike_remap
-cd strike_remap
-python strike_remap.py        # opens http://localhost:8765 in your browser
-```
+- **Lossless round-trip, proven in CI.** Parse → rebuild reproduces the original file
+  byte-for-byte (`tools/test_roundtrip.py`, `tools/test_sin_roundtrip.py`) — verified
+  green across 133 kits and 1,749 instruments, including every factory preset.
+- **Only known offsets are ever written.** Bytes whose purpose isn't confirmed are
+  carried through untouched, never invented. Every user-visible parameter the app edits
+  is hardware-confirmed (see [Format status](#format-status)).
+- **Factory presets are read-only.** Instrument edits always target your local library
+  copy; the preset SD volume is never written.
+- **Undo, autosave, and snapshots.** 20-step in-memory undo, crash-recovery autosave,
+  and the kit time machine's persistent snapshots on every load/save.
+- **Local-only server.** The app binds `127.0.0.1` and rejects requests whose
+  Host/Origin isn't localhost, so a random webpage can't reach your kit files.
+- **Experimental features are labeled.** SysEx *restore-to-module* and the inferred
+  (not hex-diff-anchored) FX/reverb type names are marked as such in the UI.
 
-Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
-
-**With your SD card:** insert it and the app finds your kits and instruments automatically
-(volumes named `NO NAME` / `NO NAME 1`, or one folder level deep for Ventoy-style setups).
-Use **Sync full library from SD** to copy everything into `library/` so you can edit with
-no SD card present — e.g. on a laptop away from your kit.
-
-**Without an SD card:** the app runs entirely against `library/`:
-
-```
-library/
-  kits/            # .skt kit files
-  instruments/     # .sin instrument files (+ WAVs)
-  samples/         # WAVs synced from the SD card
-```
-
-Saving writes to the library and/or directly to the SD card; put the card back in the
-module and load the kit. (Live USB sync to the module is not supported — that protocol
-is still unmapped. See `RESEARCH.md`.)
+Still: **back up your SD card** before the first write. It's one copy command.
 
 ## Format status
 
 The `.skt`/`.sin` binary formats are undocumented; this project and prior community work
-have mapped them empirically. Every parser here is covered by round-trip tests
-(`tools/test_roundtrip.py`, `tools/test_sin_roundtrip.py`) proving that parse → rebuild
-reproduces the original file byte-for-byte — currently green across 133 kits and 1,749
-instruments, including every factory preset.
+have mapped them empirically.
 
 | Area | Status |
 |---|---|

@@ -245,22 +245,25 @@ LAYER_A_IDX_OFF = 4   # uint16 LE offset within payload for Layer A str index
 LAYER_B_IDX_OFF = 24  # uint16 LE offset within payload for Layer B str index
 NO_INSTRUMENT   = 0xFFFF
 
-# Additional payload offsets (relative to start of inst block payload)
+# Additional payload offsets (relative to start of inst block payload).
+# NOTE: every offset below is hardware-confirmed as of May 2026 (hex diff against
+# official-editor saves) — see FORMAT.md for the authoritative table. The bracketed
+# tags record how each one was originally discovered.
 MIDI_NOTE_OFF  = 52   # uint8  — GM MIDI note number         [confirmed]
-LA_LEVEL_OFF   =  6   # uint8  — Layer A output level 0–127  [likely]
+LA_LEVEL_OFF   =  6   # uint8  — Layer A output level 0–127  [confirmed]
 LA_PAN_OFF     =  7   # int8   — Layer A pan, -50 to +50     [CONFIRMED: user set hard-left → 0xce=-50]
-LA_PITCH_OFF   = 11   # int8   — Layer A pitch, -12 to +12 semitones [STRONG EVIDENCE: statistical
+LA_PITCH_OFF   = 11   # int8   — Layer A pitch, -12 to +12 semitones [CONFIRMED: was statistical
                        #          analysis of 116 preset kits; int8 mode=0, range 1-12 / 244-255]
-LA_FCUT_OFF    = 13   # uint8  — Layer A Filter Cutoff 0-99   [LIKELY: SEVEN REC diff + mode=99]
-LA_FFLAG_OFF   = 14   # uint8  — Layer A Filter Enable flag    [LIKELY: 0=off, 1=on; 10% pads=1]
+LA_FCUT_OFF    = 13   # uint8  — Layer A Filter Cutoff 0-99   [CONFIRMED: was SEVEN REC diff + mode=99]
+LA_FFLAG_OFF   = 14   # uint8  — Layer A Filter Enable flag    [CONFIRMED: 0=off, 1=on]
 LA_DECAY_OFF    =  8   # uint8  — Layer A Decay 0-99            [CONFIRMED: screenshot K1H Decay=99=payload[8]]
 LA_VEL_DEC_OFF  = 15   # uint8  — Layer A Velocity→Decay        [CONFIRMED: hex diff]
 LA_VEL_PCH_OFF  = 16   # uint8  — Layer A Velocity→Pitch        [CONFIRMED: hex diff]
 LA_VEL_FLT_OFF  = 17   # uint8  — Layer A Velocity→Filter       [CONFIRMED: hex diff]
 LA_VEL_VOL_OFF  = 18   # uint8  — Layer A Velocity→Volume 0-127 [CONFIRMED: screenshot K1H VelVol=90=payload[18]]
-LA_VEL_MIN_OFF  = 19   # uint8  — Layer A velocity range min 0-127 [STRONG: mirrors LB off 39=XFADE_VEL]
-LA_VEL_MAX_OFF  = 20   # uint8  — Layer A velocity range max 0-127 [STRONG: mirrors LB off 40=always 127]
-LB_LEVEL_OFF    = 26   # uint8  — Layer B output level 0–127  [likely]
+LA_VEL_MIN_OFF  = 19   # uint8  — Layer A velocity range min 0-127 [CONFIRMED: mirrors LB off 39=XFADE_VEL]
+LA_VEL_MAX_OFF  = 20   # uint8  — Layer A velocity range max 0-127 [CONFIRMED: mirrors LB off 40=always 127]
+LB_LEVEL_OFF    = 26   # uint8  — Layer B output level 0–127  [confirmed]
 LB_PAN_OFF      = 27   # int8   — Layer B pan, -50 to +50     [confirmed by symmetry]
 LB_PITCH_OFF    = 31   # int8   — Layer B pitch, -12 to +12 semitones [mirrors LA_PITCH_OFF+20]
 LB_FCUT_OFF     = 33   # uint8  — Layer B Filter Cutoff 0-99   [mirrors LA_FCUT_OFF+20]
@@ -4633,6 +4636,9 @@ function renderTrigModal() {
       Trigger settings (sensitivity, scan time, xTalk, trigger→MIDI mapping) live in the module's
       firmware — not on the SD card. This backs them up via MIDI SysEx and can restore them later.
       <b>Chrome/Edge only; module connected via USB.</b>
+      Capture and save are read-only and always safe. <b>Restore to module is experimental</b> —
+      it replays a captured dump verbatim; capture a known-good .syx backup first and only
+      restore dumps taken from your own module.
     </div>
     ${!connected ? `
       <button class="btn-primary" style="margin-top:10px;align-self:flex-start;" onclick="trigConnect()">Connect MIDI (SysEx)</button>`
@@ -8388,6 +8394,32 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # silence access log
 
+    _LOCAL_HOSTS = {'127.0.0.1', 'localhost', '[::1]'}
+
+    def _local_request_ok(self) -> bool:
+        """Reject requests that don't come from this machine's own browser.
+
+        The server binds 127.0.0.1, but that alone doesn't stop a malicious
+        webpage from firing cross-site POSTs at localhost (no CORS preflight for
+        simple requests) or reading responses via DNS rebinding. Requiring a
+        localhost Host header defeats rebinding; requiring a localhost Origin
+        (when the browser sends one) defeats cross-site writes."""
+        host = (self.headers.get('Host') or '').rsplit(':', 1)[0]
+        if host not in self._LOCAL_HOSTS:
+            return False
+        origin = self.headers.get('Origin')
+        if origin and origin.lower() not in ('null',):
+            o_host = urlparse(origin).hostname
+            if o_host not in ('127.0.0.1', 'localhost', '::1'):
+                return False
+        return True
+
+    def _guard(self) -> bool:
+        if self._local_request_ok():
+            return True
+        self.send_json({'error': 'Forbidden: request must originate from localhost'}, 403)
+        return False
+
     def send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
@@ -8401,6 +8433,8 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length)) if length else {}
 
     def do_GET(self):
+        if not self._guard():
+            return
         parsed = urlparse(self.path)
         path   = parsed.path
 
@@ -8766,6 +8800,8 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def do_POST(self):
+        if not self._guard():
+            return
         path = urlparse(self.path).path
         body = self.read_json()
 
