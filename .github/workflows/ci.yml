@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile check
+        run: python -m py_compile strike_remap.py
+
+      - name: Generate synthetic fixtures
+        run: python tools/make_fixtures.py
+
+      - name: Kit round-trip (parse → build is lossless)
+        run: python tools/test_roundtrip.py tests/fixtures/*.skt
+
+      - name: Instrument round-trip (parse/patch preserve bytes)
+        run: python tools/test_sin_roundtrip.py tests/fixtures/*.sin
+
+      - name: Dump Python parser output (expected)
+        run: python tools/dump_parser_expected.py
+
+      - name: JS↔Python parser parity (web viewer stage 1)
+        run: node web/test_parsers.mjs
+
+      - name: Dump Python similarity k-NN output (expected)
+        run: python tools/dump_similar_expected.py
+
+      - name: JS↔Python similarity k-NN parity
+        run: node web/test_similar.mjs
+
+      - name: Single-file viewer bundle (build + validate)
+        run: python tools/build_viewer.py --check
+
+      - name: Audio fingerprint + similarity ranking
+        run: python tools/test_fingerprint.py
+
+      - name: Kit time machine (snapshots / diff / restore / retention)
+        run: python tools/test_time_machine.py
+
+      - name: Playback manifest (kit_playback_manifest endpoint)
+        run: python tools/test_playback_manifest.py
+
+      - name: Embedded JS syntax check
+        run: |
+          python - <<'EOF'
+          import importlib.util, re, pathlib
+          spec = importlib.util.spec_from_file_location('sr', 'strike_remap.py')
+          sr = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(sr)
+          m = re.findall(r'<script>(.*?)</script>', sr.HTML, re.S)
+          assert m, 'no script block found'
+          pathlib.Path('embedded.js').write_text('\n'.join(m), encoding='utf-8')
+          EOF
+          node --check embedded.js

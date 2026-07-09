@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strike Pro Remapper — Viewer</title>
+<!-- Extracted verbatim from strike_remap.py HTML string. app.css = <style> contents,
+     app.js = <script> contents. engine.js (added) provides a client-side read-only
+     replacement for the Python /api server via fetch interception. -->
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>Strike Pro Remapper</h1>
+
+  <!-- Kit picker -->
+  <div class="tb-group">
+    <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
+    <div id="kit-menu" class="tb-popover" style="display:none;width:290px;max-height:70vh;overflow-y:auto;">
+      <div id="new-kit-form" style="display:none;margin-bottom:6px;">
+        <input type="text" id="new-kit-name" placeholder="Kit name&#x2026;" autocomplete="off"
+               style="width:100%;padding:6px 8px;background:#0b0e15;border:1px solid #242c3d;color:#e8ebf2;border-radius:4px;font-size:.85rem;margin-bottom:4px;"
+               onkeydown="if(event.key==='Enter')confirmNewKit();if(event.key==='Escape')cancelNewKit()">
+        <div style="display:flex;gap:5px;">
+          <button class="btn-primary" style="flex:1;" onclick="confirmNewKit()">Create</button>
+          <button class="btn-secondary" style="padding:7px 10px;" onclick="cancelNewKit()">&#x2715;</button>
+        </div>
+      </div>
+      <div id="kit-list" class="kit-list" style="max-height:200px;overflow-y:auto;"></div>
+      <div style="margin-top:6px;padding-top:6px;border-top:1px solid #20283a;display:flex;flex-direction:column;gap:4px;">
+        <button class="btn-secondary" style="width:100%;font-size:.78rem;" onclick="showNewKitForm()">+ New kit from scratch</button>
+        <select id="template-sel" style="width:100%;padding:5px 7px;background:#0b0e15;border:1px solid #242c3d;color:#aac;border-radius:4px;font-size:.78rem;" onchange="if(this.value)runTemplate(this.value);this.value=''">
+          <option value="">New from template&#x2026;</option>
+          <option value="make_metal_kit">Metal Baseline</option>
+        </select>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="syncKitsFromCard()">&#x1F4BE; Sync kits from card</button>
+        <button id="sync-lib-btn" class="btn-secondary" style="width:100%;font-size:.72rem;background:#0d2030;border-color:#1a5080;" onclick="syncLibrary()">&#x2B07; Sync full library from SD</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="exportKits()">&#x1F4E4; Export kits to JSON</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="printMidiMap()">&#x1F5A8; Print MIDI map</button>
+        <label class="btn-secondary" style="width:100%;font-size:.72rem;display:block;text-align:center;cursor:pointer;box-sizing:border-box;">
+          &#x1F4CB; Import assignment CSV
+          <input type="file" accept=".csv,.txt" style="display:none;"
+            onchange="if(this.files[0])importAssignCSV(this.files[0]);this.value=''">
+        </label>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showDiffModal()">&#x1F50D; Compare with kit&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="openTimeMachine()">&#x1F570;&#xFE0F; Kit time machine&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showRelinkModal()">&#x1F527; Fix broken paths&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showKitFxModal()">&#x1F39A; Kit FX editor&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="exportBundle()">&#x1F4E6; Export kit bundle (.zip)</button>
+        <label class="btn-secondary" style="width:100%;font-size:.72rem;display:block;text-align:center;cursor:pointer;box-sizing:border-box;"
+          title="Accepts strike_remap bundles, official Strike Editor exports, and commercial pack zips (eDrumWorkshop, drum-tec, …)">
+          &#x1F4E6; Import bundle / editor .zip&#x2026;
+          <input type="file" accept=".zip" style="display:none;"
+            onchange="if(this.files[0])importBundle(this.files[0]);this.value=''">
+        </label>
+        <div id="sync-progress" class="sync-progress" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span id="sync-phase" style="color:#88aacc;font-weight:600;"></span>
+            <span id="sync-counts" style="color:#556;"></span>
+          </div>
+          <div class="sync-bar-wrap"><div id="sync-bar" class="sync-bar" style="width:0%"></div></div>
+          <div id="sync-detail" class="sync-detail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save split button -->
+  <div class="tb-group">
+    <div style="display:flex;gap:0;">
+      <button class="btn-primary tb-btn" id="save-lib-btn" onclick="saveToLibrary()" disabled
+              style="border-radius:4px 0 0 4px;">Save</button>
+      <button class="btn-primary tb-btn" onclick="menuToggle('save-menu')"
+              style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
+    </div>
+    <div id="save-menu" class="tb-popover" style="display:none;min-width:220px;">
+      <button id="save-sd-btn" class="btn-secondary" onclick="saveToSD()" disabled
+              style="width:100%;margin-bottom:6px;">Save to SD card</button>
+      <details>
+        <summary style="font-size:.72rem;color:#666;cursor:pointer;">Custom path&#x2026;</summary>
+        <div style="margin-top:5px;display:flex;flex-direction:column;gap:4px;">
+          <input type="text" id="save-path" placeholder="Full path to .skt" autocomplete="off" spellcheck="false"
+                 style="width:100%;padding:6px 8px;background:#0b0e15;border:1px solid #242c3d;color:#e8ebf2;border-radius:4px;font-size:.82rem;">
+          <button class="btn-secondary" onclick="saveCustom()">Save to this path</button>
+        </div>
+      </details>
+      <p id="save-hint" style="font-size:.7rem;color:#666;margin-top:6px;"></p>
+    </div>
+  </div>
+
+  <!-- Duplicate -->
+  <div class="tb-group">
+    <button class="btn-secondary tb-btn" id="dup-btn" onclick="showDuplicateForm()" disabled>Duplicate&#x2026;</button>
+    <div id="dup-form" class="dup-form" style="display:none;">
+      <input type="text" id="dup-name" placeholder="Copy name&#x2026;" autocomplete="off"
+             onkeydown="if(event.key==='Enter')confirmDuplicate();if(event.key==='Escape')cancelDuplicate()">
+      <div style="display:flex;gap:4px;">
+        <button class="btn-primary" style="flex:1;" onclick="confirmDuplicate()">Save copy</button>
+        <button class="btn-secondary" onclick="cancelDuplicate()">&#x2715;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clear all pads -->
+  <button class="btn-secondary tb-btn" id="clear-pads-btn" onclick="clearAllPads()" disabled style="color:#c06060;">Clear all pads</button>
+
+  <div style="flex:1;"></div>
+
+  <span id="msg"></span>
+  <span id="kit-size-badge" style="display:none;font-size:.72rem;color:#668;flex-shrink:0;"></span>
+  <span id="dirty-badge">&#9679; Unsaved</span>
+  <div style="position:relative;display:inline-flex;gap:2px;flex-shrink:0;">
+    <button id="undo-btn" class="btn-secondary tb-btn" onclick="undoLast()" disabled title="Undo (Ctrl+Z)">&#x21A9; Undo</button>
+    <button id="undo-hist-btn" class="btn-secondary tb-btn" style="padding:5px 7px;" onclick="toggleUndoHistory()" disabled title="Undo history">&#9660;</button>
+    <div id="undo-hist-panel" class="undo-hist-panel" style="display:none;"></div>
+  </div>
+
+  <!-- Tools -->
+  <div class="tb-group">
+    <button class="btn-secondary tb-btn" onclick="menuToggle('tools-menu');loadTools()">&#x1F527; Tools &#9660;</button>
+    <div id="tools-menu" class="tb-popover" style="display:none;right:0;left:auto;min-width:260px;max-height:60vh;overflow-y:auto;">
+      <button class="btn-secondary" style="width:100%;font-size:.72rem;margin-bottom:6px;"
+        title="Back up / restore the module's trigger settings (sensitivity, xTalk, scan time) via MIDI SysEx — Chrome/Edge only"
+        onclick="showTrigModal()">&#x1F39B; Trigger settings backup&#x2026;</button>
+      <div id="tools-list"></div>
+      <div id="tool-output" class="tool-output"></div>
+    </div>
+  </div>
+
+  <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
+          title="Virtual module — play the kit being edited from the pads or number keys" style="flex-shrink:0;">Virtual</button>
+  <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;flex-shrink:0;font-size:.7rem;color:#888;">
+    <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:64px;vertical-align:middle;"
+           title="Keyboard-hit velocity (number keys 1–0)"></span>
+  <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
+          title="Enable MIDI monitor — hit a pad to see it light up" style="flex-shrink:0;">MIDI</button>
+  <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
+  <button id="theme-btn" class="btn-secondary tb-btn" onclick="toggleTheme()" title="Toggle dark/light theme" style="font-size:.9rem;flex-shrink:0;">&#9790;</button>
+</header>
+<div class="main">
+
+  <!-- Left: back panel jacks + pad editor -->
+  <div id="left-panel">
+    <div id="patch-panel-wrap">
+      <div class="patch-hdr" onclick="togglePatchPanel()">
+        <span class="patch-hdr-lbl">Back panel jacks</span>
+        <span id="patch-toggle-arrow" style="font-size:.6rem;color:#445;margin-left:auto">&#9660;</span>
+      </div>
+      <div id="patch-panel"></div>
+    </div>
+    <div id="pad-detail">
+      <div class="det-empty">Load a kit, then click a pad to edit it</div>
+    </div>
+  </div>
+
+  <!-- Center: drum map + live loop -->
+  <section id="center-panel">
+    <div class="center-hdr">
+      Drum Map&nbsp;<span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit"></span>
+      <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+      <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
+        onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
+      <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
+      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="exportLayout()" title="Save your customized kit layout (positions, sizes, rotation, finish) to a file.">&#x2913; Save layout</button>
+      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="document.getElementById('layout-file').click()" title="Load a kit layout file saved earlier.">&#x2912; Load layout</button>
+      <input type="file" id="layout-file" accept="application/json,.json" style="display:none"
+        onchange="importLayout(this.files[0]); this.value=''">
+    </div>
+    <div id="batch-panel">
+      <span class="batch-info" id="batch-count">0 pads selected</span>
+      <button class="btn-secondary" style="font-size:.65rem;padding:2px 7px;" onclick="batchSelectAll()">All</button>
+      <button class="btn-secondary" style="font-size:.65rem;padding:2px 7px;" onclick="batchClearSel()">None</button>
+      <div class="batch-param-row">
+        <label>Param:</label>
+        <select id="batch-param" style="flex:1;padding:2px 4px;background:#0b0e15;border:1px solid #313a4d;color:#e8ebf2;border-radius:3px;font-size:.72rem;">
+          <option value="la_level">Layer A level</option>
+          <option value="la_pan">Layer A pan</option>
+          <option value="la_pitch">Layer A pitch</option>
+          <option value="la_fine">A fine pitch</option>
+          <option value="la_loop">A loop (0=off,1=on)</option>
+          <option value="la_vel_min">A vel range min</option>
+          <option value="la_vel_max">A vel range max</option>
+          <option value="la_decay">A decay</option>
+          <option value="la_vel_vol">A vel→vol</option>
+          <option value="la_vel_dec">A vel→dec</option>
+          <option value="la_vel_pch">A vel→pch</option>
+          <option value="la_vel_flt">A vel→flt</option>
+          <option value="la_fcut">A filter cutoff</option>
+          <option value="lb_level">B level</option>
+          <option value="lb_pan">B pan</option>
+          <option value="lb_pitch">B pitch</option>
+          <option value="lb_fine">B fine pitch</option>
+          <option value="lb_loop">B loop (0=off,1=on)</option>
+          <option value="lb_decay">B decay</option>
+          <option value="lb_vel_vol">B vel→vol</option>
+          <option value="lb_vel_dec">B vel→dec</option>
+          <option value="lb_vel_pch">B vel→pch</option>
+          <option value="lb_vel_flt">B vel→flt</option>
+          <option value="lb_fcut">B filter cutoff</option>
+          <option value="xfade_vel">Vel. xfade</option>
+          <option value="reverb">Reverb</option>
+          <option value="fx1">FX1</option>
+          <option value="fx2">FX2</option>
+          <option value="priority">Priority</option>
+          <option value="midi_note">MIDI note</option>
+          <option value="midi_chan">MIDI channel</option>
+          <option value="mute_grp">Mute group</option>
+        </select>
+        <label>Value:</label>
+        <input id="batch-value" type="number" value="0" style="width:54px;padding:2px 4px;background:#0b0e15;border:1px solid #313a4d;color:#e8ebf2;border-radius:3px;font-size:.72rem;">
+        <button class="btn-primary" style="font-size:.68rem;padding:3px 10px;" onclick="batchApply()">Apply</button>
+      </div>
+      <button class="btn-secondary" style="font-size:.65rem;padding:2px 7px;margin-left:auto;" onclick="batchToggle()">&#x2715; Done</button>
+    </div>
+    <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
+      <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div id="loop-panel">
+      <div class="loop-hdr" onclick="toggleLoopPanel()">
+        <span class="loop-hdr-lbl">Live Loop</span>
+        <span id="loop-toggle-arrow" style="font-size:.6rem;color:#445;margin-left:auto;">&#9654;</span>
+      </div>
+      <div id="loop-body" style="display:none;">
+        <div class="loop-controls">
+          <button id="loop-play-btn" class="btn-secondary" onclick="loopToggle()">&#9654; Play</button>
+          <label>BPM</label>
+          <input id="loop-bpm" type="number" min="40" max="240" value="100"
+                 onchange="if(liveLoop)liveLoop.setBpm(+this.value)">
+          <label>Pattern</label>
+          <select id="loop-pattern" onchange="if(liveLoop)liveLoop.loadPattern(this.value)">
+            <option value="simple44">Simple 4/4</option>
+            <option value="metal">Metal</option>
+            <option value="halftime">Half-time</option>
+            <option value="blank">Blank</option>
+          </select>
+          <label>Vol</label>
+          <input type="range" id="loop-vol" min="0" max="1" step="0.05" value="0.8"
+                 style="width:60px;height:3px;accent-color:#f0b32e;cursor:pointer;"
+                 oninput="if(liveLoop)liveLoop.setVolume(+this.value)">
+        </div>
+        <div class="loop-grid" id="loop-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right: instrument browser -->
+  <section id="inst-panel">
+    <div style="padding:6px 12px 0;">
+    <div id="assign-target" class="assign-target empty">Click a pad or jack to assign instruments</div>
+    <!-- Import WAV form -->
+    <div id="import-wav-form">
+      <div id="import-drop-zone" onclick="document.getElementById('import-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleImportDrop(event)">
+        &#128266; Drop WAV(s) here — 1 file or multiple for velocity layers
+      </div>
+      <input type="file" id="import-file-input" accept=".wav,audio/wav" multiple
+             onchange="stageFiles([...this.files].filter(f=>f.name.toLowerCase().endsWith('.wav')))">
+      <div id="import-staged-list"></div>
+      <div class="import-grid">
+        <span>Name</span>
+        <input type="text" id="import-name" placeholder="Instrument name&#x2026;" autocomplete="off">
+        <span>Category</span>
+        <input type="text" id="import-category" value="Custom" placeholder="Custom">
+        <span>Mode</span>
+        <select id="import-mode" onchange="recalcVelBands();renderStagedFiles();">
+          <option value="velocity">Velocity layers</option>
+          <option value="roundrobin">Round-robin (same vel, cycles)</option>
+        </select>
+      </div>
+      <label style="font-size:.72rem;color:#889;display:flex;align-items:center;gap:5px;margin-top:4px;">
+        <input type="checkbox" id="import-normalize"> Normalize to -0.1 dBFS
+      </label>
+      <label style="font-size:.72rem;color:#889;display:flex;align-items:center;gap:5px;margin-top:4px;"
+             title="Measure each WAV's peak, sort quiet to loud, and assign velocity ranges automatically (overrides per-file ranges)">
+        <input type="checkbox" id="import-automap"> Auto-map velocity by loudness
+      </label>
+      <button id="import-create-btn" class="btn-primary" onclick="createInstrument()" disabled
+              style="width:100%;margin-top:6px;font-size:.78rem;padding:6px;">Create instrument</button>
+      <div id="import-progress" style="min-height:1.2em;font-size:.72rem;color:#88c090;margin-top:4px;"></div>
+      <button class="btn-secondary" style="width:100%;font-size:.75rem;padding:4px;margin-top:4px;" onclick="hideImportForm()">Close</button>
+    </div>
+    <div id="tag-chips-row"></div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <input type="text" id="inst-search" placeholder="Search&#x2026;" oninput="renderInstruments()" style="flex:1;margin-bottom:0;">
+      <button class="btn-secondary" style="font-size:.7rem;padding:4px 8px;flex-shrink:0;" onclick="toggleImportForm()" title="Import your own WAV files">&#43; WAV</button>
+    </div>
+    <div class="browser-toolbar">
+      <select id="inst-sort" onchange="savePref('instSort',this.value);instSort=this.value;renderInstruments()">
+        <option value="az">A–Z</option>
+        <option value="used">Most used</option>
+        <option value="recent">Recently added</option>
+      </select>
+      <label><input type="checkbox" id="hover-preview-chk" onchange="savePref('hoverPreview',this.checked);hoverPreview=this.checked"> Hover preview</label>
+      <label><input type="checkbox" id="auto-preview-chk"  onchange="savePref('autoPreview',this.checked);autoPreview=this.checked"> Auto-preview on assign</label>
+      <label>Vol <input type="range" id="preview-vol-slider" min="0" max="1" step="0.05" value="1"
+        style="width:48px;vertical-align:middle;accent-color:#f0b32e;"
+        oninput="previewVol=+this.value;if(previewAudio)previewAudio.volume=previewVol*previewVelGain;savePref('previewVol',previewVol)"></label>
+      <label>Vel <input type="range" id="preview-vel-slider" min="1" max="127" step="1" value="127"
+        style="width:48px;vertical-align:middle;accent-color:#9060cc;"
+        oninput="previewVelGain=+this.value/127;if(previewAudio)previewAudio.volume=previewVol*previewVelGain;savePref('previewVel',+this.value)"></label>
+    </div>
+    <div id="inst-list"></div>
+    </div><!-- /padding wrapper -->
+  </section>
+
+</div>
+
+<div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
+
+<!-- Kit diff modal -->
+<div id="diff-modal" onclick="if(event.target===this)closeDiffModal()">
+  <div class="diff-box">
+    <h3>&#x1F50D; Compare kits</h3>
+    <div class="diff-kit-sel">
+      <label style="font-size:.72rem;color:#556;white-space:nowrap;">Compare against:</label>
+      <select id="diff-kit-select" style="flex:1;padding:4px 6px;background:#0b0e15;border:1px solid #242c3d;color:#e8ebf2;border-radius:4px;font-size:.8rem;">
+        <option value="">— select a kit —</option>
+      </select>
+      <button class="btn-primary" style="font-size:.8rem;padding:5px 14px;" onclick="runDiff()">Compare</button>
+      <button class="btn-secondary" style="font-size:.8rem;padding:5px 10px;" onclick="closeDiffModal()">&#x2715;</button>
+    </div>
+    <div id="diff-result" class="diff-table"></div>
+  </div>
+</div>
+
+<!-- Kit time machine modal -->
+<div id="tm-modal" onclick="if(event.target===this)closeTimeMachine()">
+  <div class="tm-box">
+    <h3>&#x1F570;&#xFE0F; Kit time machine
+      <span id="tm-kit-name" style="font-weight:400;color:#667;font-size:.74rem;"></span></h3>
+    <div class="tm-toolbar">
+      <button class="btn-primary" style="font-size:.75rem;padding:5px 12px;" onclick="tmSnapshotNow()">&#x1F4F8; Snapshot now</button>
+      <label style="font-size:.68rem;color:#667;display:flex;align-items:center;gap:4px;cursor:pointer;">
+        <input type="checkbox" id="tm-all-kits" style="width:auto;margin:0;" onchange="loadTimeMachine()"> show all kits</label>
+      <span style="flex:1;"></span>
+      <button class="btn-secondary" style="font-size:.75rem;padding:5px 10px;" onclick="closeTimeMachine()">&#x2715;</button>
+    </div>
+    <div class="tm-scrub">
+      <span style="font-size:.66rem;color:#556;">newest</span>
+      <input type="range" id="tm-slider" min="0" max="0" value="0" oninput="tmScrub(+this.value)">
+      <span style="font-size:.66rem;color:#556;">oldest</span>
+      <span class="tm-scrub-lbl" id="tm-scrub-lbl"></span>
+    </div>
+    <div class="tm-cols">
+      <div class="tm-list" id="tm-list"></div>
+      <div class="tm-detail">
+        <div class="tm-cmp">
+          <span>Compare</span>
+          <select id="tm-cmp-a"></select>
+          <span>&#x2192;</span>
+          <select id="tm-cmp-b"></select>
+          <button class="btn-secondary" style="font-size:.7rem;padding:3px 10px;" onclick="tmCompare()">Diff</button>
+        </div>
+        <div class="tm-diff" id="tm-diff"><div class="tm-empty">Pick a snapshot on the left, or choose two points to compare.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sample relink modal -->
+<div id="relink-modal" onclick="if(event.target===this)closeRelinkModal()">
+  <div class="sin-box">
+    <h3>&#x1F527; Fix broken instrument paths</h3>
+    <div id="relink-body"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="relink-apply-btn" class="btn-primary" onclick="applyRelink()">Relink selected</button>
+      <button class="btn-secondary" onclick="closeRelinkModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kit FX editor modal -->
+<div id="kitfx-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="sin-box" style="width:min(560px,94vw);">
+    <h3>&#x1F39A; Kit FX</h3>
+    <div id="kitfx-body" style="display:flex;flex-direction:column;"></div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="btn-secondary" onclick="document.getElementById('kitfx-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trigger settings backup modal (SysEx) -->
+<div id="trig-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="sin-box" style="width:min(620px,94vw);">
+    <h3>&#x1F39B; Trigger settings backup</h3>
+    <div id="trig-body" style="display:flex;flex-direction:column;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+      <button class="btn-secondary" onclick="document.getElementById('trig-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Instrument (.sin) editor modal -->
+<div id="sin-modal" onclick="if(event.target===this)closeSinEditor()">
+  <div class="sin-box">
+    <h3>&#x1F39B; Instrument editor</h3>
+    <div id="sin-body"></div>
+  </div>
+</div>
+
+<!-- "More like this" similarity modal -->
+<div id="similar-modal" onclick="if(event.target===this)closeSimilar()">
+  <div class="sin-box" style="width:min(560px,94vw);">
+    <h3>&#8776; Similar-sounding instruments
+      <span id="sim-src" style="font-weight:400;color:#667;font-size:.74rem;"></span></h3>
+    <div id="sim-body" style="min-height:60px;"></div>
+    <div id="sim-build" class="sync-progress" style="display:none;margin-top:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span id="sim-phase" style="color:#88aacc;font-weight:600;"></span>
+        <span id="sim-counts" style="color:#556;"></span>
+      </div>
+      <div class="sync-bar-wrap"><div id="sim-bar" class="sync-bar" style="width:0%"></div></div>
+      <div id="sim-detail" class="sync-detail"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <button id="sim-build-btn" class="btn-secondary" style="font-size:.72rem;" onclick="buildFingerprints()">&#8776; Build similarity index</button>
+      <button class="btn-secondary" style="font-size:.72rem;" onclick="closeSimilar()">Close</button>
+    </div>
+  </div>
+</div>
+<!-- engine.js installs the /api fetch interceptor and sets window.VIEWER BEFORE
+     app.js runs, then dynamically injects app.js as a classic script so the
+     extracted frontend (global funcs + inline onclick) works unchanged. -->
+<script type="module" src="engine.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "strike-remap",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["strike_remap.py"],
+      "port": 8765
+    }
+  ]
+}

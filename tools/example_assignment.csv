@@ -1,0 +1,12 @@
+# Strike Pro Remapper — example assignment CSV
+# Format: pad_id,sin_rel   OR   pad_id,layer,sin_rel
+# pad_id: K1H, S1H, S1R, T1H–T4H, H1B/H1E/H1F, C1B/C1E, C2B/C2E, R1B/R1E/R1D
+# layer defaults to A if omitted
+
+K1H,Kicks/BJ TrashyKick 1.sin
+S1H,a,Snares/90sAlt Center.sin
+S1R,a,Snares/70sProg Rimshot.sin
+T1H,Toms/Arena Rock 1.sin
+T2H,Toms/Arena Rock 2.sin
+T3H,Toms/Arena Rock 3.sin
+T4H,Toms/Arena Rock 4.sin
