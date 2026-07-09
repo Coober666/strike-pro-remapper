@@ -474,6 +474,9 @@ web/                         # pure-browser port (stage 1 = read-only viewer). S
     engine.js                #   client-side read-only replacement for the /api server (fetch interceptor)
   test_parsers.mjs test_similar.mjs  # Node parity tests (vs tools/dump_*_expected.py), in CI
 dist/                        # git-ignored — build output: strike_viewer.html (single self-contained file)
+docs/
+  screenshot.png             # README hero screenshot (captured from the running app)
+  QA_PLAYBOOK.md             # fresh-start UAT procedure (agent-run, human-in-the-loop; phases A–D)
 tools/
   hex_explorer.py            # annotated hex dump tool for .skt files
   make_metal_kit.py          # generates a baseline metal kit from library instruments
