@@ -18,7 +18,7 @@ body { font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
 header { background: linear-gradient(180deg, #1a1f2a, #14181f); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #242c3d; flex-wrap: nowrap; }
 header h1 { font-size: .92rem; color: #f0b32e; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; white-space: nowrap; }
 #msg { color: #a0e0a0; font-size: .85rem; margin-left: auto; }
-#dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; display: none; }
+#dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; }
 #undo-btn { font-size: .75rem; padding: 4px 10px; }
 #undo-btn:disabled { opacity: .35; cursor: not-allowed; }
 #msg.err { color: #e08080; }

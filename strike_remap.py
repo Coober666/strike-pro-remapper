@@ -3025,7 +3025,7 @@ body { font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
 header { background: linear-gradient(180deg, #1a1f2a, #14181f); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #242c3d; flex-wrap: nowrap; }
 header h1 { font-size: .92rem; color: #f0b32e; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; white-space: nowrap; }
 #msg { color: #a0e0a0; font-size: .85rem; margin-left: auto; }
-#dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; display: none; }
+#dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; }
 #undo-btn { font-size: .75rem; padding: 4px 10px; }
 #undo-btn:disabled { opacity: .35; cursor: not-allowed; }
 #msg.err { color: #e08080; }
@@ -3571,7 +3571,7 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
 
   <span id="msg"></span>
   <span id="kit-size-badge" style="display:none;font-size:.72rem;color:#668;flex-shrink:0;"></span>
-  <span id="dirty-badge">&#9679; Unsaved</span>
+  <span id="dirty-badge" style="display:none;">&#9679; Unsaved</span>
   <div style="position:relative;display:inline-flex;gap:2px;flex-shrink:0;">
     <button id="undo-btn" class="btn-secondary tb-btn" onclick="undoLast()" disabled title="Undo (Ctrl+Z)">&#x21A9; Undo</button>
     <button id="undo-hist-btn" class="btn-secondary tb-btn" style="padding:5px 7px;" onclick="toggleUndoHistory()" disabled title="Undo history">&#9660;</button>
