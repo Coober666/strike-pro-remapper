@@ -53,6 +53,9 @@ jobs:
       - name: SD volume classification (content + writability, issue 3)
         run: python tools/test_volume_classify.py
 
+      - name: Kit size meter (index translation, issue 6)
+        run: python tools/test_kit_size.py
+
       - name: Embedded JS syntax check
         run: |
           python - <<'EOF'
