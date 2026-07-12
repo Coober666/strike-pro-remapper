@@ -56,8 +56,9 @@ def main():
         root = Path(__file__).resolve().parent.parent / 'library' / 'instruments'
         files = sorted(root.rglob('*.sin'))
     if not files:
-        print('No .sin files found')
-        sys.exit(1)
+        # An empty library is a valid state (fresh clone), not a failure.
+        print('skip: no .sin files found — nothing to test')
+        sys.exit(0)
 
     passed = failed = 0
     for f in files:

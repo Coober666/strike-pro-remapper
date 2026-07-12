@@ -1244,6 +1244,30 @@ _PARAM_MAP = {
     'play_mode':   (PLAY_MODE_OFF,   'B',   0,     1),
 }
 
+# Friendly names for status-line + undo-history labels — internal ids like
+# 'la_level' leaked into user-facing text (finding A3-5).
+_PARAM_LABELS = {
+    'midi_note': 'MIDI note', 'midi_chan': 'MIDI channel', 'mute_grp': 'mute group',
+    'gate_time': 'gate time', 'xfade_vel': 'A/B crossfade velocity',
+    'reverb': 'reverb send', 'fx1': 'FX1 send', 'fx2': 'FX2 send',
+    'eq_comp': 'EQ/comp', 'priority': 'priority', 'note_off': 'note-off mode',
+    'play_mode': 'play mode',
+}
+for _pfx, _side in (('la', 'Layer A'), ('lb', 'Layer B')):
+    _PARAM_LABELS.update({
+        f'{_pfx}_level': f'{_side} level',        f'{_pfx}_pan': f'{_side} pan',
+        f'{_pfx}_pitch': f'{_side} pitch',        f'{_pfx}_fine': f'{_side} fine pitch',
+        f'{_pfx}_decay': f'{_side} decay',        f'{_pfx}_loop': f'{_side} loop',
+        f'{_pfx}_fcut': f'{_side} filter cutoff', f'{_pfx}_fflag': f'{_side} filter enable',
+        f'{_pfx}_vel_dec': f'{_side} vel→decay',  f'{_pfx}_vel_pch': f'{_side} vel→pitch',
+        f'{_pfx}_vel_flt': f'{_side} vel→filter', f'{_pfx}_vel_vol': f'{_side} vel→volume',
+        f'{_pfx}_vel_min': f'{_side} vel min',    f'{_pfx}_vel_max': f'{_side} vel max',
+    })
+
+
+def _param_label(param: str) -> str:
+    return _PARAM_LABELS.get(param, param)
+
 # Gate time (off 53) is non-contiguous: 0–99 = Free gate length in ms,
 # 100–109 = Sync:32/32T/16/16T/8/8T/4/4T/2/2T, 255 = OFF.
 GATE_SYNC_NAMES = ['Sync:1/32', 'Sync:1/32T', 'Sync:1/16', 'Sync:1/16T',
@@ -1261,9 +1285,10 @@ def set_pad_param(pad_id: str, param: str, value: int, coalesce: bool = False):
     coalesce=True (dial/encoder streams): skip the history push when the last
     undo entry is the same pad+param, so a twist is one undo step, not twenty.
     """
+    label = _param_label(param)
     if not (coalesce and state['history']
-            and state['history'][-1].get('label', '').startswith(f'{pad_id} {param} = ')):
-        _push_history(f'{pad_id} {param} = {value}')
+            and state['history'][-1].get('label', '').startswith(f'{pad_id} {label} = ')):
+        _push_history(f'{pad_id} {label} = {value}')
     for pad in state['pads']:
         if pad['id'] != pad_id:
             continue
@@ -1287,7 +1312,7 @@ def set_pad_param(pad_id: str, param: str, value: int, coalesce: bool = False):
         else:
             raise ValueError(f'Unknown param: {param!r}. Valid: {list(_PARAM_MAP)} + mute_grp')
         state['dirty']     = True
-        state['message']   = f'{pad_id} {param} = {value}'
+        state['message']   = f'{pad_id} {label} = {value}'
         state['param_rev'] += 1
         return
     raise ValueError(f'Pad not found: {pad_id}')
@@ -1882,7 +1907,7 @@ def swap_pads(pad_id_a: str, pad_id_b: str):
 
 def batch_set_param(pad_ids: list, param: str, value: int):
     """Apply a single parameter change to multiple pads at once (single undo entry)."""
-    _push_history(f'Batch {param}={value} ({len(pad_ids)} pads)')
+    _push_history(f'Batch {_param_label(param)}={value} ({len(pad_ids)} pads)')
     changed = 0
     for pad in state['pads']:
         if pad['id'] not in pad_ids:
@@ -1908,7 +1933,7 @@ def batch_set_param(pad_ids: list, param: str, value: int):
             raise ValueError(f'Unknown param: {param!r}')
         changed += 1
     state['dirty']   = True
-    state['message'] = f'Batch set {param}={value} on {changed} pads'
+    state['message'] = f'Batch set {_param_label(param)}={value} on {changed} pads'
 
 
 _TAGS_PATH = LIBRARY_DIR / 'tags.json'
@@ -3019,7 +3044,7 @@ def save_kit(out_path_str: str):
     if state.get('kit_raw') is None:
         raise ValueError('No kit loaded — open a kit before saving.')
     out = Path(out_path_str)
-    _, preset_vol = get_volumes()
+    user_vol, preset_vol = get_volumes()
     if preset_vol:
         try:
             out.resolve().relative_to(preset_vol.resolve())
@@ -3029,11 +3054,16 @@ def save_kit(out_path_str: str):
                 raise
     data = build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail'])
     out.parent.mkdir(parents=True, exist_ok=True)
+    origin = state.get('kit_path', '')
     out.write_bytes(data)
     state['dirty']    = False
     state['kit_path'] = str(out)
     state['kit_display'] = out.name
     state['message']  = f"Saved to {out}"
+    # Kits loaded from the (read-only) preset card save as a COPY on the user
+    # card — say so instead of retargeting silently (finding B2-3).
+    if origin and preset_vol and user_vol and _is_under(Path(origin), preset_vol) and _is_under(out, user_vol):
+        state['message'] += ' — a copy on the user card (the factory preset card is never written)'
     _auto_snapshot(f'Saved {out.name}', 'save')
     # Clean up matching autosave files (local working area + legacy next-to-kit)
     for autosave in {out.parent / (out.stem + '.autosave.skt'),
@@ -3129,6 +3159,13 @@ HTML = r"""<!DOCTYPE html>
 :focus-visible { outline: 2px solid #f0b32e66; outline-offset: 1px; }
 body { font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; background: #0d0f15; color: #e8ebf2; min-height: 100vh; -webkit-font-smoothing: antialiased; }
 header { background: linear-gradient(180deg, #1a1f2a, #14181f); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #242c3d; flex-wrap: nowrap; }
+/* ≤880px: let the toolbar wrap so the SD status chip and popovers stay
+   visible instead of overflowing off-screen (findings A2-1 / A2-5) */
+@media (max-width: 880px) {
+  header { flex-wrap: wrap; }
+  header #msg { flex-basis: 100%; margin-left: 0; order: 99; }
+  .tb-popover { max-width: calc(100vw - 24px); }
+}
 header h1 { font-size: .92rem; color: #f0b32e; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; white-space: nowrap; }
 #msg { color: #a0e0a0; font-size: .85rem; margin-left: auto; }
 #dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; }
@@ -3691,8 +3728,11 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
       <button class="btn-secondary" style="width:100%;font-size:.72rem;margin-bottom:6px;"
         title="Back up / restore the module's trigger settings (sensitivity, xTalk, scan time) via MIDI SysEx — Chrome/Edge only"
         onclick="showTrigModal()">&#x1F39B; Trigger settings backup&#x2026;</button>
-      <div id="tools-list"></div>
-      <div id="tool-output" class="tool-output"></div>
+      <details style="margin-top:4px;">
+        <summary style="font-size:.7rem;color:#667;cursor:pointer;">Developer scripts&#x2026;</summary>
+        <div id="tools-list"></div>
+        <div id="tool-output" class="tool-output"></div>
+      </details>
     </div>
   </div>
 
@@ -6150,7 +6190,11 @@ function renderPadDetail() {
       <span class="param-lbl" title="Play Layer A and B simultaneously at their current levels">Blend preview</span>
       <button class="btn-secondary" style="font-size:.68rem;padding:3px 9px;"
         onclick="previewBlend('${primary.id}')">&#9654; A+B</button>
-    </div>` : ''}
+    </div>` : `
+    <div class="param-row" style="opacity:.55;">
+      <span class="param-lbl">Blend preview</span>
+      <span style="font-size:.68rem;">assign a Layer B instrument to enable &#9654; A+B</span>
+    </div>`}
     <div class="param-row" style="margin-top:6px;padding-top:6px;border-top:1px solid #2a2a3e;">
       <span class="param-lbl" style="font-weight:600;color:#7ab3ef;font-size:.7rem;">FX / Zone</span>
     </div>
@@ -6869,7 +6913,9 @@ function showDiffModal() {
   closeAllPopovers();
   const sel = document.getElementById('diff-kit-select');
   sel.innerHTML = '<option value="">— select a kit —</option>'
-    + kits.map(k => `<option value="${escHtml(k.path)}">${escHtml(k.name)}</option>`).join('');
+    // Same-named kits can come from library / user SD / preset SD — show the
+    // source so identical labels are distinguishable (finding B4-2).
+    + kits.map(k => `<option value="${escHtml(k.path)}">${escHtml(k.name)} — ${escHtml(k.source)}</option>`).join('');
   document.getElementById('diff-result').innerHTML = '';
   document.getElementById('diff-modal').classList.add('open');
 }
@@ -7677,6 +7723,11 @@ async function _pollSyncStatus() {
   if (data.mb_copied > 0) counts += `  ${data.mb_copied.toFixed(0)} MB`;
   if (countsEl) countsEl.textContent = counts;
   if (detailEl) detailEl.textContent = data.detail || '';
+  if (data.phase !== 'done' && data.phase !== 'error') {
+    // Mirror progress into the always-visible status line — the in-menu bar
+    // sits below the dropdown fold and was easy to miss (finding B3-1).
+    setMsg(`Syncing library — ${phaseLabels[data.phase] || data.phase} ${counts}`.trim());
+  }
 
   if (data.phase === 'done') {
     if (phaseEl) phaseEl.textContent = '✓ Done';
@@ -8243,6 +8294,11 @@ async function checkStatus() {
       return;
     }
     if (!mod && e.key === 'Escape') {
+      // Close any open modal first (Esc previously worked on some modals but
+      // not others, e.g. Kit FX — finding A0-1); only then clear selection.
+      const openModal = document.querySelector(
+        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open');
+      if (openModal) { openModal.classList.remove('open'); return; }
       clearSelection();
       return;
     }
@@ -8251,7 +8307,10 @@ async function checkStatus() {
       if (selectedPad) {
         const p = pads.find(p => p.id === selectedPad.id);
         const sinRel = p && (selectedPad.layer === 'a' ? p.layer_a_path : p.layer_b_path);
-        if (sinRel) previewInstrument(sinRel);
+        if (sinRel) {
+          previewInstrument(sinRel);
+          setMsg('Preview: ' + (sinRel.split('/').pop() || sinRel));  // audible feedback had no visual cue (B2-5)
+        }
       }
       return;
     }
@@ -9408,6 +9467,13 @@ class Handler(BaseHTTPRequestHandler):
                 result = sync_kits_from_sd()
                 n = len(result['copied'])
                 s = len(result['skipped'])
+                if n == 0 and s == 0:
+                    # Nothing found is almost always an unmounted/unreadable
+                    # card, not a successful sync of zero (finding B2-1).
+                    self.send_json({'error': 'No kits found on the card — is the user card '
+                                             'mounted and readable? (Nothing was synced.)',
+                                    'kits': find_kit_files(), **result})
+                    return
                 msg = f'Synced {n} kit(s) from card' + (f' ({s} already present)' if s else '')
                 self.send_json({'message': msg, 'kits': find_kit_files(), **result})
             except Exception as e:
