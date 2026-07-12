@@ -75,7 +75,7 @@ double-click.
 | Broken sample paths | "Path not found," no remedy | Relink wizard with exact + fuzzy matching |
 | Kit sharing | Bare files with absolute paths that break on other machines | Self-contained bundles (kit + instruments + samples); also imports official-editor and commercial pack zips |
 | Finding sounds | Scroll the folder list | Search, tags, favorites, waveform thumbnails, audition at any velocity, **audio similarity search** |
-| Hear your kit while editing | Only by writing to SD and reloading the module | **Virtual module**: play the kit from the real pads (or keyboard) via Web MIDI + Web Audio |
+| Hear your kit while editing | Only by writing to SD and reloading the module | **Virtual module**: audition the kit from the real pads (or keyboard) via Web MIDI + Web Audio — single hits and slow grooves, not a low-latency playable instrument |
 | Trigger settings backup | Not possible in any official tool | SysEx capture/save/restore over Web MIDI |
 | Format documentation | Closed | Open spec in [FORMAT.md](FORMAT.md), round-trip tested |
 
@@ -160,10 +160,14 @@ double-click.
   fingerprinted, on demand. Read-only — no WAV/`.sin`/`.skt` is ever modified.
 - Live loop step-sequencer to audition a kit groove while you edit
 - MIDI monitor: hit a pad on the actual kit and watch it light up (Web MIDI, Chromium)
-- **Virtual module** — play the kit you're editing straight from the real drum pads, before
-  writing anything to the SD card. Toggle it on (button next to MIDI) and a MIDI note-on
-  matches its pad, resolves Layer A/B by velocity, and plays the right samples in the
-  browser via Web Audio — killing the edit → save → SD → module-reload loop. No hardware?
+- **Virtual module** — *audition* the kit you're editing straight from the real drum pads,
+  before writing anything to the SD card. Toggle it on (button next to MIDI) and a MIDI
+  note-on matches its pad, resolves Layer A/B by velocity, and plays the right samples in
+  the browser via Web Audio — killing the edit → save → SD → module-reload loop for
+  sample-choice and balance checks. **It is an auditioning aid, not a playable
+  instrument:** single hits and slow grooves work well, but browser audio latency and
+  scheduling make moderate/fast playing drop notes — trust the hardware for feel.
+  No hardware?
   Number keys **1–0** fire the first ten pads at a velocity slider, so it's demoable
   standalone. Samples are pre-decoded when you enable it (progress on the button; kits over
   ~100 MB decode lazily on first hit), and the manifest refreshes automatically as you edit.

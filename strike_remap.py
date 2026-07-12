@@ -4360,6 +4360,7 @@ const VM_KEYS = '1234567890';                // keyboard fallback → first 10 m
 let vmActive     = false;
 let vmManifest   = null;
 let vmCtx        = null;          // one persistent AudioContext
+let vmMaster     = null;          // master limiter (DynamicsCompressor) before destination
 let vmBuffers    = new Map();     // wav_url → AudioBuffer | Promise<AudioBuffer>
 let vmVoices     = [];            // live voices: {padId, layer, muteGrp, gain, src}
 let vmRR         = new Map();     // "padId:layer:band" → next round-robin index
@@ -4380,6 +4381,17 @@ async function toggleVirtualModule() {
   try {
     if (!vmCtx) vmCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (vmCtx.state === 'suspended') await vmCtx.resume();
+    if (!vmMaster) {
+      // Master limiter: layers A+B and every voice used to sum unclamped
+      // straight into destination — hot kits clipped ("blown out").
+      vmMaster = vmCtx.createDynamicsCompressor();
+      vmMaster.threshold.value = -3;
+      vmMaster.knee.value = 0;
+      vmMaster.ratio.value = 20;
+      vmMaster.attack.value = 0.002;
+      vmMaster.release.value = 0.1;
+      vmMaster.connect(vmCtx.destination);
+    }
   } catch(e) { vmActive = false; setMsg('Virtual module: no Web Audio', true); return; }
   updateVmBtn();
   vmWireMidi();
@@ -4410,7 +4422,9 @@ function updateVmBtn() {
     if (wrap) wrap.style.display = 'inline-flex';
   }
   btn.title =
-    'Virtual module — play the kit being edited from the pads or number keys (1–0).\n' +
+    'Virtual module — AUDITION the kit being edited from the pads or number keys (1–0).\n' +
+    'An auditioning aid for sample choice and balance: single hits and slow grooves work well; ' +
+    'it is not a low-latency playable instrument — moderate/fast playing can drop notes.\n' +
     'Simulated: velocity zones, round-robin/random, A/B xfade, level, pan, pitch, mute-group choke, Mono/Poly.\n' +
     'Approximated: decay (gain envelope), velocity loudness curve, hi-hat pedal position.\n' +
     'NOT simulated: module FX (reverb/FX1/FX2/EQ), velocity→filter/pitch/decay curves, filter, loop, gate time.';
@@ -4441,7 +4455,7 @@ async function vmPreload() {
     vmDecodeDone++;
     if (vmDecodeDone % 4 === 0) updateVmBtn();
   }
-  setMsg('Virtual module ready — hit a pad or press 1–0');
+  setMsg('Virtual module ready (auditioning aid) — hit a pad or press 1–0');
 }
 
 function vmGetBuffer(url) {
@@ -4461,8 +4475,17 @@ function vmCandidates(lyr, vel) {
   let cands = lyr.mappings.filter(m =>
     m.wav_url && vel >= m.vmin && vel <= m.vmax && m.rr !== 254);  // 254 = 0xFE pedal-function
   if (cands.length > 1) {
-    const hh = cands.filter(m => vmHH >= m.hh_min && vmHH <= m.hh_max);
-    if (hh.length) cands = hh;   // fall back to ignoring hh ranges when nothing matches
+    let hh = cands.filter(m => vmHH >= m.hh_min && vmHH <= m.hh_max);
+    if (hh.length) {
+      // Overlapping hh bands (e.g. a wide 62-127 set plus specific
+      // 109-127/91-108 sets) all match the pedal position; keep only the
+      // TIGHTEST band so round-robin cycles within one pedal position
+      // instead of alternating open/closed samples.
+      const width = m => m.hh_max - m.hh_min;
+      const tightest = Math.min(...hh.map(width));
+      cands = hh.filter(m => width(m) === tightest);
+    }
+    // else: fall back to ignoring hh ranges when nothing matches
   }
   return cands;
 }
@@ -4531,12 +4554,13 @@ function vmPlay(url, opt) {
     const gain = vmCtx.createGain();
     gain.gain.value = opt.gain;
     src.connect(gain);
+    const out = vmMaster || vmCtx.destination;
     if (vmCtx.createStereoPanner) {
       const pan = vmCtx.createStereoPanner();
       pan.pan.value = opt.pan;
-      gain.connect(pan); pan.connect(vmCtx.destination);
+      gain.connect(pan); pan.connect(out);
     } else {
-      gain.connect(vmCtx.destination);
+      gain.connect(out);
     }
     if (opt.decay < 99) {   // approximate decay: exponential-ish tail via time constant
       const tau = 0.04 + (opt.decay / 99) * 2.5;   // 0 → ~40 ms, ~99 → ~2.5 s
