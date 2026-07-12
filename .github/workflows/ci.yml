@@ -56,6 +56,9 @@ jobs:
       - name: Kit size meter (index translation, issue 6)
         run: python tools/test_kit_size.py
 
+      - name: WAV-level path check + assign validation (issue 4)
+        run: python tools/test_check_paths.py
+
       - name: Embedded JS syntax check
         run: |
           python - <<'EOF'
