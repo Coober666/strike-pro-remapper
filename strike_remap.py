@@ -9410,11 +9410,33 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
+def _port_in_use(port: int) -> bool:
+    """True if something is already listening on localhost:port."""
+    import socket
+    try:
+        with socket.create_connection(('127.0.0.1', port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+class _Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind an already-bound
+    # port, silently creating a zombie instance that never receives a
+    # connection (macOS raises EADDRINUSE). Disable it there; the explicit
+    # TIME_WAIT rebind it enables on POSIX doesn't apply to Windows anyway.
+    allow_reuse_address = platform.system() != 'Windows'
+
+
 def main():
     PORT = 8765
-    # Threading so one slow request (e.g. an SD scan) can't freeze the whole app
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     url = f'http://localhost:{PORT}'
+    if _port_in_use(PORT):
+        print(f"Strike Pro Remapper is already running at {url} — opening it.")
+        webbrowser.open(url)
+        return
+    # Threading so one slow request (e.g. an SD scan) can't freeze the whole app
+    server = _Server(('127.0.0.1', PORT), Handler)
     print(f"Strike Pro Remapper running at {url}")
     print("Make sure SD card volumes are mounted before browsing instruments.")
     print("Press Ctrl-C to quit.\n")
