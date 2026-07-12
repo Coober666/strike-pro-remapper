@@ -92,20 +92,67 @@ def _find_strike_volumes() -> dict:
     return found
 
 
+def _looks_like_preset_root(root: Path) -> bool:
+    """
+    True if root has the factory preset card's content shape: Kits/ holds
+    CATEGORY SUBFOLDERS containing .skt files (ACOUSTIC/, ELECTRONIC/, ...).
+    The user card's Kits/ holds flat .skt files (or is empty/absent).
+    """
+    kits = root / 'Kits'
+    try:
+        if not kits.is_dir():
+            return False
+        for sub in kits.iterdir():
+            if sub.is_dir():
+                try:
+                    if any(f.is_file() and f.suffix.lower() == '.skt'
+                           for f in sub.iterdir()):
+                        return True
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return False
+
+
+def _volume_writable(root: Path) -> bool:
+    """Probe root with a create+delete of a temp file. Only ever called on
+    volumes that do NOT look like the factory preset card (see
+    _classify_volumes), so the factory card is never written — not even a
+    probe file."""
+    probe = root / '.strike-remap-write-probe.tmp'
+    try:
+        probe.write_bytes(b'')
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def _classify_volumes(vols: dict):
     """
-    Identify user card ('NO NAME') and preset card ('NO NAME 1').
-    Falls back gracefully if labels differ.
+    Identify the user card and the preset card by CONTENT + WRITABILITY —
+    never by volume label. (The physical Strike cards carry no FAT label at
+    all: "NO NAME" is a macOS display name for unlabeled volumes, Windows
+    reports an empty label, and label/mount-order/drive-letter/device-node
+    all churn across remounts. Classifying by name inverted the save guard —
+    see issue #3.)
+
+    Pass 1: any volume with the factory content shape (Kits/<CATEGORY>/*.skt)
+    is the preset card. Pass 2: of the rest, the first that accepts a write
+    probe is the user card; anything unwritable/unprobeable falls into the
+    preset slot so it is protected rather than used as a save target.
     Returns (user_root, preset_root); either may be None.
     """
     user = preset = None
-    for label, path in vols.items():
-        upper = label.upper().strip()
-        if upper == 'NO NAME':
-            user = path
-        elif upper in ('NO NAME 1', 'NO NAME1'):
+    leftovers = []
+    for path in vols.values():
+        if preset is None and _looks_like_preset_root(path):
             preset = path
-        elif user is None:
+        else:
+            leftovers.append(path)
+    for path in leftovers:
+        if user is None and not _looks_like_preset_root(path) and _volume_writable(path):
             user = path
         elif preset is None:
             preset = path
