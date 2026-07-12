@@ -946,6 +946,7 @@ def get_kit_size() -> dict:
     """Sum WAV file sizes for every instrument in the current kit."""
     pads = state.get('pads', [])
     avail = state.get('avail', {})
+    instruments = state.get('instruments', [])
     roots = _sin_search_roots()
     seen_wavs: set = set()
     total_bytes = 0
@@ -953,9 +954,12 @@ def get_kit_size() -> dict:
     total = 0
     for pad in pads:
         for sin_key in ('layer_a', 'layer_b'):
-            sin_rel = pad.get(sin_key)
-            if not sin_rel:
+            # layer_a/layer_b hold INDICES into the kit's instrument string
+            # table, not rel paths (index 0 is a valid instrument).
+            idx = pad.get(sin_key)
+            if idx is None or idx == NO_INSTRUMENT or idx >= len(instruments):
                 continue
+            sin_rel = instruments[idx]
             sin_abs = avail.get(sin_rel)
             if not sin_abs:
                 continue
