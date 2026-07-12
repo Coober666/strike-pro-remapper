@@ -8495,7 +8495,10 @@ def _friendly_error(e: BaseException) -> str:
     traceback.print_exc()
     if isinstance(e, OSError):
         name = getattr(e, 'filename', None)
-        where = f' ({Path(name).name})' if name else ''
+        # basename via string split: Path(...).name won't strip Windows
+        # backslash paths when running under POSIX
+        base = str(name).replace('\\', '/').rsplit('/', 1)[-1] if name else ''
+        where = f' ({base})' if base else ''
         return f'File system error{where} — see the server console for details.'
     return 'Internal error — see the server console for details.'
 
