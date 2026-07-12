@@ -50,6 +50,9 @@ jobs:
       - name: Playback manifest (kit_playback_manifest endpoint)
         run: python tools/test_playback_manifest.py
 
+      - name: SD volume classification (content + writability, issue 3)
+        run: python tools/test_volume_classify.py
+
       - name: Embedded JS syntax check
         run: |
           python - <<'EOF'
