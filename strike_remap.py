@@ -5386,6 +5386,13 @@ const SOURCE_BADGE = {'library':'&#x1F4C1;', 'user SD':'&#x1F4BE;', 'preset SD':
 
 function renderKitList() {
   const el = document.getElementById('kit-list');
+  if (!kits.length) {
+    el.innerHTML = '<div style="padding:8px;font-size:.78rem;opacity:.75;line-height:1.5;">'
+      + 'No kits yet. Insert your Strike SD card (kits appear here automatically), '
+      + 'or use <b>Tools &rarr; Sync full library from SD</b> once to edit without the card. '
+      + 'Your factory preset card is read-only to this app &mdash; it is never written.</div>';
+    return;
+  }
   el.innerHTML = kits.map((k,i) => {
     const badge  = SOURCE_BADGE[k.source] || '';
     const active = state_kitPath && k.path === state_kitPath ? ' active' : '';
@@ -8036,13 +8043,16 @@ async function checkStatus() {
   const parts = [];
   if (s.user_mounted)   parts.push('&#x1F4BE; User: ' + s.user_path);
   else                  parts.push('&#x26A0; User card NOT mounted');
-  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path);
-  document.getElementById('vol-status').innerHTML = parts.join(' \xB7 ');
+  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path + ' (read-only)');
+  const volEl = document.getElementById('vol-status');
+  volEl.innerHTML = parts.join(' \xB7 ');
+  volEl.title = 'Cards are identified by their content, not their name. '
+    + 'Saves only ever go to the user card; the factory preset card is never written.';
   const hint = document.getElementById('save-hint');
   if (hint) {
     const sep = (s.user_path || '').includes('\\') ? '\\' : '/';
     hint.textContent = s.user_mounted
-      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card.`
+      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card. Factory presets are never touched.`
       : 'Mount the user card to save back to SD.';
   }
 }
