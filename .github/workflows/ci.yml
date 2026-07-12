@@ -59,6 +59,9 @@ jobs:
       - name: WAV-level path check + assign validation (issue 4)
         run: python tools/test_check_paths.py
 
+      - name: Error layer + no-kit save guard (issue 8)
+        run: python tools/test_error_layer.py
+
       - name: Embedded JS syntax check
         run: |
           python - <<'EOF'
