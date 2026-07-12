@@ -3008,6 +3008,8 @@ def create_new_kit(name: str):
 
 
 def save_kit(out_path_str: str):
+    if state.get('kit_raw') is None:
+        raise ValueError('No kit loaded — open a kit before saving.')
     out = Path(out_path_str)
     _, preset_vol = get_volumes()
     if preset_vol:
@@ -3036,7 +3038,7 @@ def save_kit(out_path_str: str):
 
 def autosave_kit() -> 'str | None':
     """Write a .autosave.skt alongside the current kit while dirty. Returns path or None."""
-    if not state['kit_path'] or not state['dirty']:
+    if not state['kit_path'] or not state['dirty'] or state.get('kit_raw') is None:
         return None
     src = Path(state['kit_path'])
     dst = src.parent / (src.stem + '.autosave.skt')
@@ -8482,6 +8484,25 @@ async function dismissAllAutosaves() {
 """
 
 
+def _friendly_error(e: BaseException) -> str:
+    """Translate an exception into a user-facing message. ValueError texts in
+    this codebase are written for users and pass through verbatim; everything
+    else returns a generic message and the full traceback goes to the server
+    console (raw errno/repr strings used to leak straight into the UI)."""
+    if isinstance(e, ValueError):
+        return str(e)
+    import traceback
+    traceback.print_exc()
+    if isinstance(e, OSError):
+        name = getattr(e, 'filename', None)
+        # basename via string split: Path(...).name won't strip Windows
+        # backslash paths when running under POSIX
+        base = str(name).replace('\\', '/').rsplit('/', 1)[-1] if name else ''
+        where = f' ({base})' if base else ''
+        return f'File system error{where} — see the server console for details.'
+    return 'Internal error — see the server console for details.'
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # silence access log
@@ -8911,7 +8932,7 @@ class Handler(BaseHTTPRequestHandler):
                     'kits':          find_kit_files(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/load':
@@ -8928,7 +8949,7 @@ class Handler(BaseHTTPRequestHandler):
                     'skt_lossless': state['skt_lossless'],
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/assign':
@@ -8942,7 +8963,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/clear':
@@ -8956,7 +8977,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/select':
@@ -8976,7 +8997,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/kit_fx_set':
@@ -8990,7 +9011,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/save':
@@ -9005,7 +9026,7 @@ class Handler(BaseHTTPRequestHandler):
                     'sd_save_path':  _sd_save_path(user, state['kit_path']),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/import_wav':
@@ -9025,7 +9046,7 @@ class Handler(BaseHTTPRequestHandler):
                     'instruments': {k: str(v) for k, v in state['avail'].items()},
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/import_instrument':
@@ -9066,7 +9087,7 @@ class Handler(BaseHTTPRequestHandler):
                     'instruments': {k: str(v) for k, v in state['avail'].items()},
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/undo':
@@ -9080,7 +9101,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/copy_pad':
@@ -9094,7 +9115,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/swap_pads':
@@ -9108,7 +9129,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/batch_set_param':
@@ -9122,7 +9143,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/set_tags':
@@ -9132,7 +9153,7 @@ class Handler(BaseHTTPRequestHandler):
                 set_instrument_tags(sin_rel, tags)
                 self.send_json({'tags': load_tags()})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/import_bundle':
@@ -9150,7 +9171,7 @@ class Handler(BaseHTTPRequestHandler):
                     'result':      result,
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/relink_apply':
@@ -9164,7 +9185,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/sin_update':
@@ -9176,7 +9197,7 @@ class Handler(BaseHTTPRequestHandler):
                     mappings=body.get('mappings'),
                 ))
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/sin_zones':
@@ -9187,14 +9208,14 @@ class Handler(BaseHTTPRequestHandler):
                     params=body.get('params'),
                 ))
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/sin_revert':
             try:
                 self.send_json(sin_revert(body['sin_rel']))
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/batch_assign_csv':
@@ -9210,7 +9231,7 @@ class Handler(BaseHTTPRequestHandler):
                     'skipped':        result['skipped'],
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/diff_kit':
@@ -9218,7 +9239,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = diff_kit(body['path'])
                 self.send_json(result)
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/snapshot':
@@ -9232,14 +9253,14 @@ class Handler(BaseHTTPRequestHandler):
                     'kit':       _kit_key(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/snapshot_diff':
             try:
                 self.send_json(diff_snapshots(body['a'], body['b']))
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/snapshot_restore':
@@ -9254,7 +9275,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/snapshot_delete':
@@ -9262,7 +9283,7 @@ class Handler(BaseHTTPRequestHandler):
                 delete_snapshot(body['id'])
                 self.send_json({'snapshots': list_snapshots(), 'kit': _kit_key()})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/snapshot_pin':
@@ -9270,7 +9291,7 @@ class Handler(BaseHTTPRequestHandler):
                 set_snapshot_pin(body['id'], bool(body.get('pinned', True)))
                 self.send_json({'snapshots': list_snapshots(), 'kit': _kit_key()})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/clear_all_pads':
@@ -9284,7 +9305,7 @@ class Handler(BaseHTTPRequestHandler):
                     'history_labels': _history_labels(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/duplicate_kit':
@@ -9295,7 +9316,7 @@ class Handler(BaseHTTPRequestHandler):
                     'kits':    find_kit_files(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/load_bytes':
@@ -9315,7 +9336,7 @@ class Handler(BaseHTTPRequestHandler):
                     'skt_lossless':  state['skt_lossless'],
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/autosave':
@@ -9323,7 +9344,7 @@ class Handler(BaseHTTPRequestHandler):
                 saved_path = autosave_kit()
                 self.send_json({'path': saved_path or ''})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/delete_autosave':
@@ -9333,7 +9354,7 @@ class Handler(BaseHTTPRequestHandler):
                     p.unlink()
                 self.send_json({'ok': True})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/sync_kits':
@@ -9344,7 +9365,7 @@ class Handler(BaseHTTPRequestHandler):
                 msg = f'Synced {n} kit(s) from card' + (f' ({s} already present)' if s else '')
                 self.send_json({'message': msg, 'kits': find_kit_files(), **result})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/sync_library':
@@ -9366,7 +9387,7 @@ class Handler(BaseHTTPRequestHandler):
                 output = hex_inspect_pad(body.get('pad_id', ''))
                 self.send_json({'output': output})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/run_tool':
@@ -9379,7 +9400,7 @@ class Handler(BaseHTTPRequestHandler):
             except subprocess.TimeoutExpired:
                 self.send_json({'error': 'Tool timed out (120 s limit)'})
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/run_template':
@@ -9403,7 +9424,7 @@ class Handler(BaseHTTPRequestHandler):
                     'kits':          find_kit_files(),
                 })
             except Exception as e:
-                self.send_json({'error': str(e)})
+                self.send_json({'error': _friendly_error(e)})
             return
 
         self.send_response(404)
