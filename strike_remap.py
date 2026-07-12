@@ -1166,6 +1166,10 @@ def refresh_available():
 
 def assign_instrument(pad_id: str, layer: str, sin_rel: str):
     """Set pad layer_a or layer_b to the given .sin relative path."""
+    if sin_rel not in state['avail']:
+        refresh_available()
+        if sin_rel not in state['avail']:
+            raise ValueError(f'Instrument not found: {sin_rel}')
     short = sin_rel.rsplit('/', 1)[-1].removesuffix('.sin').removesuffix('.SIN')
     _push_history(f'Assign {short} → {pad_id}')
     instruments = state['instruments']
@@ -1464,20 +1468,47 @@ def copy_pad(from_id: str, to_id: str):
     state['message'] = f'Copied {from_id} → {to_id}'
 
 
+def _sin_missing_wavs(sin_abs) -> list:
+    """Return the WAV rel paths referenced by a .sin that do not resolve in
+    any search root. Unreadable .sin counts as nothing-missing (the .sin
+    itself is reported separately)."""
+    try:
+        wav_rels = parse_sin_all_wavs(Path(sin_abs).read_bytes())
+    except OSError:
+        return []
+    roots = _sin_search_roots()
+    return [w for w in wav_rels if _resolve_wav(w, roots) is None]
+
+
 def check_paths() -> dict:
-    """Return sin_rel paths in the current kit that cannot be found in avail."""
+    """Return sin_rel paths in the current kit that are broken: the .sin
+    itself is missing from avail, OR one of the WAV samples it references
+    does not resolve (moved/renamed sample folders — the common breakage).
+    'detail' maps each broken rel to a reason string for the relink wizard."""
     avail       = state.get('avail', {})
     instruments = state.get('instruments', [])
     broken = []
+    detail = {}
     for pad in state.get('pads', []):
         for key in ('layer_a', 'layer_b'):
             idx = pad.get(key)
             if idx is None or idx == NO_INSTRUMENT or idx >= len(instruments):
                 continue
             sin_rel = instruments[idx]
-            if sin_rel not in avail and sin_rel not in broken:
+            if sin_rel in broken:
+                continue
+            sin_abs = avail.get(sin_rel)
+            if not sin_abs:
                 broken.append(sin_rel)
-    return {'broken': broken}
+                detail[sin_rel] = 'instrument file not found'
+                continue
+            missing = _sin_missing_wavs(sin_abs)
+            if missing:
+                broken.append(sin_rel)
+                short = ', '.join(m.rsplit('/', 1)[-1] for m in missing[:3])
+                more  = f' (+{len(missing) - 3} more)' if len(missing) > 3 else ''
+                detail[sin_rel] = f'{len(missing)} missing sample(s): {short}{more}'
+    return {'broken': broken, 'detail': detail}
 
 
 def relink_suggestions() -> dict:
