@@ -25,13 +25,29 @@ Requirements: **Python 3.10+**. Standard library only — there is nothing to `p
 ```
 git clone https://github.com/Coober666/strike-pro-remapper
 cd strike-pro-remapper
-python strike_remap.py        # opens http://localhost:8765 in your browser
+python3 strike_remap.py       # macOS / Linux   — opens http://localhost:8765
+py strike_remap.py            # Windows
 ```
+
+(The command differs per OS on purpose: stock macOS has no `python`, and on Windows
+`python3` can silently resolve to a different Microsoft Store interpreter — `py` is the
+reliable launcher there.)
 
 Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
 
+> **First-run notes:**
+> - **macOS:** expect a one-time "access files in your Documents folder" / removable-volume
+>   permission prompt — the app needs it to read the SD card and your library. If
+>   `launch.command` opens a Terminal that errors immediately mid-path, an oh-my-zsh
+>   update prompt swallowed the command — run it again (or update oh-my-zsh first).
+> - **Windows:** if you downloaded the repo as a ZIP, SmartScreen may warn on `launch.bat`
+>   ("Windows protected your PC") — choose *More info → Run anyway*. A `git clone` won't
+>   trigger this.
+
 **With your SD card:** insert it and the app finds your kits and instruments automatically
-(volumes named `NO NAME` / `NO NAME 1`, or one folder level deep for Ventoy-style setups).
+(detected by their content — the factory preset card by its `Kits/<CATEGORY>/` tree, the
+user card by being writable; volume names don't matter — or one folder level deep for
+Ventoy-style setups).
 Use **Sync full library from SD** to copy everything into `library/` so you can edit with
 no SD card present — e.g. on a laptop away from your kit.
 
