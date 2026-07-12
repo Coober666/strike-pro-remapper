@@ -62,6 +62,9 @@ jobs:
       - name: Error layer + no-kit save guard (issue 8)
         run: python tools/test_error_layer.py
 
+      - name: Autosave hygiene (location, dedup, display, FX no-op — issue 9)
+        run: python tools/test_autosave_hygiene.py
+
       - name: Embedded JS syntax check
         run: |
           python - <<'EOF'
