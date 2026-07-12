@@ -1144,7 +1144,10 @@ def load_kit(path_str: str):
     if not lossless:
         print(f'[warn] {p.name}: round-trip check FAILED ({len(data)}B → {len(rebuilt)}B)', flush=True)
     state['kit_path']     = str(p)
-    state['kit_display']  = p.name
+    # Autosaves display (and key the time machine) under the ORIGINAL kit
+    # name — the header showing "X.autosave.skt" after a Recover confused
+    # users (finding A4-1).
+    state['kit_display']  = p.name.replace('.autosave.skt', '.skt') if p.name.endswith('.autosave.skt') else p.name
     state['kit_raw']      = kit_raw
     state['pads']         = pads
     state['instruments']  = instruments
@@ -1630,6 +1633,11 @@ def set_kit_fx(param: str, value: int):
     k = bytearray(state['kit_raw'])
     if len(k) < 52:
         raise ValueError(f'KIT block unexpectedly small ({len(k)} bytes)')
+    if struct.unpack_from(fmt, k, off)[0] == value:
+        # No-op (e.g. reselecting the already-active reverb type) — don't
+        # pollute the undo history or mark the kit dirty (finding B4-4).
+        state['message'] = f'Kit FX: {param} already {value}'
+        return
     _push_history(f'Kit FX {param} = {value}')
     struct.pack_into(fmt, k, off, value)
     state['kit_raw'] = bytes(k)
@@ -3027,48 +3035,62 @@ def save_kit(out_path_str: str):
     state['kit_display'] = out.name
     state['message']  = f"Saved to {out}"
     _auto_snapshot(f'Saved {out.name}', 'save')
-    # Clean up matching autosave file if it exists
-    autosave = out.parent / (out.stem + '.autosave.skt')
-    if autosave.exists():
-        try:
-            autosave.unlink()
-        except OSError:
-            pass
+    # Clean up matching autosave files (local working area + legacy next-to-kit)
+    for autosave in {out.parent / (out.stem + '.autosave.skt'),
+                     LIBRARY_DIR / 'kits' / (out.stem + '.autosave.skt')}:
+        if autosave.exists():
+            try:
+                autosave.unlink()
+            except OSError:
+                pass
 
 
 def autosave_kit() -> 'str | None':
-    """Write a .autosave.skt alongside the current kit while dirty. Returns path or None."""
+    """Write a .autosave.skt for the current kit while dirty. Returns path or None.
+
+    Autosaves always land in the LOCAL working area (library/kits), never on a
+    removable card — an unprompted write to the card root violated the app's
+    'only writes you asked for' contract (finding B4-3)."""
     if not state['kit_path'] or not state['dirty'] or state.get('kit_raw') is None:
         return None
     src = Path(state['kit_path'])
-    dst = src.parent / (src.stem + '.autosave.skt')
+    dst_dir = LIBRARY_DIR / 'kits'
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dst = dst_dir / (src.stem + '.autosave.skt')
     dst.write_bytes(build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail']))
     return str(dst)
 
 
 def find_autosaves() -> list:
-    """Return [{name, autosave_path, kit_path}] for all found .autosave.skt files."""
-    results = []
+    """Return [{name, autosave_path, kit_path}] for all found .autosave.skt files.
+
+    Deduplicated by KIT identity (stem), newest autosave wins — the recovery
+    banner used to list the same kit twice with identical labels when both a
+    card-root and a Kits/ copy existed (finding B4-1). Card locations are
+    still scanned so legacy autosaves written by older versions surface."""
     user, _ = get_volumes()
     dirs = [LIBRARY_DIR / 'kits']
     if user:
         dirs += [user, user / 'Kits']
-    seen = set()
+    by_stem = {}
     for d in dirs:
         if not d.is_dir():
             continue
         for p in sorted(d.glob('*.autosave.skt')):
-            if str(p) in seen:
+            stem = p.stem.replace('.autosave', '')
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
                 continue
-            seen.add(str(p))
-            stem     = p.stem.replace('.autosave', '')
+            if stem in by_stem and by_stem[stem][0] >= mtime:
+                continue
             kit_path = p.parent / (stem + '.skt')
-            results.append({
+            by_stem[stem] = (mtime, {
                 'name':          stem,
                 'autosave_path': str(p),
                 'kit_path':      str(kit_path) if kit_path.exists() else '',
             })
-    return results
+    return [entry for _, entry in sorted(by_stem.values(), key=lambda t: -t[0])]
 
 
 def volume_status():
