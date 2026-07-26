@@ -63,6 +63,12 @@ copies to the writable Strike SD card, and verifies the result. Put the card bac
 module and load the kit. (Live USB sync to the module is not supported — that protocol
 is still unmapped. See `RESEARCH.md`.)
 
+**"The SD card stopped responding".** The module keeps its card mounted internally while also
+sharing it over USB, so under heavy use the card can stall for a moment even though it is
+still plugged in. The app retries automatically and you will usually never see this; if the
+message does appear, just try again. If it keeps happening, leave the official Strike Editor
+open while you work — the module seems to hold on to the card when it is closed.
+
 **"Could not be verified" in preflight.** The module only exposes its factory card while the
 official Alesis Strike Editor is running, so with that closed the app cannot see factory
 sounds your kit uses. Those references are reported as a warning, never as an error —

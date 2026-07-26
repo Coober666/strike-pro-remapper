@@ -332,6 +332,16 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
     `delete_snapshot(id)`, `set_snapshot_pin(id, pinned)`. `_SNAP_LOCK` guards index writes.
   - Routes: `GET /api/snapshots` (`?all=1`), `POST /api/snapshot|snapshot_diff|
     snapshot_restore|snapshot_delete|snapshot_pin`. Test: `tools/test_time_machine.py`.
+- **The SD card stalls; that is not a disconnection** (issue #35). The module keeps its card
+  mounted internally while also exporting it over USB, so sustained host access can lose the
+  volume for a moment even though it is still plugged in — reads raise `EINVAL` or
+  `WinError 55/1006` and succeed again right after. Observed only with the official Strike
+  Editor closed; the working theory is that the editor's handshake makes the module yield the
+  card. **Read card files through `read_card_bytes()`, never `Path.read_bytes()`** — it
+  retries with backoff on `_is_transient_volume_error()`. `get_volumes()` re-scans before
+  reporting a previously-seen card as missing, so a blip cannot raise a false `no_user_card`
+  blocker. `_friendly_error()` turns these into an actionable message rather than the generic
+  console pointer. Test: `tools/test_card_resilience.py`.
 - `check_paths()` — return sin_rel paths in current kit not found in avail
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
 - **Deploy asset resolution has three states, not two** (issue #33). The module only exposes

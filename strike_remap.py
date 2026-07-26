@@ -8,6 +8,7 @@ pad zone via a local web UI at http://localhost:8765
 
 import base64
 import datetime
+import errno
 import hashlib
 import io
 import json
@@ -159,9 +160,51 @@ def _classify_volumes(vols: dict):
     return user, preset
 
 
+# The module keeps its SD card mounted internally while also exporting it over
+# USB, so sustained host access can briefly lose the volume even though it is
+# still connected — reads come back as EINVAL or WinError 55/1006 and succeed
+# again moments later (issue #35). These are stalls, not disconnections: retry.
+_TRANSIENT_WINERRORS = {21, 55, 1006, 1117}   # not ready, no longer available,
+                                              # volume externally altered, I/O device
+
+
+def _is_transient_volume_error(e: OSError) -> bool:
+    """True for a removable-media stall, as opposed to a real failure."""
+    if getattr(e, 'winerror', None) in _TRANSIENT_WINERRORS:
+        return True
+    return e.errno in (errno.EINVAL, errno.EIO)
+
+
+def read_card_bytes(path: Path, tries: int = 3) -> bytes:
+    """Read a file that may live on removable media, riding out brief stalls."""
+    for attempt in range(tries):
+        try:
+            return path.read_bytes()
+        except OSError as e:
+            if attempt == tries - 1 or not _is_transient_volume_error(e):
+                raise
+            time.sleep(0.25 * (attempt + 1))
+
+
+_last_seen_user_volume = None
+
+
 def get_volumes():
     """Return (user_volume_root, preset_volume_root). Either may be None if not mounted."""
-    return _classify_volumes(_find_strike_volumes())
+    global _last_seen_user_volume
+    user, preset = _classify_volumes(_find_strike_volumes())
+    if user is None and _last_seen_user_volume is not None:
+        # A card that was mounted a moment ago should not be declared missing
+        # because one probe caught it mid-stall — re-scan before believing it.
+        for delay in (0.15, 0.4):
+            time.sleep(delay)
+            user, preset = _classify_volumes(_find_strike_volumes())
+            if user is not None:
+                break
+    # Track the outcome either way, so a genuinely ejected card costs the
+    # re-scan once rather than on every call.
+    _last_seen_user_volume = user
+    return user, preset
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -170,6 +213,10 @@ def _is_under(path: Path, root: Path) -> bool:
         path.resolve().relative_to(root.resolve())
         return True
     except ValueError:
+        return False
+    except OSError:
+        # The volume stalled mid-resolve (issue #35). Treating this as "not on
+        # the card" only risks planning a redundant copy, never a wrong write.
         return False
 
 
@@ -1137,7 +1184,7 @@ state = {
 
 def load_kit(path_str: str):
     p = Path(path_str)
-    data = p.read_bytes()
+    data = read_card_bytes(p)
     kit_raw, pads, instruments, tail = parse_skt(data)
     rebuilt  = build_skt(kit_raw, pads, instruments, tail)
     lossless = (rebuilt == data)
@@ -3297,7 +3344,7 @@ def _deploy_plan() -> dict:
         if not sin_src or not Path(sin_src).is_file():
             continue
         try:
-            wav_rels = parse_sin_all_wavs(Path(sin_src).read_bytes())
+            wav_rels = parse_sin_all_wavs(read_card_bytes(Path(sin_src)))
         except OSError:
             wav_rels = []
         for wav_rel in wav_rels:
@@ -3384,7 +3431,7 @@ def deploy_kit() -> dict:
     for asset in plan['assets']:
         if asset['status'] != 'copy':
             continue
-        _atomic_write(asset['dst'], asset['src'].read_bytes())
+        _atomic_write(asset['dst'], read_card_bytes(asset['src']))
         if not _files_equal(asset['src'], asset['dst']):
             raise OSError(f"Could not verify copied asset: {asset['rel']}")
         copied_files += 1
@@ -3403,7 +3450,7 @@ def deploy_kit() -> dict:
         shutil.copy2(card_target, backup_path)
 
     _atomic_write(card_target, plan['kit_bytes'])
-    if card_target.read_bytes() != plan['kit_bytes']:
+    if read_card_bytes(card_target) != plan['kit_bytes']:
         raise OSError('The module copy could not be verified after writing.')
 
     state['dirty'] = False
@@ -10305,6 +10352,12 @@ def _friendly_error(e: BaseException) -> str:
         # backslash paths when running under POSIX
         base = str(name).replace('\\', '/').rsplit('/', 1)[-1] if name else ''
         where = f' ({base})' if base else ''
+        if _is_transient_volume_error(e):
+            # Retries are already exhausted by here, so say what it is and what
+            # to do — the card is still plugged in (issue #35).
+            return (f'The SD card stopped responding{where}. It is still connected, so try '
+                    'again. If it keeps happening, open the official Strike Editor while you '
+                    'work — the module holds on to the card when the editor is closed.')
         return f'File system error{where} — see the server console for details.'
     return 'Internal error — see the server console for details.'
 
