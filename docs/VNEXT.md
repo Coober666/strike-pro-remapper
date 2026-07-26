@@ -308,3 +308,12 @@ The first release boundary may contain milestones 1–3. That produces a complet
 - An LLM dependency for kit creation
 - Editing unknown binary offsets without hardware confirmation
 - A complete architecture rewrite before user-facing workflow improvements
+
+## Tracking issues
+
+- [#25 — Task-based start screen](https://github.com/Coober666/strike-pro-remapper/issues/25)
+- [#26 — Read-only Deploy to Module preflight](https://github.com/Coober666/strike-pro-remapper/issues/26)
+- [#27 — Verified Deploy to Module workflow](https://github.com/Coober666/strike-pro-remapper/issues/27)
+- [#28 — Setlist Builder MVP](https://github.com/Coober666/strike-pro-remapper/issues/28)
+- [#29 — Kit Balance Assistant MVP](https://github.com/Coober666/strike-pro-remapper/issues/29)
+- [#30 — Trigger Coach advisory MVP](https://github.com/Coober666/strike-pro-remapper/issues/30)
