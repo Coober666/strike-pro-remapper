@@ -3920,10 +3920,11 @@ header.app-topbar {
 .workspace-spacer { flex: 1; min-height: 10px; }
 
 #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
-#left-panel, #inst-panel {
+#left-panel, #inst-panel, #advanced-panel {
   grid-column: 3 !important; grid-row: 1 !important; min-width: 0; min-height: 0; max-height: none;
   border: 0; background: #151916;
 }
+#advanced-panel { display: none; flex-direction: column; overflow: hidden; }
 body[data-workspace="pad"] #left-panel { display: flex; }
 body[data-workspace="pad"] #inst-panel { display: none; }
 body[data-workspace="pad"] #patch-panel-wrap { display: none; }
@@ -3935,6 +3936,14 @@ body[data-workspace="inputs"] #pad-detail { display: none; }
 body[data-workspace="inputs"] #patch-panel-wrap { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 body[data-workspace="inputs"] #patch-panel { display: block !important; flex: 1; overflow-y: auto; padding: 16px 12px; }
 body[data-workspace="inputs"] .patch-hdr { min-height: 42px; }
+body[data-workspace="fx"] #left-panel, body[data-workspace="fx"] #inst-panel,
+body[data-workspace="history"] #left-panel, body[data-workspace="history"] #inst-panel,
+body[data-workspace="tools"] #left-panel, body[data-workspace="tools"] #inst-panel,
+body[data-workspace="repair"] #left-panel, body[data-workspace="repair"] #inst-panel,
+body[data-workspace="layout"] #left-panel, body[data-workspace="layout"] #inst-panel { display: none; }
+body[data-workspace="fx"] #advanced-panel, body[data-workspace="history"] #advanced-panel,
+body[data-workspace="tools"] #advanced-panel, body[data-workspace="repair"] #advanced-panel,
+body[data-workspace="layout"] #advanced-panel { display: flex; }
 .context-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 54px;
   padding: 9px 11px 8px; border-bottom: 1px solid #303731;
@@ -3954,6 +3963,52 @@ body[data-workspace="inputs"] .patch-hdr { min-height: 42px; }
 }
 .context-head button:hover { border-color: var(--accent); color: #e6c984; background: #29251b; }
 #inst-panel > div:nth-child(2) { padding-top: 9px !important; }
+.advanced-body { min-height: 0; flex: 1; overflow-y: auto; padding: 0 11px 14px; }
+.aw-intro {
+  margin: 11px 0 5px; padding: 0 1px 10px; border-bottom: 1px solid #343b35;
+  color: #929a92; font-size: .68rem; line-height: 1.48;
+}
+.aw-status-line {
+  display: flex; align-items: center; gap: 6px; min-height: 28px; margin: 7px 0 2px;
+  color: #767e77; font: .55rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase;
+}
+.aw-status-line::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px #84b89b88; }
+.aw-status-line.warn::before { background: #c98254; box-shadow: 0 0 6px #c9825488; }
+.aw-module { position: relative; margin-top: 8px; padding: 9px 9px 10px 43px; border: 1px solid #343b35; background: linear-gradient(145deg, #1b201c, #111411); box-shadow: inset 0 1px #ffffff05; }
+.aw-module::before {
+  content: attr(data-channel); position: absolute; inset: 0 auto 0 0; display: grid; place-items: center; width: 32px;
+  border-right: 1px solid #343b35; color: #7d7563; background: linear-gradient(90deg, #101310, #1b1f1b);
+  font: 700 .55rem/1 Consolas, monospace; letter-spacing: .04em; writing-mode: vertical-rl; transform: rotate(180deg);
+}
+.aw-module-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; margin-bottom: 7px; }
+.aw-module-head > div { min-width: 0; }
+.aw-module h3 { margin: 0 0 2px; color: #dfe2dd; font: 600 .76rem/1.2 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.aw-module p { color: #747c75; font-size: .62rem; line-height: 1.42; }
+.aw-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.aw-actions button, .aw-actions label {
+  min-height: 25px; padding: 4px 7px; border: 1px solid #414941; border-radius: 2px;
+  background: #141815; color: #aeb4ae; font-size: .62rem; line-height: 1.2; cursor: pointer;
+}
+.aw-actions button:hover, .aw-actions label:hover { border-color: #8c7548; color: #e4c77f; background: #29251b; }
+.aw-actions .primary { color: #17130d; border-color: #d0ad68; background: var(--accent); font-weight: 650; }
+.aw-actions .danger { color: #d28177; border-color: #67413d; }
+.aw-meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+.aw-meter { display: grid; grid-template-columns: 1fr 24px; align-items: center; gap: 3px 5px; color: #7a827b; font: .54rem/1 Consolas, monospace; text-transform: uppercase; }
+.aw-meter em { grid-column: 1 / -1; color: #666e67; font-style: normal; letter-spacing: .08em; }
+.aw-meter-track { position: relative; height: 5px; overflow: hidden; background: #080a09; border: 1px solid #303630; }
+.aw-meter-track i { display: block; height: 100%; width: var(--meter); background: linear-gradient(90deg, #725f38, var(--accent)); }
+.aw-meter b { color: #b4bab4; font-weight: 500; text-align: right; }
+.aw-ledger { display: grid; gap: 1px; margin-top: 7px; border-top: 1px solid #343b35; }
+.aw-ledger-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 7px; padding: 6px 2px; border-bottom: 1px solid #2c322d; color: #777f78; font: .57rem/1.25 Consolas, monospace; }
+.aw-ledger-row strong { overflow: hidden; color: #b9beb9; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.aw-empty { padding: 12px 2px; color: #707871; font-size: .64rem; line-height: 1.45; }
+.aw-tool-list { display: grid; gap: 4px; margin-top: 7px; }
+.aw-tool-list .tool-item { background: #111411; border-color: #343b35; }
+.advanced-tool-output { display: none; max-height: 180px; margin-top: 7px; padding: 7px; overflow: auto; white-space: pre-wrap; background: #090b09; border: 1px solid #343b35; color: #99b19d; font: .58rem/1.45 Consolas, monospace; }
+.advanced-tool-output.visible { display: block; }
+.audition-inline { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.audition-inline .tb-btn { padding: 2px 6px; font-size: .58rem; }
+.audition-sub { color: #5f675f; font: .5rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .center-hdr { min-height: 46px; gap: 7px; padding: 7px 10px 6px; }
 .map-title { display: flex; flex-direction: column; margin-right: 5px; color: var(--text); font-family: Bahnschrift, "Arial Narrow", sans-serif; font-size: .78rem; letter-spacing: .04em; text-transform: none; }
 .map-title small { margin-bottom: 2px; color: #6f7771; font: .52rem/1 Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
@@ -4056,9 +4111,12 @@ body[data-workspace="inputs"] .patch-hdr { min-height: 42px; }
   }
   .workspace-rail { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: calc(100vh - 8px); z-index: 20; }
   #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 610px; border-bottom: 1px solid var(--border); }
-  #left-panel, #inst-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
+  #left-panel, #inst-panel, #advanced-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
   #drum-svg-wrap { min-height: 360px; }
   .layer-rack { grid-template-columns: minmax(0, 1fr) 138px minmax(0, 1fr); }
+  .rack-pad-id span { display: none; }
+  .rack-blend::before { top: 31px; }
+  .rack-xfade { margin: 4px 0; }
 }
 @media (max-width: 620px) {
   header.app-topbar { grid-template-columns: 1fr; grid-template-areas: "brand" "identity" "actions" "utility"; }
@@ -4078,7 +4136,7 @@ body[data-workspace="inputs"] .patch-hdr { min-height: 42px; }
   .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
   .workspace-spacer { display: none; }
   #center-panel { min-height: 590px; }
-  #left-panel, #inst-panel { min-height: 420px; }
+  #left-panel, #inst-panel, #advanced-panel { min-height: 420px; }
   .center-hdr { flex-wrap: wrap; }
   .center-hdr .map-title { flex-basis: 100%; }
   .layer-rack { grid-template-columns: 1fr 1fr; }
@@ -4105,6 +4163,14 @@ body[data-theme=light] .rack-layer.active { border-color: #a68b58; }
 body[data-theme=light] .rack-layer-key, body[data-theme=light] .rack-action { background: #e2e1d9; border-color: #afb2a9; color: #596159; }
 body[data-theme=light] .rack-layer-title strong, body[data-theme=light] .rack-pad-id { color: #262c27; }
 body[data-theme=light] .rack-param output { color: #4f5750; }
+body[data-theme=light] #advanced-panel { background: #e4e3dc; }
+body[data-theme=light] .aw-intro { color: #687069; border-color: #bfc1b8; }
+body[data-theme=light] .aw-module { background: linear-gradient(145deg, #f3f1ea, #dad9d1); border-color: #b9bbb2; }
+body[data-theme=light] .aw-module::before { background: #d2d1c9; border-color: #b6b8af; color: #6d624d; }
+body[data-theme=light] .aw-module h3 { color: #262c27; }
+body[data-theme=light] .aw-actions button, body[data-theme=light] .aw-actions label { background: #e2e1d9; border-color: #afb2a9; color: #505851; }
+body[data-theme=light] .aw-ledger, body[data-theme=light] .aw-ledger-row { border-color: #c2c3ba; }
+body[data-theme=light] .aw-ledger-row strong { color: #343a35; }
 </style>
 </head>
 <body data-workspace="pad">
@@ -4150,10 +4216,9 @@ body[data-theme=light] .rack-param output { color: #4f5750; }
           <input type="file" accept=".csv,.txt" style="display:none;"
             onchange="if(this.files[0])importAssignCSV(this.files[0]);this.value=''">
         </label>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showDiffModal()">&#x1F50D; Compare with kit&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="openTimeMachine()">&#x1F570;&#xFE0F; Kit time machine&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showRelinkModal()">&#x1F527; Fix broken paths&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showKitFxModal()">&#x1F39A; Kit FX editor&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('history')">&#x1F50D; History and comparison</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('repair')">&#x1F527; Fix broken paths&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('fx')">&#x1F39A; Kit FX workspace</button>
         <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="exportBundle()">&#x1F4E6; Export kit bundle (.zip)</button>
         <label class="btn-secondary" style="width:100%;font-size:.72rem;display:block;text-align:center;cursor:pointer;box-sizing:border-box;"
           title="Accepts strike_remap bundles, official Strike Editor exports, and commercial pack zips (eDrumWorkshop, drum-tec, …)">
@@ -4239,13 +4304,6 @@ body[data-theme=light] .rack-param output { color: #4f5750; }
     </div>
   </div>
 
-  <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
-          title="Virtual module — play the kit being edited from the pads or number keys" style="flex-shrink:0;">Virtual</button>
-  <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;flex-shrink:0;font-size:.7rem;color:#888;">
-    <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:64px;vertical-align:middle;"
-           title="Keyboard-hit velocity (number keys 1–0)"></span>
-  <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
-          title="Enable MIDI monitor — hit a pad to see it light up" style="flex-shrink:0;">MIDI</button>
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
   <button id="theme-btn" class="btn-secondary tb-btn" onclick="toggleTheme()" title="Toggle dark/light theme" style="font-size:.9rem;flex-shrink:0;">&#9790;</button>
   </div><!-- /utility-strip -->
@@ -4266,13 +4324,13 @@ body[data-theme=light] .rack-param output { color: #4f5750; }
       <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
     </button>
     <span class="workspace-spacer"></span>
-    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('fx')" title="Kit FX">
+    <button class="workspace-tab" type="button" data-workspace="fx" onclick="openWorkspaceUtility('fx')" title="Kit FX">
       <span class="workspace-glyph" aria-hidden="true">FX</span><span>FX</span>
     </button>
-    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('history')" title="Kit history and comparison">
+    <button class="workspace-tab" type="button" data-workspace="history" onclick="openWorkspaceUtility('history')" title="Kit history and comparison">
       <span class="workspace-glyph" aria-hidden="true">H</span><span>History</span>
     </button>
-    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('tools')" title="Module and developer tools">
+    <button class="workspace-tab" type="button" data-workspace="tools" onclick="openWorkspaceUtility('tools')" title="Module and developer tools">
       <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
     </button>
   </nav>
@@ -4364,8 +4422,18 @@ body[data-theme=light] .rack-param output { color: #4f5750; }
     </div>
     <div id="loop-panel">
       <div class="loop-hdr" onclick="toggleLoopPanel()">
-        <span class="loop-hdr-lbl">Live Loop</span>
-        <span id="loop-toggle-arrow" style="font-size:.6rem;color:#445;margin-left:auto;">&#9654;</span>
+        <span class="loop-hdr-lbl">Audition</span>
+        <span class="audition-sub">Live loop · virtual kit · MIDI monitor</span>
+        <div class="audition-inline" onclick="event.stopPropagation()">
+          <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
+            title="Virtual module — play the kit being edited from the pads or number keys">Virtual</button>
+          <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;font-size:.7rem;color:#888;">
+            <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:54px;vertical-align:middle;"
+              title="Keyboard-hit velocity (number keys 1–0)"></span>
+          <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
+            title="Enable MIDI monitor — hit a pad to see it light up">MIDI</button>
+          <span id="loop-toggle-arrow" style="font-size:.6rem;color:#657066;margin-left:3px;">&#9654;</span>
+        </div>
       </div>
       <div id="loop-body" style="display:none;">
         <div class="loop-controls">
@@ -4454,6 +4522,15 @@ body[data-theme=light] .rack-param output { color: #4f5750; }
     </div>
     <div id="inst-list"></div>
     </div><!-- /padding wrapper -->
+  </section>
+
+  <!-- Right: advanced contextual workspaces -->
+  <section id="advanced-panel" aria-label="Advanced workspace">
+    <div class="context-head">
+      <div><span id="advanced-eyebrow" class="context-eyebrow">Advanced workspace</span><strong id="advanced-title">Module controls</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
+    <div id="advanced-body" class="advanced-body"></div>
   </section>
 
 </div>
@@ -5987,6 +6064,9 @@ function setMsg(txt, err=false) {
   const el = document.getElementById('msg');
   el.textContent = txt;
   el.className = err ? 'err' : '';
+  el.onclick = null;
+  el.title = '';
+  el.style.cursor = '';
 }
 
 function setDirtyState(dirty, cnt, labels) {
@@ -6038,10 +6118,12 @@ function menuToggle(id) {
 }
 
 function setWorkspaceMode(mode) {
-  if (!['pad', 'sounds', 'inputs'].includes(mode)) return;
+  const modes = ['pad', 'sounds', 'inputs', 'fx', 'history', 'tools', 'repair', 'layout'];
+  if (!modes.includes(mode)) return;
   document.body.dataset.workspace = mode;
+  const navMode = ['repair', 'layout'].includes(mode) ? 'tools' : mode;
   document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
-    const active = btn.dataset.workspace === mode;
+    const active = btn.dataset.workspace === navMode;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   });
@@ -6050,6 +6132,8 @@ function setWorkspaceMode(mode) {
     applyPatchPanelState();
   } else if (mode === 'sounds') {
     renderInstruments();
+  } else if (['fx', 'history', 'tools', 'repair', 'layout'].includes(mode)) {
+    renderAdvancedWorkspace(mode);
   }
   const contextEyebrow = document.getElementById('context-eyebrow');
   const contextTitle = document.getElementById('context-title');
@@ -6066,10 +6150,117 @@ function setWorkspaceMode(mode) {
 
 function openWorkspaceUtility(kind) {
   if (kind === 'kit') { menuToggle('kit-menu'); return; }
-  if (kind === 'fx') { showKitFxModal(); return; }
-  if (kind === 'history') { openTimeMachine(); return; }
-  if (kind === 'tools') { menuToggle('tools-menu'); loadTools(); }
+  if (['fx', 'history', 'tools'].includes(kind)) setWorkspaceMode(kind);
 }
+
+function awModule(channel, title, copy, actions='', content='') {
+  return `<section class="aw-module" data-channel="${channel}">
+    <div class="aw-module-head"><div><h3>${title}</h3><p>${copy}</p></div></div>
+    ${actions ? `<div class="aw-actions">${actions}</div>` : ''}${content}
+  </section>`;
+}
+
+function fxName(d, fx) {
+  return fx.type === 255 ? 'Off' : (d.fx_types[fx.type] || `Type ${fx.type}`);
+}
+
+async function renderAdvancedWorkspace(kind) {
+  const body = document.getElementById('advanced-body');
+  const eyebrow = document.getElementById('advanced-eyebrow');
+  const title = document.getElementById('advanced-title');
+  if (!body || !eyebrow || !title) return;
+  const headings = {
+    fx: ['Kit processing', 'FX / EQ / compressor'],
+    history: ['Kit ledger', 'History and comparison'],
+    tools: ['Utility bank', 'Module and editor tools'],
+    repair: ['Library integrity', 'Repair missing sounds'],
+    layout: ['Performance surface', 'Layout mode'],
+  };
+  const head = headings[kind] || headings.tools;
+  eyebrow.textContent = head[0]; title.textContent = head[1];
+  body.innerHTML = '<div class="aw-empty">Reading the current kit state…</div>';
+
+  if (kind === 'fx') {
+    if (!pads.length) {
+      body.innerHTML = '<div class="aw-intro">Load a kit to inspect and edit its master processing chain.</div>'
+        + awModule('FX', 'No kit loaded', 'FX settings belong to a kit. Open one from the Kits menu to continue.');
+      return;
+    }
+    const d = await fetch('/api/kit_fx').then(r => r.json()).catch(() => ({error:'FX state unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    if (d.error) { body.innerHTML = `<div class="aw-empty">${escHtml(d.error)}</div>`; return; }
+    const rvName = d.reverb_names[d.reverb.type] || `Type ${d.reverb.type}`;
+    const compName = d.comp_presets[d.eq_comp.comp_preset] || `Preset ${d.eq_comp.comp_preset}`;
+    body.innerHTML = `<div class="aw-intro">The kit master chain sits after every pad. Per-pad send levels remain in the Pad workspace; these controls shape the shared returns and output.</div>
+      <div class="aw-status-line">Loaded chain · changes join kit undo history</div>
+      ${awModule('REV', `Reverb · ${escHtml(rvName)}`, 'Shared ambience return for the loaded kit.',
+        '<button class="primary" onclick="showKitFxModal()">Open full FX editor</button>',
+        `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.reverb.level}%"></i></span><b>${d.reverb.level}</b></div><div class="aw-meter"><em>Size</em><span class="aw-meter-track"><i style="--meter:${d.reverb.size}%"></i></span><b>${d.reverb.size}</b></div><div class="aw-meter"><em>Color</em><span class="aw-meter-track"><i style="--meter:${d.reverb.color}%"></i></span><b>${d.reverb.color}</b></div></div>`)}
+      ${awModule('FX1', `FX1 · ${escHtml(fxName(d,d.fx1))}`, 'First shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx1.level}%"></i></span><b>${d.fx1.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx1.feedback}%"></i></span><b>${d.fx1.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx1.depth}%"></i></span><b>${d.fx1.depth}</b></div></div>`)}
+      ${awModule('FX2', `FX2 · ${escHtml(fxName(d,d.fx2))}`, 'Second shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx2.level}%"></i></span><b>${d.fx2.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx2.feedback}%"></i></span><b>${d.fx2.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx2.depth}%"></i></span><b>${d.fx2.depth}</b></div></div>`)}
+      ${awModule('OUT', `Output · ${escHtml(compName)}`, `Compressor threshold ${d.eq_comp.threshold_db} dB · output ${d.eq_comp.output_db} dB.`, '<button onclick="showKitFxModal()">Edit EQ and compressor</button>')}`;
+    return;
+  }
+
+  if (kind === 'history') {
+    const data = await fetch('/api/snapshots').then(r => r.json()).catch(() => ({snapshots:[], error:'History unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    const snaps = data.snapshots || [];
+    const rows = snaps.slice(0, 5).map(s => `<div class="aw-ledger-row"><span>${escHtml(s.kind || 'manual')}</span><strong>${escHtml(s.label || s.id)}</strong><span>${tmFmtTime(s.iso,s.ts)}</span></div>`).join('');
+    body.innerHTML = `<div class="aw-intro">Snapshots are restore points for the working kit. Restores remain undoable; comparison never changes kit data.</div>
+      <div class="aw-status-line${data.error ? ' warn' : ''}">${data.error ? escHtml(data.error) : `${snaps.length} snapshot${snaps.length===1?'':'s'} · ${escHtml(data.kit || kitName || 'current kit')}`}</div>
+      ${awModule('TIME', 'Kit time machine', 'Scrub, pin, compare, restore, or delete exact kit snapshots.', '<button class="primary" onclick="openTimeMachine()">Open timeline</button><button onclick="advancedSnapshotNow()">Snapshot now</button>', rows ? `<div class="aw-ledger">${rows}</div>` : '<div class="aw-empty">No snapshots yet. Loading or saving a kit creates them automatically.</div>')}
+      ${awModule('DIFF', 'Compare with another kit', 'See exact per-pad assignment and parameter differences without modifying either kit.', '<button onclick="showDiffModal()">Choose comparison kit</button>')}`;
+    return;
+  }
+
+  if (kind === 'repair') {
+    const count = brokenPaths.size;
+    body.innerHTML = `<div class="aw-intro">Repair reconnects instrument references when a library moved between computers or storage volumes. The kit stays lossless until you save it.</div>
+      <div class="aw-status-line${count ? ' warn' : ''}">${count ? `${count} missing instrument reference${count===1?'':'s'}` : 'All assigned instrument paths resolve on this computer'}</div>
+      ${awModule('PATH', count ? 'Review suggested replacements' : 'Library paths are healthy', count ? 'The repair wizard ranks filename and library matches, but nothing changes until you apply the selected replacements.' : 'No repair action is required for the loaded kit.', count ? '<button class="primary" onclick="showRelinkModal()">Open guided repair</button>' : '<button onclick="checkPaths();renderAdvancedWorkspace(\'repair\')">Check again</button>')}
+      ${awModule('MOVE', 'Moving between Windows and macOS', 'Keep relative Instruments and Samples folders together. Repair is for changed roots or renamed content, not conversion of kit data.')}`;
+    return;
+  }
+
+  if (kind === 'layout') {
+    const changed = Object.values(padOverrides).filter(v => v && Object.keys(v).length).length;
+    body.innerHTML = `<div class="aw-intro">Layout mode changes only the browser performance surface—pad positions, shapes, finishes, mirrors, and labels. It does not rewrite module trigger geometry.</div>
+      <div class="aw-status-line">${changed} customized map element${changed===1?'':'s'} · stored in this browser</div>
+      ${awModule('MAP', 'Customize the kit map', 'Select a pad, then drag it or use the Pad workspace customization controls.', '<button class="primary" onclick="setWorkspaceMode(\'pad\')">Select and edit pads</button><button onclick="resetAllOverrides();renderAdvancedWorkspace(\'layout\')">Reset layout</button>')}
+      ${awModule('FILE', 'Portable layout file', 'Save the visual map as JSON or load a layout created on another computer.', '<button onclick="exportLayout()">Save layout file</button><button onclick="document.getElementById(\'layout-file\').click()">Load layout file</button>')}
+      ${awModule('BATCH', 'Batch parameter editing', 'Select multiple pads on the map and apply one confirmed parameter value to all of them.', `<button onclick="advancedStartBatch()">${batchMode ? 'Return to active batch' : 'Start batch edit'}</button>`)}`;
+    return;
+  }
+
+  const toolData = await api('/tools').catch(() => ({tools:[]}));
+  if (document.body.dataset.workspace !== kind) return;
+  const toolRows = (toolData.tools || []).map(t => `<div class="tool-item"><span title="${escHtml(t.name)}">${escHtml(t.label)}</span><button class="btn-secondary" onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button></div>`).join('');
+  body.innerHTML = `<div class="aw-intro">Utilities that affect playback, hardware communication, file repair, or developer output live here—separate from routine pad editing.</div>
+    <div class="aw-status-line">Editor utilities ready</div>
+    ${awModule('PLAY', 'Audition system', 'Live Loop, the virtual kit, and MIDI monitoring share one drawer beneath the map.', `<button class="primary" onclick="advancedOpenAudition()">Open audition drawer</button><button onclick="advancedToggleVirtual()">Virtual ${vmActive?'on':'off'}</button><button onclick="advancedToggleMidi()">MIDI ${midiActive?'on':'off'}</button>`)}
+    ${awModule('MAP', 'Map and batch tools', 'Customize the performance surface or edit several pads at once.', '<button onclick="setWorkspaceMode(\'layout\')">Open layout mode</button><button onclick="advancedStartBatch()">Start batch edit</button>')}
+    ${awModule('PATH', 'Library repair', `${brokenPaths.size ? brokenPaths.size + ' missing instrument reference(s)' : 'All assigned paths currently resolve.'}`, '<button onclick="setWorkspaceMode(\'repair\')">Open repair workspace</button>')}
+    ${awModule('MIDI', 'Trigger settings backup', 'Capture, save, load, and cautiously restore the module\'s raw SysEx trigger dump. Web MIDI requires Chrome or Edge.', '<button onclick="showTrigModal()">Open trigger backup</button>')}
+    ${awModule('DEV', 'Developer scripts', 'Low-level inspection and kit-generation utilities. Output remains local to this session.', '', `<div id="advanced-tools-list" class="aw-tool-list">${toolRows || '<div class="aw-empty">No developer scripts available.</div>'}</div><div id="advanced-tool-output" class="advanced-tool-output"></div>`)}`;
+}
+
+async function advancedSnapshotNow() {
+  const data = await api('/snapshot', {kind:'manual'});
+  if (data.error) { setMsg(data.error, true); return; }
+  setMsg(data.snapshot?.deduped ? 'No changes since the last snapshot' : 'Snapshot saved');
+  renderAdvancedWorkspace('history');
+}
+
+function advancedOpenAudition() {
+  if (!loopPanelOpen) toggleLoopPanel();
+  document.getElementById('loop-panel')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+  setMsg('Audition drawer open');
+}
+
+async function advancedToggleVirtual() { await toggleVirtualModule(); renderAdvancedWorkspace('tools'); }
+async function advancedToggleMidi() { await toggleMidi(); renderAdvancedWorkspace('tools'); }
+function advancedStartBatch() { if (!batchMode) batchToggle(); setWorkspaceMode('pad'); }
 
 document.addEventListener('click', e => {
   if (!e.target.closest('.tb-group') && !e.target.closest('.workspace-tab')) {
@@ -6133,6 +6324,9 @@ function applyKitData(data, path, opts) {
   if (liveLoop?.ctx) liveLoop.prefetchAll();
   refreshKitSize();
   checkPaths();
+  if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+    renderAdvancedWorkspace(document.body.dataset.workspace);
+  }
 }
 
 async function openKit(idx) {
@@ -7376,10 +7570,15 @@ async function checkPaths() {
   const data = await fetch('/api/check_paths').then(r => r.json()).catch(() => ({broken: []}));
   brokenPaths = new Set(data.broken || []);
   if (brokenPaths.size) {
-    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found on this machine — use 🔧 Fix broken paths in the Kits menu`, true);
+    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found — open Repair`, true);
+    const msg = document.getElementById('msg');
+    msg.onclick = () => setWorkspaceMode('repair');
+    msg.title = 'Open the guided repair workspace';
+    msg.style.cursor = 'pointer';
   }
   renderDrumMap();
   renderPadDetail();
+  if (['repair','tools'].includes(document.body.dataset.workspace)) renderAdvancedWorkspace(document.body.dataset.workspace);
 }
 
 // ── Sample relink wizard ──────────────────────────────────────────────────────
@@ -8564,28 +8763,31 @@ async function previewBlend(padId) {
 // ── Script runner ─────────────────────────────────────────────────────────────
 async function loadTools() {
   const data = await api('/tools');
-  const el   = document.getElementById('tools-list');
-  if (!el || !data.tools) return;
-  el.innerHTML = data.tools.map(t =>
+  if (!data.tools) return;
+  const html = data.tools.map(t =>
     `<div class="tool-item">
        <span title="${escHtml(t.name)}">${escHtml(t.label)}</span>
        <button class="btn-secondary" style="font-size:.65rem;padding:2px 6px;"
-         onclick="runTool('${escHtml(t.name)}')">Run</button>
+         onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button>
      </div>`
   ).join('');
+  const menuList = document.getElementById('tools-list');
+  const advancedList = document.getElementById('advanced-tools-list');
+  if (menuList) menuList.innerHTML = html;
+  if (advancedList) advancedList.innerHTML = html;
 }
 
 async function runTool(name) {
-  const outEl = document.getElementById('tool-output');
-  if (outEl) { outEl.textContent = `Running ${name}…`; outEl.classList.add('visible'); }
+  const outputs = [document.getElementById('tool-output'), document.getElementById('advanced-tool-output')].filter(Boolean);
+  outputs.forEach(el => { el.textContent = `Running ${name}…`; el.classList.add('visible'); });
   setMsg(`Running ${name}…`);
   const data = await api('/run_tool', {name});
   if (data.error) {
-    if (outEl) outEl.textContent = 'Error: ' + data.error;
+    outputs.forEach(el => { el.textContent = 'Error: ' + data.error; });
     setMsg(data.error, true);
     return;
   }
-  if (outEl) outEl.textContent = data.output || '(no output)';
+  outputs.forEach(el => { el.textContent = data.output || '(no output)'; });
   if (data.kits) { kits = data.kits; renderKitList(); }
   setMsg(`${name} finished`);
 }
@@ -8949,8 +9151,12 @@ async function checkStatus() {
       // Close any open modal first (Esc previously worked on some modals but
       // not others, e.g. Kit FX — finding A0-1); only then clear selection.
       const openModal = document.querySelector(
-        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open');
+        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
       if (openModal) { openModal.classList.remove('open'); return; }
+      if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+        setWorkspaceMode('pad');
+        return;
+      }
       clearSelection();
       return;
     }
