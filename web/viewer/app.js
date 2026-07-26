@@ -253,20 +253,6 @@ function renderLoopStepHighlight() {
   }
 }
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
-let themeLight = false;
-try { themeLight = localStorage.getItem('strike_theme') === 'light'; } catch(e) {}
-function applyTheme() {
-  document.body.dataset.theme = themeLight ? 'light' : 'dark';
-  const btn = document.getElementById('theme-btn');
-  if (btn) { btn.title = themeLight ? 'Switch to dark' : 'Switch to light'; btn.textContent = themeLight ? '☀' : '☾'; }
-}
-function toggleTheme() {
-  themeLight = !themeLight;
-  try { localStorage.setItem('strike_theme', themeLight ? 'light' : 'dark'); } catch(e) {}
-  applyTheme();
-}
-
 // ── Favorites & recently used ─────────────────────────────────────────────────
 let favorites  = new Set();
 let recentInst = [];
@@ -4275,7 +4261,6 @@ async function checkStatus() {
 }
 
 (async () => {
-  applyTheme();
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
