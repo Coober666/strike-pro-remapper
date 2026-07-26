@@ -3821,12 +3821,228 @@ body[data-theme=light] .inst-item:hover { background: #deddd5; }
 body[data-theme=light] .assign-target { background: #dce7e7; border-color: #9eb2b5; color: #36545c; }
 body[data-theme=light] .tag-chip { background: #e6e5de; border-color: #b7bbb3; color: #555d56; }
 body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a98549; color: #624c28; }
+
+/* ── Editor shell hierarchy (mode rail + contextual workspace) ── */
+header.app-topbar {
+  display: grid; grid-template-columns: 205px minmax(210px, 1fr) auto;
+  grid-template-areas: "brand identity actions" "utility utility utility";
+  align-items: stretch; gap: 0; min-height: 86px; padding: 0;
+  background: linear-gradient(180deg, #1b201c 0 58px, #111411 58px 100%);
+  border-bottom: 1px solid #050706;
+}
+.brand-lockup {
+  grid-area: brand; display: flex; align-items: center; gap: 11px; min-width: 0;
+  padding: 10px 16px; border-right: 1px solid #303731;
+}
+.brand-lockup > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.brand-lockup strong {
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: .86rem; font-stretch: condensed; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.brand-lockup small {
+  margin-top: 2px; color: #6f7771; font: .56rem/1 Consolas, "SFMono-Regular", monospace;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.brand-hardware {
+  position: relative; width: 30px; height: 30px; flex: 0 0 30px; border: 1px solid #5f5238; border-radius: 50%;
+  background: linear-gradient(52deg, transparent 47%, #d7b56f 48% 52%, transparent 53%), radial-gradient(circle, #303731 0 36%, #171b18 38% 58%, #090b09 60% 100%);
+  box-shadow: inset 0 0 0 3px #202520, 0 2px 6px #0009;
+}
+.brand-hardware::after {
+  content: ""; position: absolute; width: 4px; height: 4px; right: -4px; bottom: 1px; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 7px #84b89baa;
+}
+.kit-identity {
+  grid-area: identity; display: grid; grid-template-columns: auto minmax(0, auto) auto 1fr;
+  align-items: center; gap: 9px; min-width: 0; padding: 8px 16px;
+}
+.kit-eyebrow {
+  color: #6f7771; font: .58rem/1 Consolas, "SFMono-Regular", monospace;
+  letter-spacing: .13em; text-transform: uppercase;
+}
+.kit-identity #kit-name {
+  min-width: 0; max-width: 32vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif; font-size: .98rem;
+  letter-spacing: .02em;
+}
+.kit-identity #kit-name::first-letter { color: var(--accent); }
+.primary-actions {
+  grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+  padding: 9px 13px; border-left: 1px solid #303731;
+}
+.primary-actions .deploy-btn { min-width: 132px; text-transform: uppercase; letter-spacing: .07em; font-size: .68rem; }
+.primary-actions #kit-menu, .primary-actions #save-menu { right: 0; left: auto; top: calc(100% + 9px); }
+.utility-strip {
+  grid-area: utility; display: flex; align-items: center; gap: 5px; min-width: 0;
+  min-height: 30px; padding: 3px 10px; border-top: 1px solid #292f2a;
+  background: linear-gradient(180deg, #151916, #0f1210); box-shadow: inset 0 1px #ffffff04;
+}
+.utility-strip .tb-btn { padding: 3px 8px; font-size: .66rem; }
+.utility-strip #msg {
+  min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: Consolas, "SFMono-Regular", monospace; font-size: .66rem;
+}
+
+.main {
+  display: grid; grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px);
+  grid-template-rows: minmax(0, 1fr); height: calc(100vh - 86px); overflow: hidden;
+  background: #090b0a;
+}
+.workspace-rail {
+  grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: stretch;
+  min-width: 0; padding: 8px 6px 7px; gap: 3px; overflow: hidden;
+  background: linear-gradient(90deg, #111512, #202520 48%, #111512);
+  border-right: 1px solid #343b35; box-shadow: inset -1px 0 #060806, 4px 0 16px #0003;
+}
+.workspace-rail::before, .workspace-rail::after {
+  content: ""; width: 5px; height: 5px; margin: 0 auto 4px; flex: 0 0 5px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #919991, #2c322d 52%, #090b09 56%);
+  box-shadow: 0 1px 2px #000;
+}
+.workspace-rail::after { margin: 4px auto 0; }
+.workspace-tab {
+  position: relative; display: flex; min-height: 49px; padding: 5px 2px; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px; border: 1px solid transparent; border-radius: 3px;
+  background: transparent; color: #747c75; font: 560 .54rem/1 Bahnschrift, "Arial Narrow", sans-serif;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.workspace-tab:hover { background: #262c27; border-color: #3c453d; color: #d0d4cf; }
+.workspace-tab.active {
+  color: #ebd39e; border-color: #615439; background: linear-gradient(145deg, #332e22, #211f19);
+  box-shadow: inset 3px 0 var(--accent), inset 0 1px #ffffff08, 0 3px 10px #0003;
+}
+.workspace-glyph {
+  display: grid; place-items: center; width: 24px; height: 21px; border: 1px solid #3c453e; border-radius: 2px;
+  color: #9ba29b; background: #121512; font: 700 .62rem/1 Consolas, monospace; letter-spacing: -.03em;
+  box-shadow: inset 0 1px #ffffff08;
+}
+.workspace-tab.active .workspace-glyph { color: #17130d; border-color: #d0ad68; background: var(--accent); }
+.workspace-spacer { flex: 1; min-height: 10px; }
+
+#center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
+#left-panel, #inst-panel {
+  grid-column: 3 !important; grid-row: 1 !important; min-width: 0; min-height: 0; max-height: none;
+  border: 0; background: #151916;
+}
+body[data-workspace="pad"] #left-panel { display: flex; }
+body[data-workspace="pad"] #inst-panel { display: none; }
+body[data-workspace="pad"] #patch-panel-wrap { display: none; }
+body[data-workspace="sounds"] #left-panel { display: none; }
+body[data-workspace="sounds"] #inst-panel { display: block; }
+body[data-workspace="inputs"] #left-panel { display: flex; }
+body[data-workspace="inputs"] #inst-panel { display: none; }
+body[data-workspace="inputs"] #pad-detail { display: none; }
+body[data-workspace="inputs"] #patch-panel-wrap { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+body[data-workspace="inputs"] #patch-panel { display: block !important; flex: 1; overflow-y: auto; padding: 16px 12px; }
+body[data-workspace="inputs"] .patch-hdr { min-height: 42px; }
+.context-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 54px;
+  padding: 9px 11px 8px; border-bottom: 1px solid #303731;
+  background: linear-gradient(180deg, #202520, #181c19);
+}
+.context-head > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.context-head strong {
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: .8rem; letter-spacing: .025em;
+}
+.context-eyebrow {
+  color: #737b74; font: .54rem/1 Consolas, monospace; letter-spacing: .14em; text-transform: uppercase;
+}
+.context-head button {
+  padding: 4px 7px; border: 1px solid #475048; background: #171b18; color: #aeb4ae;
+  font-size: .62rem; white-space: nowrap;
+}
+.context-head button:hover { border-color: var(--accent); color: #e6c984; background: #29251b; }
+#inst-panel > div:nth-child(2) { padding-top: 9px !important; }
+.center-hdr { min-height: 46px; gap: 7px; padding: 7px 10px 6px; }
+.map-title { display: flex; flex-direction: column; margin-right: 5px; color: var(--text); font-family: Bahnschrift, "Arial Narrow", sans-serif; font-size: .78rem; letter-spacing: .04em; text-transform: none; }
+.map-title small { margin-bottom: 2px; color: #6f7771; font: .52rem/1 Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+#drum-svg-wrap { position: relative; }
+#drum-svg-wrap::after {
+  content: "STRIKE PERFORMANCE GRID"; position: absolute; right: 13px; bottom: 8px; pointer-events: none;
+  color: #90988f33; font: .53rem/1 Consolas, monospace; letter-spacing: .18em;
+}
+
+@media (max-width: 1180px) {
+  header.app-topbar { grid-template-columns: 184px minmax(180px, 1fr) auto; }
+  .brand-lockup { padding-inline: 11px; }
+  .brand-lockup small { display: none; }
+  .primary-actions .deploy-btn { min-width: 112px; }
+  .utility-strip { overflow-x: auto; scrollbar-width: none; }
+  .utility-strip::-webkit-scrollbar { display: none; }
+  .main { grid-template-columns: 58px minmax(430px, 1fr) minmax(310px, 350px); }
+}
+@media (max-width: 900px) {
+  header.app-topbar {
+    grid-template-columns: minmax(165px, 1fr) auto;
+    grid-template-areas: "brand actions" "identity identity" "utility utility";
+    background: linear-gradient(180deg, #1b201c 0 56px, #171b18 56px 100%);
+  }
+  .brand-lockup { min-height: 56px; border-right: 0; }
+  .kit-identity { min-height: 38px; padding: 5px 11px; border-top: 1px solid #303731; }
+  .kit-identity #kit-name { max-width: 55vw; }
+  .primary-actions { min-height: 56px; border-left: 0; }
+  .main {
+    grid-template-columns: 58px minmax(0, 1fr) !important; grid-template-rows: auto auto;
+    height: auto; min-height: calc(100vh - 124px); overflow: visible;
+  }
+  .workspace-rail { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: calc(100vh - 8px); z-index: 20; }
+  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 610px; border-bottom: 1px solid var(--border); }
+  #left-panel, #inst-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
+  #drum-svg-wrap { min-height: 360px; }
+}
+@media (max-width: 620px) {
+  header.app-topbar { grid-template-columns: 1fr; grid-template-areas: "brand" "identity" "actions" "utility"; }
+  .brand-lockup { min-height: 48px; padding-block: 7px; }
+  .kit-identity { min-height: 36px; }
+  .primary-actions { min-height: 48px; justify-content: stretch; padding: 6px 8px; border-top: 1px solid #303731; }
+  .primary-actions .tb-group:first-child { flex: 1; }
+  .primary-actions .tb-group:first-child > button { width: 100%; }
+  .primary-actions .deploy-btn { flex: 1; }
+  .main { display: block !important; min-height: 0; }
+  .workspace-rail {
+    position: sticky; top: 0; z-index: 30; height: 51px; padding: 4px 5px; flex-direction: row;
+    overflow-x: auto; border-right: 0; border-bottom: 1px solid #343b35;
+  }
+  .workspace-rail::before, .workspace-rail::after { display: none; }
+  .workspace-tab { flex: 0 0 50px; min-height: 41px; padding: 3px 1px; }
+  .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
+  .workspace-spacer { display: none; }
+  #center-panel { min-height: 590px; }
+  #left-panel, #inst-panel { min-height: 420px; }
+  .center-hdr { flex-wrap: wrap; }
+  .center-hdr .map-title { flex-basis: 100%; }
+}
+
+body[data-theme=light] header.app-topbar { background: linear-gradient(180deg, #f4f1e8 0 58px, #deddd5 58px 100%); }
+body[data-theme=light] .brand-lockup, body[data-theme=light] .primary-actions { border-color: #c3c2b8; }
+body[data-theme=light] .brand-lockup strong, body[data-theme=light] .kit-identity #kit-name { color: #222822; }
+body[data-theme=light] .utility-strip { background: #deddd5; border-color: #c7c6bc; }
+body[data-theme=light] .workspace-rail { background: linear-gradient(90deg, #d4d3cb, #ebe9e2 48%, #d1d0c8); border-color: #b8b8ae; }
+body[data-theme=light] .workspace-tab { color: #687069; }
+body[data-theme=light] .workspace-tab:hover { background: #d8d7cf; color: #293029; }
+body[data-theme=light] .workspace-tab.active { color: #5f4b2b; background: #e8dfca; border-color: #b9a477; }
+body[data-theme=light] .workspace-glyph { color: #5f675f; background: #e5e4dc; border-color: #b7bab2; }
+body[data-theme=light] .workspace-tab.active .workspace-glyph { color: #fffaf0; background: #9f7d43; border-color: #856634; }
+body[data-theme=light] .context-head { background: linear-gradient(180deg, #f4f2eb, #e3e2da); border-color: #c3c3b9; }
+body[data-theme=light] .context-head strong, body[data-theme=light] .map-title { color: #252b26; }
+body[data-theme=light] .context-head button { background: #e5e4dc; border-color: #b6b8b0; color: #4a514b; }
 </style>
 </head>
-<body>
-<header>
-  <h1>Strike Pro Remapper</h1>
+<body data-workspace="pad">
+<header class="app-topbar">
+  <div class="brand-lockup">
+    <span class="brand-hardware" aria-hidden="true"></span>
+    <span><strong>Strike Remapper</strong><small>Kit workstation</small></span>
+  </div>
 
+  <div class="kit-identity">
+    <span class="kit-eyebrow">Editing kit</span>
+    <span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit">No kit loaded</span>
+    <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+  </div>
+
+  <div class="primary-actions">
   <!-- Kit picker -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
@@ -3888,8 +4104,6 @@ body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a9
               style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
     </div>
     <div id="save-menu" class="tb-popover" style="display:none;min-width:220px;">
-      <button id="save-sd-btn" class="btn-secondary" onclick="saveToSD()" disabled
-              style="width:100%;margin-bottom:6px;">Save to SD card</button>
       <details>
         <summary style="font-size:.72rem;color:#666;cursor:pointer;">Custom path&#x2026;</summary>
         <div style="margin-top:5px;display:flex;flex-direction:column;gap:4px;">
@@ -3901,7 +4115,10 @@ body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a9
       <p id="save-hint" style="font-size:.7rem;color:#666;margin-top:6px;"></p>
     </div>
   </div>
+  <button id="save-sd-btn" class="btn-primary tb-btn deploy-btn" onclick="saveToSD()" disabled>Deploy to Module</button>
+  </div><!-- /primary-actions -->
 
+  <div class="utility-strip">
   <!-- Duplicate -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" id="dup-btn" onclick="showDuplicateForm()" disabled>Duplicate&#x2026;</button>
@@ -3953,11 +4170,41 @@ body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a9
           title="Enable MIDI monitor — hit a pad to see it light up" style="flex-shrink:0;">MIDI</button>
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
   <button id="theme-btn" class="btn-secondary tb-btn" onclick="toggleTheme()" title="Toggle dark/light theme" style="font-size:.9rem;flex-shrink:0;">&#9790;</button>
+  </div><!-- /utility-strip -->
 </header>
 <div class="main">
 
+  <nav id="workspace-rail" class="workspace-rail" aria-label="Editor workspaces">
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('kit')" title="Kit library and kit actions">
+      <span class="workspace-glyph" aria-hidden="true">K</span><span>Kit</span>
+    </button>
+    <button class="workspace-tab active" type="button" data-workspace="pad" onclick="setWorkspaceMode('pad')" title="Selected pad settings">
+      <span class="workspace-glyph" aria-hidden="true">P</span><span>Pad</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="sounds" onclick="setWorkspaceMode('sounds')" title="Browse and assign instruments">
+      <span class="workspace-glyph" aria-hidden="true">S</span><span>Sounds</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="inputs" onclick="setWorkspaceMode('inputs')" title="Physical module input jacks">
+      <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
+    </button>
+    <span class="workspace-spacer"></span>
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('fx')" title="Kit FX">
+      <span class="workspace-glyph" aria-hidden="true">FX</span><span>FX</span>
+    </button>
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('history')" title="Kit history and comparison">
+      <span class="workspace-glyph" aria-hidden="true">H</span><span>History</span>
+    </button>
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('tools')" title="Module and developer tools">
+      <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
+    </button>
+  </nav>
+
   <!-- Left: back panel jacks + pad editor -->
   <div id="left-panel">
+    <div class="context-head">
+      <div><span id="context-eyebrow" class="context-eyebrow">Pad workspace</span><strong id="context-title">Selected trigger</strong></div>
+      <button id="context-action" type="button" onclick="setWorkspaceMode('sounds')">Browse sounds</button>
+    </div>
     <div id="patch-panel-wrap">
       <div class="patch-hdr" onclick="togglePatchPanel()">
         <span class="patch-hdr-lbl">Back panel jacks</span>
@@ -3973,8 +4220,7 @@ body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a9
   <!-- Center: drum map + live loop -->
   <section id="center-panel">
     <div class="center-hdr">
-      Drum Map&nbsp;<span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit"></span>
-      <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+      <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
@@ -4065,6 +4311,10 @@ body[data-theme=light] .tag-chip.active { background: #e6dbc1; border-color: #a9
 
   <!-- Right: instrument browser -->
   <section id="inst-panel">
+    <div class="context-head">
+      <div><span class="context-eyebrow">Sounds workspace</span><strong>Instrument library</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
     <div style="padding:6px 12px 0;">
     <div id="assign-target" class="assign-target empty">Click a pad or jack to assign instruments</div>
     <!-- Import WAV form -->
@@ -5706,8 +5956,42 @@ function menuToggle(id) {
   if (!isOpen) el.style.display = '';
 }
 
+function setWorkspaceMode(mode) {
+  if (!['pad', 'sounds', 'inputs'].includes(mode)) return;
+  document.body.dataset.workspace = mode;
+  document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
+    const active = btn.dataset.workspace === mode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  if (mode === 'inputs') {
+    patchCollapsed = false;
+    applyPatchPanelState();
+  } else if (mode === 'sounds') {
+    renderInstruments();
+  }
+  const contextEyebrow = document.getElementById('context-eyebrow');
+  const contextTitle = document.getElementById('context-title');
+  const contextAction = document.getElementById('context-action');
+  if (contextEyebrow && contextTitle && contextAction) {
+    const inputsMode = mode === 'inputs';
+    contextEyebrow.textContent = inputsMode ? 'Inputs workspace' : 'Pad workspace';
+    contextTitle.textContent = inputsMode ? 'Module back panel' : 'Selected trigger';
+    contextAction.textContent = inputsMode ? 'Pad settings' : 'Browse sounds';
+    contextAction.onclick = () => setWorkspaceMode(inputsMode ? 'pad' : 'sounds');
+  }
+  try { localStorage.setItem('strike_workspace', mode); } catch(e) {}
+}
+
+function openWorkspaceUtility(kind) {
+  if (kind === 'kit') { menuToggle('kit-menu'); return; }
+  if (kind === 'fx') { showKitFxModal(); return; }
+  if (kind === 'history') { openTimeMachine(); return; }
+  if (kind === 'tools') { menuToggle('tools-menu'); loadTools(); }
+}
+
 document.addEventListener('click', e => {
-  if (!e.target.closest('.tb-group')) {
+  if (!e.target.closest('.tb-group') && !e.target.closest('.workspace-tab')) {
     closeAllPopovers();
   }
 });
@@ -8548,6 +8832,9 @@ async function checkStatus() {
   });
 
   applyPatchPanelState();
+  let initialWorkspace = 'pad';
+  try { initialWorkspace = localStorage.getItem('strike_workspace') || 'pad'; } catch(e) {}
+  setWorkspaceMode(initialWorkspace);
   updateLayoutBadge();
 
   // Apply saved browser toolbar prefs
