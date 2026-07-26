@@ -52,12 +52,12 @@ old = {
 }
 
 try:
-    # The shipped delays are sized for a USB re-enumeration; assert that intent
+    # The shipped delays are sized for a multi-second outage; assert that intent
     # here, then shrink them so the suite does not sleep through it.
     check(sum(app._CARD_RETRY_DELAYS) >= 3.0,
-          'the retry window is long enough for the card to re-enumerate')
+          'the retry window outlasts an observed card outage')
     check(app._CARD_RETRY_DELAYS[0] >= 0.25,
-          'the first retry waits rather than landing inside the same drop')
+          'the first retry waits rather than landing inside the same outage')
     app._CARD_RETRY_DELAYS = (0.01, 0.01, 0.01)
 
     # --- which errors count as a stall ------------------------------------
@@ -120,8 +120,10 @@ try:
     # --- what the user is told --------------------------------------------
     stall_msg = app._friendly_error(
         OSError(errno.EINVAL, 'Invalid argument', 'L:\\Kits\\THE POCKET REC.skt'))
-    check('dropped off' in stall_msg and 'THE POCKET REC.skt' in stall_msg,
-          'a card drop is reported as a drop, naming the file')
+    check('stopped responding' in stall_msg and 'THE POCKET REC.skt' in stall_msg,
+          'an outage is reported as an outage, naming the file')
+    check('still connected' in stall_msg,
+          'the message does not imply the card came unplugged')
     check('try again' in stall_msg and 'server console' not in stall_msg,
           'the message is actionable instead of pointing at the console')
     check('Strike Editor' in stall_msg,
