@@ -161,10 +161,8 @@
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="exportLayout()" title="Save your customized kit layout (positions, sizes, rotation, finish) to a file.">&#x2913; Save layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="document.getElementById('layout-file').click()" title="Load a kit layout file saved earlier.">&#x2912; Load layout</button>
+      <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="openSetupProfiles()" title="Save and switch between physical drum and cymbal arrangements.">&#x25C9; Setup profiles</button>
       <input type="file" id="layout-file" accept="application/json,.json" style="display:none"
         onchange="importLayout(this.files[0]); this.value=''">
     </div>
@@ -310,6 +308,31 @@
 </div>
 
 <div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
+
+<!-- Physical setup profiles -->
+<div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title"
+     onclick="if(event.target===this)closeSetupProfiles()">
+  <div class="setup-rack">
+    <header class="setup-head">
+      <div class="setup-emblem" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><small>Performance hardware library</small><strong id="setup-title">Physical setup profiles</strong></div>
+      <span id="setup-profile-count">0 saved slots</span>
+      <button type="button" onclick="closeSetupProfiles()" aria-label="Close physical setup profiles">&#x2715;</button>
+    </header>
+    <section class="setup-capture">
+      <div><small>Capture the map in front of you</small><strong>Save current arrangement as a rig</strong><p>Positions, shapes, finishes, labels, and mirrored/Y-split pieces are saved. Kit sounds are not.</p></div>
+      <div class="setup-name-row"><input id="setup-profile-name" maxlength="48" placeholder="e.g. Open-hand dual hi-hat"
+        onkeydown="if(event.key==='Enter')saveCurrentSetupProfile()"><button class="btn-primary" onclick="saveCurrentSetupProfile()">Save new setup</button></div>
+    </section>
+    <div id="setup-profile-list" class="setup-slot-grid"></div>
+    <footer class="setup-foot">
+      <span>Edits auto-save to the active rig slot.</span>
+      <button onclick="exportLayout()">Export active JSON</button>
+      <button onclick="document.getElementById('layout-file').click()">Import setup JSON</button>
+      <button onclick="closeSetupProfiles()">Done</button>
+    </footer>
+  </div>
+</div>
 
 <!-- Kit diff modal -->
 <div id="diff-modal" onclick="if(event.target===this)closeDiffModal()">
