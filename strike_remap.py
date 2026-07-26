@@ -161,29 +161,40 @@ def _classify_volumes(vols: dict):
 
 
 # The module keeps its SD card mounted internally while also exporting it over
-# USB, so sustained host access can briefly lose the volume even though it is
-# still connected — reads come back as EINVAL or WinError 55/1006 and succeed
-# again moments later (issue #35). These are stalls, not disconnections: retry.
+# USB. Under sustained host access it takes the card back: the drive genuinely
+# drops off the bus and re-enumerates a few seconds later (observed directly —
+# the volume disconnects and reconnects repeatedly, issue #35). In-flight reads
+# fail with EINVAL or WinError 55/1006 in the gap.
+#
+# So the waits below are sized for a USB re-enumeration, not for a stalled read:
+# sub-second retries all land inside the same gap and fail together.
 _TRANSIENT_WINERRORS = {21, 55, 1006, 1117}   # not ready, no longer available,
                                               # volume externally altered, I/O device
+_CARD_RETRY_DELAYS = (0.5, 1.5, 3.0)          # ~5s total, covers a re-enumeration
 
 
 def _is_transient_volume_error(e: OSError) -> bool:
-    """True for a removable-media stall, as opposed to a real failure."""
+    """True when the card dropped off the bus, as opposed to a real failure."""
     if getattr(e, 'winerror', None) in _TRANSIENT_WINERRORS:
         return True
     return e.errno in (errno.EINVAL, errno.EIO)
 
 
-def read_card_bytes(path: Path, tries: int = 3) -> bytes:
-    """Read a file that may live on removable media, riding out brief stalls."""
+def read_card_bytes(path: Path, tries: int = len(_CARD_RETRY_DELAYS) + 1) -> bytes:
+    """Read a file on removable media, waiting out a card that re-enumerates."""
     for attempt in range(tries):
         try:
-            return path.read_bytes()
+            data = path.read_bytes()
+            if attempt:
+                # Worth surfacing: this is the signature of issue #35, and the
+                # only way to tell a recovered drop from a clean run.
+                print(f'[card] read of {path} recovered after {attempt} '
+                      f'retr{"y" if attempt == 1 else "ies"}')
+            return data
         except OSError as e:
             if attempt == tries - 1 or not _is_transient_volume_error(e):
                 raise
-            time.sleep(0.25 * (attempt + 1))
+            time.sleep(_CARD_RETRY_DELAYS[min(attempt, len(_CARD_RETRY_DELAYS) - 1)])
 
 
 _last_seen_user_volume = None
@@ -194,12 +205,13 @@ def get_volumes():
     global _last_seen_user_volume
     user, preset = _classify_volumes(_find_strike_volumes())
     if user is None and _last_seen_user_volume is not None:
-        # A card that was mounted a moment ago should not be declared missing
-        # because one probe caught it mid-stall — re-scan before believing it.
-        for delay in (0.15, 0.4):
+        # A card that was mounted a moment ago is probably mid-re-enumeration,
+        # not ejected — wait it out before reporting it gone (issue #35).
+        for delay in _CARD_RETRY_DELAYS:
             time.sleep(delay)
             user, preset = _classify_volumes(_find_strike_volumes())
             if user is not None:
+                print(f'[card] user volume reappeared at {user} after a drop')
                 break
     # Track the outcome either way, so a genuinely ejected card costs the
     # re-scan once rather than on every call.
@@ -10353,11 +10365,13 @@ def _friendly_error(e: BaseException) -> str:
         base = str(name).replace('\\', '/').rsplit('/', 1)[-1] if name else ''
         where = f' ({base})' if base else ''
         if _is_transient_volume_error(e):
-            # Retries are already exhausted by here, so say what it is and what
-            # to do — the card is still plugged in (issue #35).
-            return (f'The SD card stopped responding{where}. It is still connected, so try '
-                    'again. If it keeps happening, open the official Strike Editor while you '
-                    'work — the module holds on to the card when the editor is closed.')
+            # Retries are already exhausted by here, so name it and say what to
+            # do. The card drops off the bus and comes back on its own (#35),
+            # so "unplugged" would be misleading — it needs a moment, not a hand.
+            return (f'The SD card dropped off the USB connection{where} and is reconnecting. '
+                    'Wait a few seconds and try again — nothing was damaged. If it keeps '
+                    'happening, leave the official Strike Editor open while you work; the '
+                    'module appears to take the card back when the editor is closed.')
         return f'File system error{where} — see the server console for details.'
     return 'Internal error — see the server console for details.'
 

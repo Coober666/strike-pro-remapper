@@ -332,16 +332,20 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
     `delete_snapshot(id)`, `set_snapshot_pin(id, pinned)`. `_SNAP_LOCK` guards index writes.
   - Routes: `GET /api/snapshots` (`?all=1`), `POST /api/snapshot|snapshot_diff|
     snapshot_restore|snapshot_delete|snapshot_pin`. Test: `tools/test_time_machine.py`.
-- **The SD card stalls; that is not a disconnection** (issue #35). The module keeps its card
-  mounted internally while also exporting it over USB, so sustained host access can lose the
-  volume for a moment even though it is still plugged in — reads raise `EINVAL` or
-  `WinError 55/1006` and succeed again right after. Observed only with the official Strike
-  Editor closed; the working theory is that the editor's handshake makes the module yield the
-  card. **Read card files through `read_card_bytes()`, never `Path.read_bytes()`** — it
-  retries with backoff on `_is_transient_volume_error()`. `get_volumes()` re-scans before
-  reporting a previously-seen card as missing, so a blip cannot raise a false `no_user_card`
-  blocker. `_friendly_error()` turns these into an actionable message rather than the generic
-  console pointer. Test: `tools/test_card_resilience.py`.
+- **The SD card drops off the bus and re-enumerates while you are using it** (issue #35).
+  The module keeps its card mounted internally while also exporting it over USB, and under
+  sustained host access it takes the card back — the volume genuinely disconnects and
+  reconnects seconds later (observed directly, repeatedly). In-flight reads fail with
+  `EINVAL` or `WinError 55/1006`. Observed only with the official Strike Editor closed; the
+  working theory is that the editor's handshake makes the module yield the card, but this is
+  intermittent on a timescale of hours, so a single clean run proves nothing.
+  **Read card files through `read_card_bytes()`, never `Path.read_bytes()`** — it retries on
+  `_is_transient_volume_error()`. Waits (`_CARD_RETRY_DELAYS`, ~5s total) are sized for a USB
+  re-enumeration, **not** for a stalled read: sub-second retries all land inside the same drop
+  and fail together. `get_volumes()` waits the same window before reporting a previously-seen
+  card as missing, so a drop cannot raise a false `no_user_card` blocker. Recoveries print a
+  `[card]` line to the server console — that log is the only way to tell a recovered drop from
+  a clean run when diagnosing. Test: `tools/test_card_resilience.py`.
 - `check_paths()` — return sin_rel paths in current kit not found in avail
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
 - **Deploy asset resolution has three states, not two** (issue #33). The module only exposes
