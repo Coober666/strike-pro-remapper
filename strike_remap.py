@@ -3075,6 +3075,235 @@ def save_kit(out_path_str: str):
                 pass
 
 
+def _deploy_rel_path(rel: str) -> Path:
+    """Return a safe card-relative path for a .sin/.wav reference."""
+    clean = str(rel or '').replace('\\', '/').strip('/')
+    parts = clean.split('/') if clean else []
+    if not parts or any(p in ('', '.', '..') for p in parts) or ':' in parts[0]:
+        raise ValueError(f'Unsafe asset path: {rel!r}')
+    return Path(*parts)
+
+
+def _files_equal(a: Path, b: Path) -> bool:
+    """Compare files without loading large samples into memory."""
+    try:
+        if a.stat().st_size != b.stat().st_size:
+            return False
+        with a.open('rb') as fa, b.open('rb') as fb:
+            while True:
+                ca, cb = fa.read(1024 * 1024), fb.read(1024 * 1024)
+                if ca != cb:
+                    return False
+                if not ca:
+                    return True
+    except OSError:
+        return False
+
+
+def _atomic_write(path: Path, data: bytes):
+    """Write beside the destination, then replace it as one filesystem step."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.deploying')
+    try:
+        with tmp.open('wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _deploy_plan() -> dict:
+    """Build a read-only deployment plan for the currently loaded kit."""
+    user, preset = get_volumes()
+    issues = []
+    if state.get('kit_raw') is None:
+        issues.append({'severity': 'blocker', 'code': 'no_kit',
+                       'title': 'No kit loaded',
+                       'detail': 'Open or create a kit before deploying.'})
+    if user is None:
+        issues.append({'severity': 'blocker', 'code': 'no_user_card',
+                       'title': 'User card not detected',
+                       'detail': 'Insert the writable Strike user SD card, then run preflight again.'})
+
+    kit_name = Path(state.get('kit_display') or state.get('kit_path') or 'kit.skt').name
+    if not kit_name.lower().endswith('.skt'):
+        kit_name += '.skt'
+    local_target = LIBRARY_DIR / 'kits' / kit_name
+    card_target = Path(_sd_save_path(user, state.get('kit_path') or kit_name)) if user else None
+    if card_target and card_target.suffix.lower() != '.skt':
+        card_target = card_target.with_suffix('.skt')
+
+    used_rels = []
+    instruments = state.get('instruments', [])
+    for pad in state.get('pads', []):
+        for key in ('layer_a', 'layer_b'):
+            idx = pad.get(key)
+            if idx is None or idx == NO_INSTRUMENT or idx >= len(instruments):
+                continue
+            rel = instruments[idx]
+            if rel not in used_rels:
+                used_rels.append(rel)
+
+    assets = []
+    seen_targets = set()
+    roots = _sin_search_roots()
+
+    def add_asset(kind: str, rel: str, src):
+        if not src:
+            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
+                           'title': f'Missing {kind}', 'detail': rel})
+            return
+        src = Path(src)
+        if not src.is_file():
+            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
+                           'title': f'Missing {kind}', 'detail': rel})
+            return
+        if (user and _is_under(src, user)) or (preset and _is_under(src, preset)):
+            assets.append({'kind': kind, 'rel': rel, 'src': src, 'dst': None,
+                           'status': 'available', 'bytes': 0})
+            return
+        try:
+            dst = user / ('Instruments' if kind == 'instrument' else 'Samples') / _deploy_rel_path(rel) if user else None
+        except ValueError as e:
+            issues.append({'severity': 'blocker', 'code': 'unsafe_asset_path',
+                           'title': 'Unsafe asset path', 'detail': str(e)})
+            return
+        target_key = str(dst).casefold() if dst else f'{kind}:{rel}'.casefold()
+        if target_key in seen_targets:
+            return
+        seen_targets.add(target_key)
+        status = 'copy'
+        size = src.stat().st_size
+        if dst and dst.exists():
+            if _files_equal(src, dst):
+                status, size = 'present', 0
+            else:
+                status, size = 'conflict', 0
+                issues.append({'severity': 'blocker', 'code': 'asset_conflict',
+                               'title': f'{kind.title()} conflict',
+                               'detail': f'{rel} already exists on the user card with different contents.'})
+        assets.append({'kind': kind, 'rel': rel, 'src': src, 'dst': dst,
+                       'status': status, 'bytes': size})
+
+    for rel in used_rels:
+        sin_src = state.get('avail', {}).get(rel)
+        add_asset('instrument', rel, sin_src)
+        if not sin_src or not Path(sin_src).is_file():
+            continue
+        try:
+            wav_rels = parse_sin_all_wavs(Path(sin_src).read_bytes())
+        except OSError:
+            wav_rels = []
+        for wav_rel in wav_rels:
+            add_asset('sample', wav_rel, _resolve_wav(wav_rel, roots))
+
+    kit_bytes = (build_skt(state['kit_raw'], state['pads'], instruments, state['tail'])
+                 if state.get('kit_raw') is not None else b'')
+    bytes_to_copy = len(kit_bytes) + sum(a['bytes'] for a in assets if a['status'] == 'copy')
+    free_bytes = None
+    if user:
+        try:
+            free_bytes = shutil.disk_usage(user).free
+            if free_bytes < bytes_to_copy:
+                issues.append({'severity': 'blocker', 'code': 'insufficient_space',
+                               'title': 'Not enough free space',
+                               'detail': f'The card needs {bytes_to_copy:,} bytes; {free_bytes:,} are free.'})
+        except OSError:
+            pass
+    if card_target and card_target.exists():
+        issues.append({'severity': 'warning', 'code': 'replace_kit',
+                       'title': 'Module copy will be replaced',
+                       'detail': 'The existing card kit will be backed up to the local library first.'})
+    if state.get('skt_lossless') is False:
+        issues.append({'severity': 'warning', 'code': 'parser_warning',
+                       'title': 'Parser warning',
+                       'detail': 'This kit contains bytes the editor does not fully understand.'})
+
+    return {
+        'ready': not any(i['severity'] == 'blocker' for i in issues),
+        'user': user, 'preset': preset, 'kit_name': kit_name,
+        'card_target': card_target, 'local_target': local_target,
+        'kit_bytes': kit_bytes, 'assets': assets, 'issues': issues,
+        'used_instruments': len(used_rels), 'bytes_to_copy': bytes_to_copy,
+        'free_bytes': free_bytes,
+    }
+
+
+def deploy_preflight() -> dict:
+    plan = _deploy_plan()
+    counts = {s: sum(1 for a in plan['assets'] if a['status'] == s)
+              for s in ('copy', 'present', 'available', 'conflict')}
+    counts['instruments'] = sum(1 for a in plan['assets'] if a['kind'] == 'instrument')
+    counts['samples'] = sum(1 for a in plan['assets'] if a['kind'] == 'sample')
+    return {
+        'ready': plan['ready'], 'kit_name': plan['kit_name'],
+        'user_mounted': plan['user'] is not None,
+        'user_path': str(plan['user']) if plan['user'] else '',
+        'target_path': str(plan['card_target']) if plan['card_target'] else '',
+        'local_path': str(plan['local_target']),
+        'target_exists': bool(plan['card_target'] and plan['card_target'].exists()),
+        'dirty': bool(state.get('dirty')), 'skt_lossless': state.get('skt_lossless') is not False,
+        'used_instruments': plan['used_instruments'], 'asset_counts': counts,
+        'bytes_to_copy': plan['bytes_to_copy'], 'free_bytes': plan['free_bytes'],
+        'issues': plan['issues'],
+    }
+
+
+def deploy_kit() -> dict:
+    """Save the working copy, copy local custom assets, then publish the kit last."""
+    plan = _deploy_plan()
+    blockers = [i for i in plan['issues'] if i['severity'] == 'blocker']
+    if blockers:
+        raise ValueError('; '.join(i['detail'] for i in blockers))
+    card_target, local_target = plan['card_target'], plan['local_target']
+    if card_target is None:
+        raise ValueError('User card not detected')
+
+    _atomic_write(local_target, plan['kit_bytes'])
+    copied_files = 0
+    copied_bytes = 0
+    for asset in plan['assets']:
+        if asset['status'] != 'copy':
+            continue
+        _atomic_write(asset['dst'], asset['src'].read_bytes())
+        if not _files_equal(asset['src'], asset['dst']):
+            raise OSError(f"Could not verify copied asset: {asset['rel']}")
+        copied_files += 1
+        copied_bytes += asset['src'].stat().st_size
+
+    backup_path = None
+    if card_target.exists():
+        stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        backup_dir = LIBRARY_DIR / 'deploy-backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / f'{card_target.stem}-{stamp}.skt'
+        suffix = 2
+        while backup_path.exists():
+            backup_path = backup_dir / f'{card_target.stem}-{stamp}-{suffix}.skt'
+            suffix += 1
+        shutil.copy2(card_target, backup_path)
+
+    _atomic_write(card_target, plan['kit_bytes'])
+    if card_target.read_bytes() != plan['kit_bytes']:
+        raise OSError('The module copy could not be verified after writing.')
+
+    state['dirty'] = False
+    state['kit_path'] = str(local_target)
+    state['kit_display'] = plan['kit_name']
+    state['message'] = f'Deployed {plan["kit_name"]} to {card_target}'
+    _auto_snapshot(f'Deployed {plan["kit_name"]}', 'save')
+    for autosave in {local_target.parent / (local_target.stem + '.autosave.skt')}:
+        autosave.unlink(missing_ok=True)
+    return {
+        'message': state['message'], 'target_path': str(card_target),
+        'local_path': str(local_target), 'backup_path': str(backup_path) if backup_path else '',
+        'copied_files': copied_files, 'copied_bytes': copied_bytes,
+        'verified': True,
+    }
+
+
 def autosave_kit() -> 'str | None':
     """Write a .autosave.skt for the current kit while dirty. Returns path or None.
 
@@ -3387,68 +3616,6 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .dup-form { position:absolute; top:calc(100% + 6px); left:0; background:#181d28; border:1px solid #2e3749; border-radius:10px; padding:8px; z-index:300; box-shadow:0 8px 28px #000000a0; display:flex; flex-direction:column; gap:6px; min-width:240px; }
 .dup-form input { width:100%; padding:5px 7px; background:#0b0e15; border:1px solid #242c3d; color:#e8ebf2; border-radius:4px; font-size:.8rem; }
 
-/* ── Light theme ── */
-body[data-theme=light] { background:#f2f4f8; color:#0d0f15; }
-body[data-theme=light] header { background:#fff; border-bottom-color:#c8d4e0; }
-body[data-theme=light] .main > section { border-right-color:#c8d4e0; }
-body[data-theme=light] #center-panel { border-right-color:#c8d4e0; }
-body[data-theme=light] #drum-svg-wrap { background:#dce6f0; }
-body[data-theme=light] .det-card { background:#fff; }
-body[data-theme=light] .det-zone { background:#f8fafc; }
-body[data-theme=light] .det-layer .name { color:#223; }
-body[data-theme=light] .det-layer .pill { background:#c8d8ee; color:#313a4d; }
-body[data-theme=light] .param-lbl { color:#556; }
-body[data-theme=light] .param-val { color:#446; }
-body[data-theme=light] section h2, body[data-theme=light] .center-hdr { color:#556; }
-body[data-theme=light] input[type=text], body[data-theme=light] input[type=number],
-body[data-theme=light] select { background:#e8edf5 !important; border-color:#b0c0d4 !important; color:#0d0f15 !important; }
-body[data-theme=light] .btn-secondary { background:#e0e8f2; border-color:#b0c0d4; color:#334; }
-body[data-theme=light] .btn-secondary:hover { background:#d0dcea; }
-body[data-theme=light] .kit-item:hover { background:#d8e4f0; }
-body[data-theme=light] .kit-item.active { background:#c8d8ee; border-left-color:#f0b32e; }
-body[data-theme=light] .inst-item:hover { background:#d8e4f0; }
-body[data-theme=light] .cat-header { border-top-color:#c8d4e0; color:#667; }
-body[data-theme=light] #patch-panel-wrap, body[data-theme=light] #loop-panel { background:#dce6f0; border-color:#c0d0e0; }
-body[data-theme=light] #left-panel { border-right-color:#c8d4e0; }
-body[data-theme=light] .loop-hdr, body[data-theme=light] .patch-hdr { border-bottom-color:#c0d0e0; }
-body[data-theme=light] .loop-hdr-lbl, body[data-theme=light] .patch-hdr-lbl { color:#778; }
-body[data-theme=light] .loop-step { background:#c8d8ea; border-color:#a8b8cc; }
-body[data-theme=light] .loop-step.on { background:#f0b32e; border-color:#2a5090; }
-body[data-theme=light] .loop-row-lbl { color:#667; }
-body[data-theme=light] .jack-item:hover { background:#d0dcea; }
-body[data-theme=light] .jack-lbl { color:#7a8a9a; }
-body[data-theme=light] .jack-num { color:#8a9aa8; }
-body[data-theme=light] .assign-target { background:#d8eaf8; border-color:#a8c0d8; color:#334488; }
-body[data-theme=light] .assign-target.empty { background:none; color:#778; }
-body[data-theme=light] .in-use-badge { background:#d0e0f0; color:#3a5878; border-color:#a0b8cc; }
-body[data-theme=light] .in-use-badge.mine { background:#c8e4d0; color:#2a7040; border-color:#90c0a0; }
-body[data-theme=light] #import-wav-form { background:#edf3fa; border-color:#b0c4d8; }
-body[data-theme=light] #import-drop-zone { border-color:#90b0cc; color:#4a6a8a; }
-body[data-theme=light] #autosave-banner { background:#fff8e8; border-color:#d0a020; color:#7a6010; }
-body[data-theme=light] #autosave-banner a { color:#906010; }
-body[data-theme=light] .det-zone-id { color:#778; }
-body[data-theme=light] .det-zone-id .zlbl { color:#889; }
-body[data-theme=light] .det-customize summary { color:#889; }
-body[data-theme=light] .det-customize summary:hover { color:#667; }
-body[data-theme=light] .cust-grid span { color:#667; }
-body[data-theme=light] .undo-hist-panel { background:#fff; border-color:#c0d0e4; box-shadow:0 4px 12px #0002; }
-body[data-theme=light] .undo-hist-item { color:#334; border-bottom-color:#e0e8f0; }
-body[data-theme=light] .undo-hist-item:hover { background:#e0eaf6; color:#112; }
-body[data-theme=light] .sect-hdr { border-top-color:#d0dce8; color:#667; }
-body[data-theme=light] .copy-pad-row { border-top-color:#d0dce8; }
-body[data-theme=light] .copy-pad-row label { color:#667; }
-body[data-theme=light] .copy-pad-row select { background:#e8edf5 !important; border-color:#b0c0d4 !important; color:#0d0f15 !important; }
-body[data-theme=light] .star-btn { color:#bbb; }
-body[data-theme=light] .star-btn.starred { color:#c09010; }
-body[data-theme=light] #drop-overlay { background:#f2f4f888; border-color:#f0b32e; color:#2a5a9a; }
-body[data-theme=light] .layer-btn { border-color:#b0bec8; background:#e8edf5; color:#556; }
-body[data-theme=light] .play-btn { border-color:#90c0a0; background:#e8f4ec; color:#3a8050; }
-body[data-theme=light] .browser-toolbar select { background:#e8edf5 !important; border-color:#b0c0d4 !important; color:#0d0f15 !important; }
-body[data-theme=light] .browser-toolbar label { color:#445; }
-body[data-theme=light] .dup-form input { background:#e8edf5 !important; border-color:#b0c0d4 !important; color:#0d0f15 !important; }
-body[data-theme=light] .center-hdr-kit[contenteditable=true] { border-bottom-color:#f0b32e; }
-body[data-theme=light] .tb-popover { background:#fff; border-color:#b0c0d4; }
-body[data-theme=light] .dup-form { background:#fff; border-color:#b0c0d4; }
 /* ── Tools panel ── */
 .tools-section { margin-top:4px; }
 .tools-section summary { font-size:.72rem; color:#556; cursor:pointer; user-select:none; padding:4px 0; }
@@ -3463,10 +3630,6 @@ body[data-theme=light] .dup-form { background:#fff; border-color:#b0c0d4; }
 .sync-detail { color:#556; font-size:.65rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* ── Hex inspector ── */
 .hex-output { background:#060a10; border:1px solid #1a3050; border-radius:4px; padding:8px 10px; font-size:.62rem; font-family:monospace; color:#9ac; white-space:pre; overflow-x:auto; max-height:260px; overflow-y:auto; margin-top:6px; }
-body[data-theme=light] .tool-output { background:#f0f4fa; border-color:#b0c0d4; color:#2a6040; }
-body[data-theme=light] .hex-output   { background:#f0f4fa; border-color:#b0c0d4; color:#336; }
-body[data-theme=light] .tools-section summary { color:#667; }
-body[data-theme=light] .tool-item span { color:#667; }
 /* ── Batch apply panel ── */
 #batch-panel { background:#0b0e15; border-top:1px solid #20283a; padding:5px 10px; display:none; flex-shrink:0; }
 #batch-panel.active { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -3526,21 +3689,122 @@ body[data-theme=light] .tool-item span { color:#667; }
 .tm-diff td { padding:3px 6px; border-bottom:1px solid #0d0f15; vertical-align:top; }
 .tm-diff .chg td { background:#1a2a3e; }
 .tm-empty { color:#445; font-style:italic; font-size:.68rem; padding:8px 2px; }
-body[data-theme=light] .tm-box { background:#fff; border-color:#b0c0d4; }
 #confirm-modal { display:none; position:fixed; inset:0; z-index:400; background:#000a; align-items:center; justify-content:center; }
 #confirm-modal.open { display:flex; }
 .confirm-box { background:#171c26; border:1px solid #2e3749; border-radius:12px; padding:18px; width:min(440px,92vw); display:flex; flex-direction:column; gap:14px; box-shadow:0 12px 40px #000000b0; }
 .confirm-box p { margin:0; font-size:.82rem; color:#bcd; white-space:pre-wrap; line-height:1.45; }
 .confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
-body[data-theme=light] .confirm-box { background:#fff; border-color:#b0c0d4; }
-body[data-theme=light] .confirm-box p { color:#334; }
-body[data-theme=light] .tm-snap { background:#f2f5fa; border-color:#d0dce8; }
-body[data-theme=light] .tm-snap-lbl { color:#1a2230; }
-body[data-theme=light] .tm-diff th { background:#fff; color:#667; }
-body[data-theme=light] .tm-diff .chg td { background:#eef4ff; }
-body[data-theme=light] #batch-panel { background:#e8edf5; border-top-color:#c0d0e4; }
-body[data-theme=light] .batch-info { color:#3a6090; }
-body[data-theme=light] .diff-box { background:#fff; border-color:#b0c0d4; }
+
+/* Physical setups are presented as rack-memory slots, because they describe
+   the player's connected hardware rather than a kit document or sound preset. */
+#setup-modal { display:none; position:fixed; inset:0; z-index:410; padding:18px; align-items:center; justify-content:center; background:#050706dc; backdrop-filter:blur(5px); }
+#setup-modal.open { display:flex; }
+.setup-rack { width:min(900px,96vw); max-height:min(850px,94vh); display:flex; flex-direction:column; overflow:hidden; border:1px solid #665738; border-radius:5px; background:#101310; box-shadow:0 24px 70px #000d,inset 0 1px #ffffff0b; }
+.setup-head { display:flex; align-items:center; gap:12px; min-height:65px; padding:10px 14px; border-bottom:1px solid #3b403a; background:linear-gradient(180deg,#252a25,#181c19); }
+.setup-emblem { display:flex; align-items:center; justify-content:center; gap:3px; width:42px; height:34px; border:1px solid #5f5642; background:#101310; box-shadow:inset 0 0 0 3px #1b1f1b; }
+.setup-emblem i { width:7px; height:7px; border:1px solid #a2864f; border-radius:50%; background:#26251f; box-shadow:0 0 5px #d0aa5b35; }
+.setup-head div:nth-child(2) { min-width:0; }
+.setup-head small,.setup-capture small { display:block; margin-bottom:4px; color:#7a827b; font:.5rem/1 Consolas,monospace; letter-spacing:.15em; text-transform:uppercase; }
+.setup-head strong { color:#edf0eb; font:620 1rem/1 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:.02em; }
+.setup-head > span { margin-left:auto; color:#7f897f; font:.55rem/1 Consolas,monospace; text-transform:uppercase; letter-spacing:.1em; }
+.setup-head > button { width:29px; height:29px; padding:0; border:1px solid #485049; background:#151916; color:#899189; }
+.setup-capture { display:grid; grid-template-columns:minmax(0,1fr) minmax(270px,.7fr); gap:18px; align-items:end; padding:14px 16px; border-bottom:1px solid #303630; background:#141815; }
+.setup-capture strong { color:#d9ded8; font:600 .78rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-capture p { margin:4px 0 0; color:#737c74; font:.55rem/1.45 Consolas,monospace; }
+.setup-name-row { display:flex; gap:6px; }
+.setup-name-row input { min-width:0; flex:1; padding:7px 9px; border:1px solid #3c443d; border-radius:3px; background:#0b0e0c; color:#e4e8e2; font:.67rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-name-row input:focus { outline:1px solid #b79659; border-color:#b79659; }
+.setup-slot-grid { min-height:0; padding:13px 14px 16px; overflow:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.setup-slot { min-width:0; padding:11px; border:1px solid #343b35; border-radius:3px; background:linear-gradient(145deg,#1b201c,#111411); box-shadow:inset 0 1px #ffffff05; }
+.setup-slot.active { border-color:#8f7748; background:linear-gradient(145deg,#24241c,#141612); box-shadow:inset 3px 0 #d0aa5b,0 0 16px #d0aa5b0b; }
+.setup-slot-top { display:flex; align-items:center; min-height:16px; margin-bottom:5px; }
+.setup-slot-id,.setup-date,.setup-active { font:.47rem/1 Consolas,monospace; letter-spacing:.11em; text-transform:uppercase; }
+.setup-slot-id { color:#858e86; }
+.setup-date { margin-left:auto; color:#606961; }
+.setup-active { margin-left:auto; color:#dfbd75; }
+.setup-slot > strong { display:block; overflow:hidden; color:#e0e4df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.setup-slot > p { margin:3px 0 9px; color:#6f7871; font:.52rem/1.35 Consolas,monospace; }
+.setup-fingerprint { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; padding:8px; border:1px solid #2e342f; background:#090c0a; }
+.setup-fingerprint i { position:relative; display:grid; place-items:center; aspect-ratio:1; max-height:25px; border:1px solid #404741; border-radius:50%; background:radial-gradient(circle,#0b0e0c 0 34%,#242925 37% 50%,#0a0c0a 53%); color:#586059; font:400 .38rem/1 Consolas,monospace; font-style:normal; }
+.setup-fingerprint i.wired { border-color:#a68a53; color:#d5b66f; box-shadow:0 0 6px #d0aa5b30,inset 0 0 5px #d0aa5b16; }
+.setup-fingerprint i.split::after { content:"Y"; position:absolute; right:-2px; top:-4px; display:grid; place-items:center; width:10px; height:10px; border-radius:50%; background:#795d2f; color:#f3d99e; font:700 .36rem/1 Consolas,monospace; }
+.setup-slot-actions { display:flex; gap:5px; margin-top:9px; }
+.setup-slot-actions button,.setup-foot button { border:1px solid #414941; border-radius:3px; background:#171b18; color:#aeb6af; cursor:pointer; }
+.setup-slot-actions button:hover,.setup-foot button:hover { border-color:#71644b; background:#24251e; color:#eee9dc; }
+.setup-slot-actions button:disabled { opacity:.48; cursor:default; }
+.setup-slot-actions button.primary { border-color:#967b47; background:#b9924e; color:#15120c; }
+.setup-slot-actions button { min-height:25px; padding:3px 7px; font-size:.58rem; }
+.setup-slot-actions button:first-child { flex:1; }
+.setup-slot-actions .danger { color:#b9796e; }
+.setup-slot-actions .danger:hover { border-color:#74443c; background:#2a1714; color:#e4a096; }
+.setup-foot { display:flex; align-items:center; justify-content:flex-end; gap:7px; padding:10px 14px; border-top:1px solid #343b35; background:#0d100e; }
+.setup-foot span { margin-right:auto; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
+.setup-foot button { min-height:28px; padding:4px 9px; }
+@media (max-width:680px) { #setup-modal{padding:7px;align-items:flex-start}.setup-rack{width:100%;max-height:calc(100vh - 14px)}.setup-capture{grid-template-columns:1fr}.setup-slot-grid{grid-template-columns:1fr}.setup-foot{flex-wrap:wrap}.setup-foot span{flex-basis:100%} }
+
+/* Deploy is a hardware handoff, not another save dialog. Its signal rail
+   mirrors the real sequence: inspect the card, transfer, then verify. */
+#deploy-modal { display:none; position:fixed; inset:0; z-index:420; padding:18px; align-items:center; justify-content:center; background:#050706d9; backdrop-filter:blur(5px); }
+#deploy-modal.open { display:flex; }
+.deploy-console { width:min(760px,96vw); max-height:min(820px,94vh); display:flex; flex-direction:column; overflow:hidden; border:1px solid #665738; border-radius:4px; background:#111411; box-shadow:0 24px 70px #000d,inset 0 1px #ffffff0a; }
+.deploy-head { display:flex; align-items:center; gap:12px; min-height:62px; padding:10px 13px; border-bottom:1px solid #3b403a; background:linear-gradient(180deg,#252a25,#181c19); }
+.deploy-mark { display:grid; place-items:center; width:36px; height:36px; flex:0 0 36px; border:1px solid #8d7649; border-radius:50%; color:#e0bd74; background:radial-gradient(circle,#28251c 0 43%,#101310 46%); font:700 .61rem/1 Consolas,monospace; box-shadow:0 0 13px #d0aa5b20,inset 0 1px #ffffff12; }
+.deploy-head-copy { min-width:0; }
+.deploy-head-copy small { display:block; margin-bottom:4px; color:#7a827b; font:.5rem/1 Consolas,monospace; letter-spacing:.16em; text-transform:uppercase; }
+.deploy-head-copy strong { color:#edf0eb; font:620 .95rem/1 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:.025em; }
+.deploy-close { margin-left:auto; width:29px; height:29px; padding:0; border:1px solid #485049; background:#151916; color:#899189; }
+.deploy-rail { display:grid; grid-template-columns:repeat(3,1fr); padding:9px 14px 10px; border-bottom:1px solid #303630; background:#0c0f0d; }
+.deploy-stage { position:relative; display:grid; grid-template-columns:20px minmax(0,1fr); align-items:center; gap:7px; color:#69716a; font:.51rem/1 Consolas,monospace; letter-spacing:.11em; text-transform:uppercase; }
+.deploy-stage:not(:last-child)::after { content:""; position:absolute; left:calc(50% + 20px); right:8px; top:9px; height:1px; background:#363c36; }
+.deploy-stage i { display:grid; place-items:center; width:18px; height:18px; border:1px solid #495149; border-radius:50%; color:#747c75; background:#111411; font-style:normal; font-size:.47rem; }
+.deploy-stage.active { color:#dfc178; }
+.deploy-stage.active i { border-color:#b99a5c; color:#17130d; background:#d0aa5b; box-shadow:0 0 10px #d0aa5b55; }
+.deploy-stage.done { color:#89b49a; }
+.deploy-stage.done i { border-color:#6d9f80; color:#d8eddf; background:#284433; }
+.deploy-stage.failed { color:#d58b7e; }
+.deploy-stage.failed i { border-color:#9b554a; color:#f2c2ba; background:#4a2823; }
+.deploy-body { min-height:0; padding:13px 14px 15px; overflow:auto; }
+.deploy-destination { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(190px,.6fr); gap:9px; margin-bottom:10px; }
+.deploy-card { min-width:0; padding:10px 11px; border:1px solid #373e38; border-radius:3px; background:linear-gradient(145deg,#1c211d,#121512); box-shadow:inset 0 1px #ffffff05; }
+.deploy-card-label { display:flex; align-items:center; gap:6px; margin-bottom:7px; color:#747c75; font:.49rem/1 Consolas,monospace; letter-spacing:.13em; text-transform:uppercase; }
+.deploy-card-label i { width:6px; height:6px; border-radius:50%; background:#6b746c; }
+.deploy-card-label i.ready { background:#75ad89; box-shadow:0 0 7px #75ad8988; }
+.deploy-card-label i.warn { background:#d0aa5b; box-shadow:0 0 7px #d0aa5b70; }
+.deploy-card strong { display:block; overflow:hidden; color:#e1e5df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-path { display:block; margin-top:4px; overflow:hidden; color:#7c857d; font:.53rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.deploy-stat { padding:7px 8px; border:1px solid #323832; background:#101310; }
+.deploy-stat b { display:block; color:#d7bc7e; font:650 .82rem/1 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-stat span { display:block; margin-top:3px; color:#687069; font:.45rem/1 Consolas,monospace; letter-spacing:.08em; text-transform:uppercase; }
+.deploy-route { display:grid; grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr); align-items:center; gap:7px; margin:10px 0; }
+.deploy-route-box { min-width:0; padding:8px 9px; border:1px solid #343b35; background:#101310; }
+.deploy-route-box small { display:block; margin-bottom:4px; color:#6f7771; font:.47rem/1 Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
+.deploy-route-box span { display:block; overflow:hidden; color:#aeb5ae; font:.56rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-route-arrow { color:#b6995d; font:700 .9rem/1 Consolas,monospace; text-align:center; }
+.deploy-issues { display:grid; gap:5px; }
+.deploy-issue { display:grid; grid-template-columns:8px minmax(0,1fr); gap:8px; padding:7px 9px; border:1px solid #3b423c; background:#151916; }
+.deploy-issue i { width:7px; height:7px; margin-top:3px; border-radius:50%; background:#788078; }
+.deploy-issue.warning { border-color:#5b4e35; background:#211e16; }
+.deploy-issue.warning i { background:#d0aa5b; box-shadow:0 0 6px #d0aa5b66; }
+.deploy-issue.blocker { border-color:#66433e; background:#241816; }
+.deploy-issue.blocker i { background:#c46f62; box-shadow:0 0 6px #c46f6266; }
+.deploy-issue strong { display:block; color:#c7ccc7; font:600 .62rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-issue span { display:block; margin-top:2px; color:#747c75; font:.54rem/1.35 Consolas,monospace; }
+.deploy-progress { display:none; padding:22px 8px 18px; text-align:center; }
+.deploy-progress.visible { display:block; }
+.deploy-progress-line { height:3px; margin:14px auto 11px; overflow:hidden; max-width:430px; background:#262c27; }
+.deploy-progress-line i { display:block; width:38%; height:100%; background:linear-gradient(90deg,transparent,#d0aa5b,transparent); animation:deploy-scan 1.1s linear infinite; }
+@keyframes deploy-scan { from { transform:translateX(-110%); } to { transform:translateX(270%); } }
+.deploy-progress strong,.deploy-result strong { color:#e0e4df; font:600 .78rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-progress span { display:block; margin-top:5px; color:#747c75; font:.56rem/1.4 Consolas,monospace; }
+.deploy-result { padding:14px; border:1px solid #45624f; background:#15231a; text-align:left; }
+.deploy-result strong { color:#a7d2b4; }
+.deploy-result p { margin:7px 0 0; color:#82958a; font:.57rem/1.5 Consolas,monospace; }
+.deploy-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; padding:10px 13px; border-top:1px solid #343b35; background:#101310; }
+.deploy-actions button { min-height:29px; padding:5px 10px; }
+.deploy-actions .deploy-spacer { flex:1; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
+@media (max-width:620px) { #deploy-modal{padding:7px;align-items:flex-start}.deploy-console{width:100%;max-height:calc(100vh - 14px)}.deploy-destination,.deploy-route{grid-template-columns:1fr}.deploy-route-arrow{transform:rotate(90deg)}.deploy-actions{flex-wrap:wrap}.deploy-actions .deploy-spacer{flex-basis:100%;order:-1} }
+@media (prefers-reduced-motion:reduce) { .deploy-progress-line i{animation:none;width:100%} }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
 .sim-row { display:flex; align-items:center; gap:8px; padding:5px 6px; border-bottom:1px solid #222b3a; font-size:.76rem; }
@@ -3548,18 +3812,15 @@ body[data-theme=light] .diff-box { background:#fff; border-color:#b0c0d4; }
 .sim-row .sim-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sim-row .sim-grp { color:#7288aa; font-size:.66rem; background:#101a28; border-radius:3px; padding:1px 5px; }
 .sim-row .sim-dist { color:#89b; font-size:.66rem; font-variant-numeric:tabular-nums; min-width:44px; text-align:right; }
-body[data-theme=light] .sim-row:hover { background:#eef2f8; }
 .trig-hex { font-family:ui-monospace,Consolas,monospace; font-size:.68rem; line-height:1.5; color:#9ab; white-space:pre; overflow-x:auto; background:#0b0e15; border:1px solid #242c3d; border-radius:4px; padding:8px; }
 .trig-hex .known { color:#e8b34b; font-weight:700; cursor:help; }
 #relink-modal select { background:#0b0e15; border:1px solid #242c3d; color:#e8ebf2; border-radius:3px; font-size:.72rem; padding:2px 4px; }
-body[data-theme=light] #relink-modal select { background:#fff; color:#222; border-color:#b0c0d4; }
 .sin-box { background:#171c26; border:1px solid #2e3749; border-radius:12px; padding:16px; width:min(920px,94vw); max-height:86vh; overflow-y:auto; display:flex; flex-direction:column; gap:6px; box-shadow:0 12px 40px #000000b0; }
 .sin-sec-title { font-size:.7rem; color:#667; margin-top:8px; display:flex; align-items:center; gap:8px; }
 .sin-curve-tab { font-size:.62rem; padding:1px 7px; border-radius:3px; border:1px solid #313a4d; background:none; color:#88a; cursor:pointer; }
 .sin-curve-tab.active { background:#242c3d; color:#dde; }
 #sin-lane { display:block; border:1px solid #223; border-radius:4px; background:#0b0e15; touch-action:none; }
 #sin-curve { display:block; border:1px solid #223; border-radius:4px; background:#0b0e15; touch-action:none; cursor:ns-resize; }
-body[data-theme=light] #sin-lane, body[data-theme=light] #sin-curve { background:#f4f7fb; border-color:#c4d0e0; }
 .sin-box h3 { margin:0; font-size:.9rem; color:#aac; }
 .sin-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 18px; }
 .sin-row { display:flex; align-items:center; gap:8px; min-height:24px; }
@@ -3571,14 +3832,6 @@ body[data-theme=light] #sin-lane, body[data-theme=light] #sin-curve { background
 .sin-maps th, .sin-maps td { padding:2px 4px; border-bottom:1px solid #223; text-align:left; }
 .sin-maps input[type=number] { width:52px; background:#0b0e15; border:1px solid #242c3d; color:#e8ebf2; border-radius:3px; font-size:.7rem; padding:1px 3px; margin:0; }
 .sin-ro-badge { font-size:.65rem; color:#c90; border:1px solid #c90; border-radius:3px; padding:1px 5px; }
-body[data-theme=light] .sin-box { background:#fff; border-color:#b0c0d4; }
-body[data-theme=light] .sin-maps input[type=number], body[data-theme=light] .sin-row select { background:#fff; color:#222; border-color:#b0c0d4; }
-body[data-theme=light] .diff-table th { background:#fff; border-bottom-color:#d0dce8; color:#667; }
-body[data-theme=light] .diff-table td { border-bottom-color:#e8edf5; }
-body[data-theme=light] .diff-row-changed td { background:#eef4ff; }
-body[data-theme=light] .diff-val-cur { color:#1a5090; }
-body[data-theme=light] .diff-val-oth { color:#903010; }
-body[data-theme=light] .diff-kit-sel select { background:#e8edf5 !important; border-color:#b0c0d4 !important; color:#0d0f15 !important; }
 /* ── Mobile / narrow layout ── */
 @media (max-width: 768px) {
   header { flex-wrap: wrap; padding: 4px 8px; gap: 4px; min-height: 0; height: auto; }
@@ -3608,17 +3861,581 @@ body[data-theme=light] .diff-kit-sel select { background:#e8edf5 !important; bor
 .inst-tag { font-size:.6rem; padding:1px 5px; border-radius:8px; background:#0d2a1a; border:1px solid #1a5030; color:#5a9a60; cursor:pointer; white-space:nowrap; }
 .inst-tag:hover { background:#1a3a28; }
 .inst-tag-edit { font-size:.65rem; width:120px; padding:1px 4px; background:#060e18; border:1px solid #3a6090; color:#cce; border-radius:3px; }
-body[data-theme=light] .tag-chip { background:#e8f0fa; border-color:#b0c8e8; color:#3a6090; }
-body[data-theme=light] .tag-chip.active { background:#c8ddf5; }
-body[data-theme=light] .tag-chip.all-chip { border-color:#c0c8d0; color:#778; }
-body[data-theme=light] .inst-tag { background:#e8f5e8; border-color:#80c080; color:#2a6030; }
-body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0; color:#1a2a3e; }
+
+/* ── Editor visual foundation (graphite + brass, behavior-preserving) ── */
+:root {
+  --bg: #0c0f0e; --bg-deep: #080a09; --panel: #171b18; --raised: #222824;
+  --field: #101310; --border: #303832; --border-lt: #434c45;
+  --text: #eee9dd; --text-2: #a6aca5; --text-3: #6f7771;
+  --accent: #c9a35e; --accent-dim: #a98549; --accent-soft: #c9a35e20;
+  --info: #6d98a8; --ok: #84b89b; --danger: #ce6d5f;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 9px;
+  --shadow-pop: 0 18px 50px #00000080, 0 1px 0 #ffffff0a inset;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: #3c443e; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: #59635b; border: 2px solid transparent; background-clip: content-box; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body { font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); letter-spacing: .005em; }
+
+header {
+  min-height: 58px; background: linear-gradient(180deg, #1c211d, #141815); padding: 9px 14px;
+  gap: 7px; border-bottom: 1px solid #343b35; box-shadow: 0 1px 0 #050605, 0 12px 30px #00000024;
+  position: relative; z-index: 100;
+}
+header h1 {
+  color: var(--text); font-family: "Arial Narrow", "Segoe UI", sans-serif; font-size: .88rem;
+  letter-spacing: .14em; font-weight: 750; display: inline-flex; align-items: center; gap: 9px; margin-right: 5px;
+}
+header h1::before {
+  content: ""; width: 23px; height: 23px; flex: 0 0 23px; border: 1px solid #725e3b; border-radius: 50%;
+  background: linear-gradient(62deg, transparent 46%, var(--accent) 47% 53%, transparent 54%), radial-gradient(circle, #262c27 0 42%, #111411 44% 100%);
+  box-shadow: inset 0 0 0 3px #1c211d, 0 1px 4px #0008;
+}
+#msg { color: var(--ok); font-size: .78rem; }
+#msg.err { color: #e58b80; }
+#dirty-badge { color: #e0bd74; background: #2b2418; border-color: #665334; border-radius: var(--r-sm); font-family: Consolas, monospace; font-size: .67rem; }
+#kit-size-badge, #vol-status { font-family: Consolas, "SFMono-Regular", monospace; }
+
+.main { grid-template-columns: 280px minmax(440px, 1fr) 360px; height: calc(100vh - 58px); background: var(--bg-deep); }
+#left-panel { background: #151916; border-right-color: var(--border); }
+#center-panel { background: #0e110f; border-right-color: var(--border); }
+#inst-panel { background: #151916; }
+section { border-right-color: var(--border); }
+
+button { border-radius: var(--r-sm); font-weight: 600; letter-spacing: .01em; transition: background .12s, border-color .12s, color .12s, box-shadow .12s, transform .12s; }
+button:active:not(:disabled) { transform: translateY(1px); }
+.btn-primary { background: linear-gradient(180deg, #d4af69, #bd9650); border: 1px solid #e0bd74; color: #17130d; box-shadow: inset 0 1px #ffffff38, 0 1px 3px #0005; }
+.btn-primary:hover { background: linear-gradient(180deg, #e1bd74, #c9a35e); }
+.btn-primary:disabled { background: #303530; border-color: #3b423c; color: #737a74; box-shadow: none; }
+.btn-secondary { background: linear-gradient(180deg, #252b26, #1e231f); border-color: #3b443d; color: #c9cec8; box-shadow: inset 0 1px #ffffff08; }
+.btn-secondary:hover { background: #2c332d; border-color: #566158; color: var(--text); }
+.tb-btn { padding: 6px 10px; font-size: .75rem; }
+.tb-popover, .dup-form, .undo-hist-panel { background: #1b201c; border-color: #465048; border-radius: var(--r-lg); box-shadow: var(--shadow-pop); }
+.undo-hist-item { color: var(--text-2); border-bottom-color: #292f2a; }
+.undo-hist-item:hover { background: #293029; color: var(--text); }
+.kit-list .kit-item { border-radius: var(--r-sm); color: var(--text-2); }
+.kit-list .kit-item:hover { background: #292f2a; color: var(--text); }
+.kit-list .kit-item.active { background: #302d24; border-left-color: var(--accent); color: var(--text); }
+
+input[type=text], input[type=number], input[type=search], select, textarea, .midi-select, #inst-search,
+#loop-bpm, #loop-pattern, .det-customize input[type=text], .det-customize select, .copy-pad-row select,
+.import-grid input, .import-grid select {
+  background: var(--field) !important; border-color: var(--border-lt) !important; color: var(--text) !important;
+  border-radius: var(--r-sm); box-shadow: inset 0 1px 2px #0006;
+}
+input::placeholder, textarea::placeholder { color: #646c66; }
+input[type=range] { accent-color: var(--accent) !important; }
+
+.center-hdr {
+  min-height: 39px; padding: 9px 12px 7px; color: var(--text-3); border-bottom: 1px solid #242a25;
+  background: linear-gradient(180deg, #191d19, #141815); font-family: Consolas, monospace; font-size: .69rem; letter-spacing: .11em;
+}
+.center-hdr-kit { color: var(--accent); font-family: "Segoe UI", sans-serif; font-size: .82rem; font-weight: 650; }
+.center-hdr-kit[contenteditable=true] { border-bottom-color: var(--accent); }
+#parse-warn { color: #e0bd74; background: #2d2619; border-color: #665334; }
+#drum-svg-wrap {
+  padding: 8px 10px;
+  background: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px), radial-gradient(ellipse at 52% 58%, #232821, #131713 52%, #0a0d0b 82%);
+  background-size: 34px 34px, 34px 34px, auto; box-shadow: inset 0 -18px 50px #00000035;
+}
+.map-pad { transition: filter .12s ease; }
+.map-pad:hover { filter: brightness(1.08); }
+.map-pad.selected, .map-pad:focus { filter: drop-shadow(0 0 7px #c9a35e88); }
+@keyframes pad-flash {
+  0% { filter: brightness(1.7) saturate(1.15) drop-shadow(0 0 12px #84b89b); }
+  60% { filter: brightness(1.18) drop-shadow(0 0 5px #84b89b); }
+  100% { filter: none; }
+}
+
+#pad-detail { padding: 10px 11px 14px; background: #151916; }
+.det-empty { color: var(--text-3); }
+.det-card { background: linear-gradient(145deg, #202520, #181d19); border-color: #353d36; border-radius: var(--r-lg); padding: 11px 12px; box-shadow: inset 0 1px #ffffff07, 0 8px 18px #0000001f; }
+.det-id { color: var(--accent); font-family: "Arial Narrow", "Segoe UI", sans-serif; letter-spacing: .04em; }
+.det-input { color: var(--text-3); background: #111411; border: 1px solid #2e352f; }
+.det-zone { border-radius: var(--r-sm); padding: 5px 6px 4px; }
+.det-zone.zone-sel { background: #29271f; border-left-color: var(--accent); }
+.det-zone-id { color: var(--text-3); }
+.det-zone-id .zlbl { color: #818982; }
+.det-layer { color: var(--text-2); }
+.det-layer .name { color: #d9ddd6; }
+.det-layer .pill { min-width: 23px; text-align: center; background: #101310; border: 1px solid #4c4433; color: var(--accent); border-radius: var(--r-sm); font-family: Consolas, monospace; }
+.layer-btn { background: #161a17; border-color: #414941; color: var(--text-2); }
+.layer-btn:hover { background: #2b312c; color: var(--text); }
+.layer-btn.active-layer { border-color: var(--accent); color: var(--accent); background: #2a251a; }
+.layer-btn.clear { border-color: #653a35; color: #dc8176; }
+.det-params, .det-customize, .copy-pad-row { border-color: #303731; }
+.param-row { min-height: 24px; }
+.param-lbl { color: #858d86; font-family: Consolas, monospace; font-size: .64rem; }
+.param-val { color: #cbd0ca; font-family: Consolas, monospace; }
+
+#patch-panel-wrap { background: linear-gradient(180deg, #151915, #0d100e); border-bottom-color: #353c36; box-shadow: inset 0 -1px #050605; }
+.patch-hdr, .loop-hdr { padding: 6px 9px 5px; border-bottom-color: #252b26; }
+.patch-hdr:hover, .loop-hdr:hover { background: #202520; }
+.patch-hdr-lbl, .loop-hdr-lbl { color: #7d857e; font-family: Consolas, monospace; letter-spacing: .12em; }
+#patch-panel { padding: 7px 7px 6px; }
+.jack-item { padding: 4px 2px 3px; border-radius: var(--r-sm); }
+.jack-item:hover { background: #202620; border-color: #39433b; }
+.jack-item.jack-hot { background: #29261d; border-color: #7c6741; }
+.jack-plug { width: 13px; height: 13px; background: radial-gradient(circle, #050605 0 38%, #20251f 42% 62%, #090b09 66%); border-color: #4a514b; box-shadow: inset 0 1px 2px #000; }
+.jack-item.jack-hot .jack-plug { border-color: var(--accent); box-shadow: 0 0 8px #c9a35e55, inset 0 1px 2px #000; }
+.jack-num { color: #646c66; }
+.jack-lbl { color: #777f78; }
+.jack-item.jack-hot .jack-lbl { color: #e0bd74; }
+
+#inst-search { padding: 8px 9px; }
+.assign-target { background: #172326; border-color: #35535c; color: #8db2bd; border-radius: var(--r-sm); }
+.assign-target.empty { color: var(--text-3); border-color: #303631; }
+.assign-target .clr { color: var(--accent); }
+.cat-header, .sect-hdr { color: #858d86; border-top-color: #2d342e; font-family: Consolas, monospace; }
+.cat-header:hover { color: var(--text); }
+.inst-item { min-height: 29px; border-radius: var(--r-sm); color: var(--text-2); }
+.inst-item:hover { background: #252b26; color: var(--text); }
+.inst-item .ab-btn { background: #111411; border-color: #4b4639; color: var(--accent); }
+.inst-item .ab-btn:hover { background: #332d20; }
+.play-btn { background: #111a15; border-color: #345241; color: var(--ok); }
+.play-btn:hover { background: #1b2b22; color: #a3d0b5; }
+.play-btn.playing { color: #e1bd74; border-color: #705a32; background: #2b2215; }
+.star-btn { color: #525953; }
+.star-btn:hover, .star-btn.starred { color: var(--accent); }
+.waveform-canvas { opacity: .65; }
+.in-use-badge { background: #182226; color: #7399a5; border-color: #314a52; }
+.in-use-badge.mine { background: #17251c; color: #76aa8b; border-color: #335b41; }
+.tag-chip { background: #121512; border-color: #3b443d; color: #9ca49d; }
+.tag-chip:hover { border-color: #67736a; color: var(--text); }
+.tag-chip.active { background: #332d20; border-color: var(--accent); color: #e5c681; }
+.inst-tag { background: #18241c; border-color: #365342; color: #79a88c; }
+
+#loop-panel { background: #101310; border-top-color: #353c36; }
+.loop-controls label, .loop-row-lbl { color: #788079; }
+.loop-step { background: #171c18; border-color: #343d35; }
+.loop-step:hover { border-color: #68746a; }
+.loop-step.on { background: #6f5d39; border-color: #b18e4d; }
+.loop-step.cur { border-color: var(--accent) !important; box-shadow: 0 0 5px #c9a35e66; }
+.loop-step.on.cur { background: var(--accent); }
+#loop-play-btn.playing { background: #203329; border-color: #4f745e; color: #9dceb1; }
+
+#import-wav-form { background: #171e19; border-color: #385044; border-radius: var(--r-md); }
+#import-drop-zone { border-color: #526159; color: #858e87; }
+#import-drop-zone:hover, #import-drop-zone.drag-over { border-color: var(--accent); color: #dfc183; }
+#autosave-banner { background: #2b2418; border-bottom-color: #675536; color: #e0bd74; }
+#autosave-banner a { color: #f0cf88; }
+#drop-overlay { background: #090b09dd; border-color: var(--accent); color: #e0bd74; }
+
+.sin-box, .diff-box, .tm-box, .confirm-box { background: #1a1f1b; border-color: #465048; border-radius: var(--r-lg); box-shadow: var(--shadow-pop); }
+#diff-modal, #tm-modal, #relink-modal, #kitfx-modal, #trig-modal, #sin-modal, #similar-modal, #confirm-overlay { background: #050706b8; backdrop-filter: blur(4px); }
+.sin-box h3, .diff-box h3, .tm-box h3 { color: var(--text); font-family: "Arial Narrow", "Segoe UI", sans-serif; letter-spacing: .05em; }
+.tm-snap { background: #202520; border-color: #343c35; }
+.tm-snap:hover { border-color: #5d695f; }
+.tm-snap.sel { border-color: var(--accent); background: #2b281f; }
+.tm-diff th, .diff-table th { background: #171b18; color: #858d86; }
+.diff-row-changed td, .tm-diff .chg td { background: #2c291f; }
+
+@media (max-width: 1100px) {
+  header { flex-wrap: wrap; padding: 6px 10px; gap: 5px; min-height: 0; height: auto; }
+  header #msg { flex-basis: 100%; margin-left: 0; order: 99; }
+  .main { grid-template-columns: 1fr !important; grid-template-rows: auto auto auto; height: auto; overflow: visible; }
+  #left-panel { grid-column: 1 !important; grid-row: 2; max-height: 60vh; border-right: none; border-bottom: 1px solid var(--border); }
+  #center-panel { grid-column: 1 !important; grid-row: 1; min-height: 440px; border-right: none; border-bottom: 1px solid var(--border); }
+  #inst-panel { grid-column: 1 !important; grid-row: 3; max-height: 55vh; }
+  #drum-svg-wrap { min-height: 270px; }
+  body { overflow-y: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  .map-pad.midi-hit { animation-duration: .01ms !important; }
+  .input-bay-dock.attention { animation: none !important; }
+}
+
+
+/* ── Editor shell hierarchy (mode rail + contextual workspace) ── */
+header.app-topbar {
+  display: grid; grid-template-columns: 205px minmax(210px, 1fr) auto;
+  grid-template-areas: "brand identity actions" "utility utility utility";
+  align-items: stretch; gap: 0; min-height: 86px; padding: 0;
+  background: linear-gradient(180deg, #1b201c 0 58px, #111411 58px 100%);
+  border-bottom: 1px solid #050706;
+}
+.brand-lockup {
+  grid-area: brand; display: flex; align-items: center; gap: 11px; min-width: 0;
+  padding: 10px 16px; border-right: 1px solid #303731;
+}
+.brand-lockup > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.brand-lockup strong {
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: .86rem; font-stretch: condensed; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.brand-lockup small {
+  margin-top: 2px; color: #6f7771; font: .56rem/1 Consolas, "SFMono-Regular", monospace;
+  letter-spacing: .14em; text-transform: uppercase;
+}
+.brand-hardware {
+  position: relative; width: 30px; height: 30px; flex: 0 0 30px; border: 1px solid #5f5238; border-radius: 50%;
+  background: linear-gradient(52deg, transparent 47%, #d7b56f 48% 52%, transparent 53%), radial-gradient(circle, #303731 0 36%, #171b18 38% 58%, #090b09 60% 100%);
+  box-shadow: inset 0 0 0 3px #202520, 0 2px 6px #0009;
+}
+.brand-hardware::after {
+  content: ""; position: absolute; width: 4px; height: 4px; right: -4px; bottom: 1px; border-radius: 50%;
+  background: var(--ok); box-shadow: 0 0 7px #84b89baa;
+}
+.kit-identity {
+  grid-area: identity; display: grid; grid-template-columns: auto minmax(0, auto) auto 1fr;
+  align-items: center; gap: 9px; min-width: 0; padding: 8px 16px;
+}
+.kit-eyebrow {
+  color: #6f7771; font: .58rem/1 Consolas, "SFMono-Regular", monospace;
+  letter-spacing: .13em; text-transform: uppercase;
+}
+.kit-identity #kit-name {
+  min-width: 0; max-width: 32vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif; font-size: .98rem;
+  letter-spacing: .02em;
+}
+.kit-identity #kit-name::first-letter { color: var(--accent); }
+.primary-actions {
+  grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+  padding: 9px 13px; border-left: 1px solid #303731;
+}
+.primary-actions .deploy-btn { min-width: 132px; text-transform: uppercase; letter-spacing: .07em; font-size: .68rem; }
+.primary-actions #kit-menu, .primary-actions #save-menu { right: 0; left: auto; top: calc(100% + 9px); }
+.utility-strip {
+  grid-area: utility; display: flex; align-items: center; gap: 5px; min-width: 0;
+  min-height: 30px; padding: 3px 10px; border-top: 1px solid #292f2a;
+  background: linear-gradient(180deg, #151916, #0f1210); box-shadow: inset 0 1px #ffffff04;
+}
+.utility-strip .tb-btn { padding: 3px 8px; font-size: .66rem; }
+.utility-strip #msg {
+  min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: Consolas, "SFMono-Regular", monospace; font-size: .66rem;
+}
+
+.main {
+  position: relative; display: grid; grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px);
+  grid-template-rows: minmax(0, 1fr); height: calc(100vh - 86px); overflow: hidden;
+  background: #090b0a;
+}
+.workspace-rail {
+  grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: stretch;
+  min-width: 0; padding: 8px 6px 7px; gap: 3px; overflow: hidden;
+  background: linear-gradient(90deg, #111512, #202520 48%, #111512);
+  border-right: 1px solid #343b35; box-shadow: inset -1px 0 #060806, 4px 0 16px #0003;
+}
+.workspace-rail::before, .workspace-rail::after {
+  content: ""; width: 5px; height: 5px; margin: 0 auto 4px; flex: 0 0 5px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #919991, #2c322d 52%, #090b09 56%);
+  box-shadow: 0 1px 2px #000;
+}
+.workspace-rail::after { margin: 4px auto 0; }
+.workspace-tab {
+  position: relative; display: flex; min-height: 49px; padding: 5px 2px; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px; border: 1px solid transparent; border-radius: 3px;
+  background: transparent; color: #747c75; font: 560 .54rem/1 Bahnschrift, "Arial Narrow", sans-serif;
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.workspace-tab:hover { background: #262c27; border-color: #3c453d; color: #d0d4cf; }
+.workspace-tab.active {
+  color: #ebd39e; border-color: #615439; background: linear-gradient(145deg, #332e22, #211f19);
+  box-shadow: inset 3px 0 var(--accent), inset 0 1px #ffffff08, 0 3px 10px #0003;
+}
+.workspace-glyph {
+  display: grid; place-items: center; width: 24px; height: 21px; border: 1px solid #3c453e; border-radius: 2px;
+  color: #9ba29b; background: #121512; font: 700 .62rem/1 Consolas, monospace; letter-spacing: -.03em;
+  box-shadow: inset 0 1px #ffffff08;
+}
+.workspace-tab.active .workspace-glyph { color: #17130d; border-color: #d0ad68; background: var(--accent); }
+.workspace-spacer { flex: 1; min-height: 10px; }
+
+/* The module bay and kit map are one visual instrument: selecting a physical
+   socket leaves both surfaces visible and illuminates every zone it drives. */
+.input-bay-dock {
+  position: relative; flex: 0 0 auto; min-width: 0; padding: 7px 8px 8px;
+  border-top: 1px solid #4a4335; border-bottom: 1px solid #252b26;
+  background: linear-gradient(180deg, #20241f, #111411 74%);
+  box-shadow: inset 0 1px #ffffff08, 0 -8px 20px #0004;
+}
+.input-bay-dock.attention { animation: input-bay-signal 520ms ease-out; }
+@keyframes input-bay-signal { 35% { box-shadow: inset 0 1px #ffffff08, 0 0 0 1px #c7a35d, 0 0 25px #c7a35d40; } }
+.input-bay-head {
+  display: flex; align-items: center; gap: 9px; min-height: 25px; padding: 0 2px 6px;
+}
+.input-bay-head > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.input-bay-head strong { color: #e0e4df; font: 600 .7rem/1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.input-bay-head small { color: #777f78; font: .49rem/1 Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.input-bay-route {
+  min-width: 0; margin-left: auto; overflow: hidden; color: #9b8354;
+  font: .51rem/1 Consolas, monospace; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap;
+}
+.input-bay-route strong { color: #d8b86f; font: inherit; }
+.input-bay-scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #554b36 #101310; }
+.input-backplane { min-width: 680px; }
+.input-back-bank + .input-back-bank { margin-top: 6px; }
+.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 3px; color: #6e766f; font: .47rem/1 Consolas, monospace; letter-spacing: .14em; }
+.input-bank-label::after { content: ""; flex: 1; height: 1px; background: #323833; }
+.input-back-row { display: grid; grid-template-columns: repeat(var(--jack-count), minmax(78px, 1fr)); gap: 4px; }
+.input-back-jack {
+  position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr); grid-template-rows: 17px auto auto; gap: 0 5px;
+  min-width: 0; min-height: 48px; padding: 4px 5px; overflow: hidden; border: 1px solid #353c36; border-radius: 2px;
+  background: linear-gradient(145deg, #1b201c, #111411); color: #b7bdb7; text-align: left;
+}
+.input-back-jack:hover, .input-back-jack:focus-visible { border-color: #8f7749; background: #29251b; outline: none; }
+.input-back-jack.current {
+  border-color: #a58a54; background: linear-gradient(145deg, #302a1e, #171712);
+  box-shadow: inset 0 -3px var(--accent), 0 0 12px #d0aa5b25;
+}
+.input-back-jack.current::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%;
+  background: #d7ba78; box-shadow: 0 0 7px #e3c37ddd;
+}
+.input-back-plug {
+  grid-row: 1 / 4; align-self: center; width: 19px; height: 19px; border: 2px solid #697169; border-radius: 50%;
+  background: radial-gradient(circle, #050605 0 29%, #272c28 31% 47%, #090b09 49% 100%);
+  box-shadow: inset 0 1px #ffffff10, 0 1px 2px #000;
+}
+.input-back-jack.current .input-back-plug { border-color: #b49354; box-shadow: 0 0 8px #d0aa5b55, inset 0 1px #ffffff10; }
+.input-back-num { color: #c4a768; font: 700 .52rem/1 Consolas, monospace; }
+.input-back-name { overflow: hidden; color: #e0e4df; font: 600 .56rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
+.input-back-dest { overflow: hidden; color: #6d756e; font: .44rem/1.1 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.input-bay-note { color: #69716a; font: .48rem/1 Consolas, monospace; white-space: nowrap; }
+.input-bay-note b { color: #a88d57; font-weight: 700; letter-spacing: .06em; }
+
+#center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
+#left-panel, #inst-panel, #advanced-panel {
+  grid-column: 3 !important; grid-row: 1 !important; min-width: 0; min-height: 0; max-height: none;
+  border: 0; background: #151916;
+}
+#advanced-panel { display: none; flex-direction: column; overflow: hidden; }
+body[data-workspace="pad"] #left-panel { display: flex; }
+body[data-workspace="pad"] #inst-panel { display: none; }
+body[data-workspace="pad"] #patch-panel-wrap { display: none; }
+body[data-workspace="sounds"] #left-panel { display: none; }
+body[data-workspace="sounds"] #inst-panel { display: block; }
+body[data-workspace="fx"] #left-panel, body[data-workspace="fx"] #inst-panel,
+body[data-workspace="history"] #left-panel, body[data-workspace="history"] #inst-panel,
+body[data-workspace="tools"] #left-panel, body[data-workspace="tools"] #inst-panel,
+body[data-workspace="repair"] #left-panel, body[data-workspace="repair"] #inst-panel,
+body[data-workspace="layout"] #left-panel, body[data-workspace="layout"] #inst-panel { display: none; }
+body[data-workspace="fx"] #advanced-panel, body[data-workspace="history"] #advanced-panel,
+body[data-workspace="tools"] #advanced-panel, body[data-workspace="repair"] #advanced-panel,
+body[data-workspace="layout"] #advanced-panel { display: flex; }
+.context-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 54px;
+  padding: 9px 11px 8px; border-bottom: 1px solid #303731;
+  background: linear-gradient(180deg, #202520, #181c19);
+}
+.context-head > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.context-head strong {
+  color: var(--text); font-family: Bahnschrift, "Arial Narrow", "Segoe UI", sans-serif;
+  font-size: .8rem; letter-spacing: .025em;
+}
+.context-eyebrow {
+  color: #737b74; font: .54rem/1 Consolas, monospace; letter-spacing: .14em; text-transform: uppercase;
+}
+.context-head button {
+  padding: 4px 7px; border: 1px solid #475048; background: #171b18; color: #aeb4ae;
+  font-size: .62rem; white-space: nowrap;
+}
+.context-head button:hover { border-color: var(--accent); color: #e6c984; background: #29251b; }
+#inst-panel > div:nth-child(2) { padding-top: 9px !important; }
+.advanced-body { min-height: 0; flex: 1; overflow-y: auto; padding: 0 11px 14px; }
+.aw-intro {
+  margin: 11px 0 5px; padding: 0 1px 10px; border-bottom: 1px solid #343b35;
+  color: #929a92; font-size: .68rem; line-height: 1.48;
+}
+.aw-status-line {
+  display: flex; align-items: center; gap: 6px; min-height: 28px; margin: 7px 0 2px;
+  color: #767e77; font: .55rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase;
+}
+.aw-status-line::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px #84b89b88; }
+.aw-status-line.warn::before { background: #c98254; box-shadow: 0 0 6px #c9825488; }
+.aw-module { position: relative; margin-top: 8px; padding: 9px 9px 10px 43px; border: 1px solid #343b35; background: linear-gradient(145deg, #1b201c, #111411); box-shadow: inset 0 1px #ffffff05; }
+.aw-module::before {
+  content: attr(data-channel); position: absolute; inset: 0 auto 0 0; display: grid; place-items: center; width: 32px;
+  border-right: 1px solid #343b35; color: #7d7563; background: linear-gradient(90deg, #101310, #1b1f1b);
+  font: 700 .55rem/1 Consolas, monospace; letter-spacing: .04em; writing-mode: vertical-rl; transform: rotate(180deg);
+}
+.aw-module-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; margin-bottom: 7px; }
+.aw-module-head > div { min-width: 0; }
+.aw-module h3 { margin: 0 0 2px; color: #dfe2dd; font: 600 .76rem/1.2 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.aw-module p { color: #747c75; font-size: .62rem; line-height: 1.42; }
+.aw-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.aw-actions button, .aw-actions label {
+  min-height: 25px; padding: 4px 7px; border: 1px solid #414941; border-radius: 2px;
+  background: #141815; color: #aeb4ae; font-size: .62rem; line-height: 1.2; cursor: pointer;
+}
+.aw-actions button:hover, .aw-actions label:hover { border-color: #8c7548; color: #e4c77f; background: #29251b; }
+.aw-actions .primary { color: #17130d; border-color: #d0ad68; background: var(--accent); font-weight: 650; }
+.aw-actions .danger { color: #d28177; border-color: #67413d; }
+.aw-meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+.aw-meter { display: grid; grid-template-columns: 1fr 24px; align-items: center; gap: 3px 5px; color: #7a827b; font: .54rem/1 Consolas, monospace; text-transform: uppercase; }
+.aw-meter em { grid-column: 1 / -1; color: #666e67; font-style: normal; letter-spacing: .08em; }
+.aw-meter-track { position: relative; height: 5px; overflow: hidden; background: #080a09; border: 1px solid #303630; }
+.aw-meter-track i { display: block; height: 100%; width: var(--meter); background: linear-gradient(90deg, #725f38, var(--accent)); }
+.aw-meter b { color: #b4bab4; font-weight: 500; text-align: right; }
+.aw-ledger { display: grid; gap: 1px; margin-top: 7px; border-top: 1px solid #343b35; }
+.aw-ledger-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 7px; padding: 6px 2px; border-bottom: 1px solid #2c322d; color: #777f78; font: .57rem/1.25 Consolas, monospace; }
+.aw-ledger-row strong { overflow: hidden; color: #b9beb9; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.aw-empty { padding: 12px 2px; color: #707871; font-size: .64rem; line-height: 1.45; }
+.aw-tool-list { display: grid; gap: 4px; margin-top: 7px; }
+.aw-tool-list .tool-item { background: #111411; border-color: #343b35; }
+.advanced-tool-output { display: none; max-height: 180px; margin-top: 7px; padding: 7px; overflow: auto; white-space: pre-wrap; background: #090b09; border: 1px solid #343b35; color: #99b19d; font: .58rem/1.45 Consolas, monospace; }
+.advanced-tool-output.visible { display: block; }
+.audition-inline { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.audition-inline .tb-btn { padding: 2px 6px; font-size: .58rem; }
+.audition-sub { color: #5f675f; font: .5rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.center-hdr { min-height: 46px; gap: 7px; padding: 7px 10px 6px; }
+.map-title { display: flex; flex-direction: column; margin-right: 5px; color: var(--text); font-family: Bahnschrift, "Arial Narrow", sans-serif; font-size: .78rem; letter-spacing: .04em; text-transform: none; }
+.map-title small { margin-bottom: 2px; color: #6f7771; font: .52rem/1 Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
+#drum-svg-wrap { position: relative; }
+#drum-svg-wrap::after {
+  content: "STRIKE PERFORMANCE GRID"; position: absolute; right: 13px; bottom: 8px; pointer-events: none;
+  color: #90988f33; font: .53rem/1 Consolas, monospace; letter-spacing: .18em;
+}
+
+/* Quick layer rack: the map stays the performance surface while the selected
+   pad's core sound-shaping controls remain one gesture away. */
+.layer-rack {
+  display: grid; grid-template-columns: minmax(0, 1fr) 158px minmax(0, 1fr); gap: 7px;
+  flex: 0 0 auto; min-height: 150px; padding: 8px 9px;
+  border-top: 1px solid #353c36; background: linear-gradient(180deg, #111512, #0c0f0d);
+  box-shadow: inset 0 1px #ffffff04, 0 -7px 18px #0003;
+}
+.layer-rack-empty {
+  grid-column: 1 / -1; display: grid; place-items: center; min-height: 96px;
+  border: 1px dashed #394139; color: #747c75; background: #111411;
+  font: .68rem/1.5 Consolas, "SFMono-Regular", monospace; letter-spacing: .03em;
+}
+.rack-layer, .rack-blend {
+  min-width: 0; border: 1px solid #343b35; background: linear-gradient(145deg, #1c211d, #121512);
+  box-shadow: inset 0 1px #ffffff06, 0 4px 10px #0002;
+}
+.rack-layer { padding: 7px 8px 8px; }
+.rack-layer.active { border-color: #8d7549; box-shadow: inset 3px 0 var(--accent), inset 0 1px #ffffff07, 0 4px 10px #0003; }
+.rack-layer.broken { border-color: #75503e; }
+.rack-layer-head { display: grid; grid-template-columns: 27px minmax(0, 1fr) auto; align-items: center; gap: 7px; min-width: 0; }
+.rack-layer-key {
+  display: grid; place-items: center; width: 27px; height: 27px; padding: 0;
+  border: 1px solid #4b544c; border-radius: 2px; background: #0d100e; color: #aeb5ae;
+  font: 700 .72rem/1 Consolas, monospace;
+}
+.rack-layer.active .rack-layer-key { color: #17130d; border-color: #d0ad68; background: var(--accent); }
+.rack-layer-title { min-width: 0; }
+.rack-layer-title small, .rack-blend small {
+  display: block; margin-bottom: 2px; color: #707871;
+  font: .5rem/1 Consolas, monospace; letter-spacing: .13em; text-transform: uppercase;
+}
+.rack-layer-title strong {
+  display: block; overflow: hidden; color: #e0e3de; font: 600 .73rem/1.2 Bahnschrift, "Arial Narrow", sans-serif;
+  letter-spacing: .015em; text-overflow: ellipsis; white-space: nowrap;
+}
+.rack-layer.empty .rack-layer-title strong { color: #777f78; font-style: italic; font-weight: 450; }
+.rack-layer-status { color: #788078; font: .52rem/1 Consolas, monospace; text-transform: uppercase; }
+.rack-layer.broken .rack-layer-status { color: #d8906f; }
+.rack-actions { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin: 6px 0 5px; min-height: 22px; }
+.rack-action {
+  min-width: 24px; height: 22px; padding: 2px 6px; border: 1px solid #404840; border-radius: 2px;
+  background: #121613; color: #99a199; font-size: .61rem; line-height: 1; white-space: nowrap;
+}
+.rack-action:hover { border-color: #897348; color: #e6c984; background: #29251b; }
+.rack-action.assign { margin-right: auto; color: #d7bb7d; border-color: #64583e; }
+.rack-action.danger { color: #c97870; border-color: #633d39; }
+.rack-params { display: grid; gap: 3px; }
+.rack-param { display: grid; grid-template-columns: 33px minmax(48px, 1fr) 27px; align-items: center; gap: 5px; min-width: 0; }
+.rack-param label { color: #727a73; font: .54rem/1 Consolas, monospace; text-transform: uppercase; }
+.rack-param input[type=range], .rack-xfade input[type=range] { width: 100%; min-width: 0; height: 3px; accent-color: var(--accent); cursor: pointer; }
+.rack-param output { color: #b8bdb8; font: .58rem/1 Consolas, monospace; text-align: right; }
+.rack-blend {
+  position: relative; display: flex; min-width: 0; padding: 8px 9px; flex-direction: column; justify-content: space-between;
+  overflow: hidden; text-align: center; background: linear-gradient(145deg, #171b18, #0d100e);
+}
+.rack-blend::before {
+  content: ""; position: absolute; top: 36px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, var(--accent), #6b6f69 50%, #6686a6); opacity: .52;
+}
+.rack-pad-id { position: relative; color: #e0e3de; font: 650 .7rem/1.15 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .035em; }
+.rack-pad-id span { display: block; margin-top: 2px; overflow: hidden; color: #737b74; font: .52rem/1 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.rack-xfade { position: relative; display: grid; gap: 4px; margin: 9px 0 7px; }
+.rack-xfade-meta { display: flex; justify-content: space-between; color: #747c75; font: .5rem/1 Consolas, monospace; text-transform: uppercase; }
+.rack-xfade-value { color: #d6bc82; font: 600 .62rem/1.2 Consolas, monospace; }
+.rack-blend .rack-action { width: 100%; height: 25px; color: #d7dcd7; }
+.rack-blend .rack-action:disabled { opacity: .38; cursor: not-allowed; border-color: #3b423c; color: #727972; }
+
+@media (max-width: 1180px) {
+  header.app-topbar { grid-template-columns: 184px minmax(180px, 1fr) auto; }
+  .brand-lockup { padding-inline: 11px; }
+  .brand-lockup small { display: none; }
+  .primary-actions .deploy-btn { min-width: 112px; }
+  .utility-strip { overflow-x: auto; scrollbar-width: none; }
+  .utility-strip::-webkit-scrollbar { display: none; }
+  .main { grid-template-columns: 58px minmax(430px, 1fr) minmax(310px, 350px); }
+}
+@media (max-width: 900px) {
+  header.app-topbar {
+    grid-template-columns: minmax(165px, 1fr) auto;
+    grid-template-areas: "brand actions" "identity identity" "utility utility";
+    background: linear-gradient(180deg, #1b201c 0 56px, #171b18 56px 100%);
+  }
+  .brand-lockup { min-height: 56px; border-right: 0; }
+  .kit-identity { min-height: 38px; padding: 5px 11px; border-top: 1px solid #303731; }
+  .kit-identity #kit-name { max-width: 55vw; }
+  .primary-actions { min-height: 56px; border-left: 0; }
+  .main {
+    grid-template-columns: 58px minmax(0, 1fr) !important; grid-template-rows: auto auto;
+    height: auto; min-height: calc(100vh - 124px); overflow: visible;
+  }
+  .workspace-rail { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: calc(100vh - 8px); z-index: 20; }
+  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 760px; border-bottom: 1px solid var(--border); }
+  #left-panel, #inst-panel, #advanced-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
+  #drum-svg-wrap { min-height: 360px; }
+  .layer-rack { grid-template-columns: minmax(0, 1fr) 138px minmax(0, 1fr); }
+  .rack-pad-id span { display: none; }
+  .rack-blend::before { top: 31px; }
+  .rack-xfade { margin: 4px 0; }
+}
+@media (max-width: 620px) {
+  header.app-topbar { grid-template-columns: 1fr; grid-template-areas: "brand" "identity" "actions" "utility"; }
+  .brand-lockup { min-height: 48px; padding-block: 7px; }
+  .kit-identity { min-height: 36px; }
+  .primary-actions { min-height: 48px; justify-content: stretch; padding: 6px 8px; border-top: 1px solid #303731; }
+  .primary-actions .tb-group:first-child { flex: 1; }
+  .primary-actions .tb-group:first-child > button { width: 100%; }
+  .primary-actions .deploy-btn { flex: 1; }
+  .main { display: block !important; min-height: 0; }
+  .workspace-rail {
+    position: sticky; top: 0; z-index: 30; height: 51px; padding: 4px 5px; flex-direction: row;
+    overflow-x: auto; border-right: 0; border-bottom: 1px solid #343b35;
+  }
+  .workspace-rail::before, .workspace-rail::after { display: none; }
+  .workspace-tab { flex: 0 0 50px; min-height: 41px; padding: 3px 1px; }
+  .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
+  .workspace-spacer { display: none; }
+  #center-panel { min-height: 760px; }
+  #left-panel, #inst-panel, #advanced-panel { min-height: 420px; }
+  .center-hdr { flex-wrap: wrap; }
+  .center-hdr .map-title { flex-basis: 100%; }
+  .input-bay-head { align-items: flex-start; flex-wrap: wrap; }
+  .input-bay-route { order: 3; width: 100%; margin-left: 0; }
+  .input-bay-note { margin-left: auto; }
+  .layer-rack { grid-template-columns: 1fr 1fr; }
+  .rack-blend { grid-column: 1 / -1; grid-row: 2; min-height: 112px; }
+}
+
+
 </style>
 </head>
-<body>
-<header>
-  <h1>Strike Pro Remapper</h1>
+<body data-workspace="pad">
+<header class="app-topbar">
+  <div class="brand-lockup">
+    <span class="brand-hardware" aria-hidden="true"></span>
+    <span><strong>Strike Remapper</strong><small>Kit workstation</small></span>
+  </div>
 
+  <div class="kit-identity">
+    <span class="kit-eyebrow">Editing kit</span>
+    <span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit">No kit loaded</span>
+    <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+  </div>
+
+  <div class="primary-actions">
   <!-- Kit picker -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
@@ -3648,10 +4465,9 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
           <input type="file" accept=".csv,.txt" style="display:none;"
             onchange="if(this.files[0])importAssignCSV(this.files[0]);this.value=''">
         </label>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showDiffModal()">&#x1F50D; Compare with kit&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="openTimeMachine()">&#x1F570;&#xFE0F; Kit time machine&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showRelinkModal()">&#x1F527; Fix broken paths&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showKitFxModal()">&#x1F39A; Kit FX editor&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('history')">&#x1F50D; History and comparison</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('repair')">&#x1F527; Fix broken paths&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('fx')">&#x1F39A; Kit FX workspace</button>
         <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="exportBundle()">&#x1F4E6; Export kit bundle (.zip)</button>
         <label class="btn-secondary" style="width:100%;font-size:.72rem;display:block;text-align:center;cursor:pointer;box-sizing:border-box;"
           title="Accepts strike_remap bundles, official Strike Editor exports, and commercial pack zips (eDrumWorkshop, drum-tec, …)">
@@ -3680,8 +4496,6 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
               style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
     </div>
     <div id="save-menu" class="tb-popover" style="display:none;min-width:220px;">
-      <button id="save-sd-btn" class="btn-secondary" onclick="saveToSD()" disabled
-              style="width:100%;margin-bottom:6px;">Save to SD card</button>
       <details>
         <summary style="font-size:.72rem;color:#666;cursor:pointer;">Custom path&#x2026;</summary>
         <div style="margin-top:5px;display:flex;flex-direction:column;gap:4px;">
@@ -3693,7 +4507,10 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
       <p id="save-hint" style="font-size:.7rem;color:#666;margin-top:6px;"></p>
     </div>
   </div>
+  <button id="save-sd-btn" class="btn-primary tb-btn deploy-btn" onclick="openDeploy()" disabled>Deploy to Module</button>
+  </div><!-- /primary-actions -->
 
+  <div class="utility-strip">
   <!-- Duplicate -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" id="dup-btn" onclick="showDuplicateForm()" disabled>Duplicate&#x2026;</button>
@@ -3736,20 +4553,43 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
     </div>
   </div>
 
-  <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
-          title="Virtual module — play the kit being edited from the pads or number keys" style="flex-shrink:0;">Virtual</button>
-  <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;flex-shrink:0;font-size:.7rem;color:#888;">
-    <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:64px;vertical-align:middle;"
-           title="Keyboard-hit velocity (number keys 1–0)"></span>
-  <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
-          title="Enable MIDI monitor — hit a pad to see it light up" style="flex-shrink:0;">MIDI</button>
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
-  <button id="theme-btn" class="btn-secondary tb-btn" onclick="toggleTheme()" title="Toggle dark/light theme" style="font-size:.9rem;flex-shrink:0;">&#9790;</button>
+  </div><!-- /utility-strip -->
 </header>
 <div class="main">
 
+  <nav id="workspace-rail" class="workspace-rail" aria-label="Editor workspaces">
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('kit')" title="Kit library and kit actions">
+      <span class="workspace-glyph" aria-hidden="true">K</span><span>Kit</span>
+    </button>
+    <button class="workspace-tab active" type="button" data-workspace="pad" onclick="setWorkspaceMode('pad')" title="Selected pad settings">
+      <span class="workspace-glyph" aria-hidden="true">P</span><span>Pad</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="sounds" onclick="setWorkspaceMode('sounds')" title="Browse and assign instruments">
+      <span class="workspace-glyph" aria-hidden="true">S</span><span>Sounds</span>
+    </button>
+    <button id="inputs-quick-btn" class="workspace-tab" type="button"
+      onclick="focusInputBay()" title="Jump to the always-visible physical input bay">
+      <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
+    </button>
+    <span class="workspace-spacer"></span>
+    <button class="workspace-tab" type="button" data-workspace="fx" onclick="openWorkspaceUtility('fx')" title="Kit FX">
+      <span class="workspace-glyph" aria-hidden="true">FX</span><span>FX</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="history" onclick="openWorkspaceUtility('history')" title="Kit history and comparison">
+      <span class="workspace-glyph" aria-hidden="true">H</span><span>History</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="tools" onclick="openWorkspaceUtility('tools')" title="Module and developer tools">
+      <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
+    </button>
+  </nav>
+
   <!-- Left: back panel jacks + pad editor -->
   <div id="left-panel">
+    <div class="context-head">
+      <div><span id="context-eyebrow" class="context-eyebrow">Pad workspace</span><strong id="context-title">Selected trigger</strong></div>
+      <button id="context-action" type="button" onclick="setWorkspaceMode('sounds')">Browse sounds</button>
+    </div>
     <div id="patch-panel-wrap">
       <div class="patch-hdr" onclick="togglePatchPanel()">
         <span class="patch-hdr-lbl">Back panel jacks</span>
@@ -3765,16 +4605,13 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
   <!-- Center: drum map + live loop -->
   <section id="center-panel">
     <div class="center-hdr">
-      Drum Map&nbsp;<span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit"></span>
-      <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+      <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="exportLayout()" title="Save your customized kit layout (positions, sizes, rotation, finish) to a file.">&#x2913; Save layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="document.getElementById('layout-file').click()" title="Load a kit layout file saved earlier.">&#x2912; Load layout</button>
+      <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="openSetupProfiles()" title="Save and switch between physical drum and cymbal arrangements.">&#x25C9; Setup profiles</button>
       <input type="file" id="layout-file" accept="application/json,.json" style="display:none"
         onchange="importLayout(this.files[0]); this.value=''">
     </div>
@@ -3827,10 +4664,31 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
     <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
       <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
+    <section id="input-bay-dock" class="input-bay-dock" aria-labelledby="input-bay-title">
+      <div class="input-bay-head">
+        <div><small>Module rear panel</small><strong id="input-bay-title">Trigger input bay</strong></div>
+        <span id="input-bay-route" class="input-bay-route">SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP</span>
+        <span class="input-bay-note"><b>HH CTRL</b> follows Hi-Hat</span>
+      </div>
+      <div id="input-bay-body" class="input-bay-scroll"></div>
+    </section>
+    <div id="layer-rack" class="layer-rack" aria-label="Selected pad layer controls" aria-live="polite">
+      <div class="layer-rack-empty">Select a pad to open its Layer A / B signal path</div>
+    </div>
     <div id="loop-panel">
       <div class="loop-hdr" onclick="toggleLoopPanel()">
-        <span class="loop-hdr-lbl">Live Loop</span>
-        <span id="loop-toggle-arrow" style="font-size:.6rem;color:#445;margin-left:auto;">&#9654;</span>
+        <span class="loop-hdr-lbl">Audition</span>
+        <span class="audition-sub">Live loop · virtual kit · MIDI monitor</span>
+        <div class="audition-inline" onclick="event.stopPropagation()">
+          <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
+            title="Virtual module — play the kit being edited from the pads or number keys">Virtual</button>
+          <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;font-size:.7rem;color:#888;">
+            <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:54px;vertical-align:middle;"
+              title="Keyboard-hit velocity (number keys 1–0)"></span>
+          <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
+            title="Enable MIDI monitor — hit a pad to see it light up">MIDI</button>
+          <span id="loop-toggle-arrow" style="font-size:.6rem;color:#657066;margin-left:3px;">&#9654;</span>
+        </div>
       </div>
       <div id="loop-body" style="display:none;">
         <div class="loop-controls">
@@ -3857,6 +4715,10 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
 
   <!-- Right: instrument browser -->
   <section id="inst-panel">
+    <div class="context-head">
+      <div><span class="context-eyebrow">Sounds workspace</span><strong>Instrument library</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
     <div style="padding:6px 12px 0;">
     <div id="assign-target" class="assign-target empty">Click a pad or jack to assign instruments</div>
     <!-- Import WAV form -->
@@ -3915,6 +4777,15 @@ body[data-theme=light] .inst-tag-edit { background:#f0f4fa; border-color:#90b0d0
     </div>
     <div id="inst-list"></div>
     </div><!-- /padding wrapper -->
+  </section>
+
+  <!-- Right: advanced contextual workspaces -->
+  <section id="advanced-panel" aria-label="Advanced workspace">
+    <div class="context-head">
+      <div><span id="advanced-eyebrow" class="context-eyebrow">Advanced workspace</span><strong id="advanced-title">Module controls</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
+    <div id="advanced-body" class="advanced-body"></div>
   </section>
 
 </div>
@@ -4171,20 +5042,6 @@ function renderLoopStepHighlight() {
   if (idx >= 0) {
     el.querySelectorAll(`.loop-step[data-step="${idx}"]`).forEach(b => b.classList.add('cur'));
   }
-}
-
-// ── Theme ─────────────────────────────────────────────────────────────────────
-let themeLight = false;
-try { themeLight = localStorage.getItem('strike_theme') === 'light'; } catch(e) {}
-function applyTheme() {
-  document.body.dataset.theme = themeLight ? 'light' : 'dark';
-  const btn = document.getElementById('theme-btn');
-  if (btn) { btn.title = themeLight ? 'Switch to dark' : 'Switch to light'; btn.textContent = themeLight ? '☀' : '☾'; }
-}
-function toggleTheme() {
-  themeLight = !themeLight;
-  try { localStorage.setItem('strike_theme', themeLight ? 'light' : 'dark'); } catch(e) {}
-  applyTheme();
 }
 
 // ── Favorites & recently used ─────────────────────────────────────────────────
@@ -4902,6 +5759,16 @@ function togglePatchPanel() {
 let padOverrides = {};
 try { padOverrides = JSON.parse(localStorage.getItem('strike_pad_overrides') || '{}'); } catch(e) {}
 
+// Physical setup profiles live independently from kits. A profile describes the
+// hardware shown on the performance surface — including mirrors/Y-splits — while
+// kit assignments and sound parameters remain untouched.
+const SETUP_PROFILE_KEY = 'strike_setup_profiles_v1';
+let setupProfileStore = {version:1, activeId:null, profiles:[]};
+try {
+  const storedSetups = JSON.parse(localStorage.getItem(SETUP_PROFILE_KEY) || 'null');
+  if (storedSetups && Array.isArray(storedSetups.profiles)) setupProfileStore = storedSetups;
+} catch(e) {}
+
 // Drag state
 let dragState = null;  // {id, origCx, origCy, startX, startY, moved}
 
@@ -5061,15 +5928,29 @@ const PAD_GROUPS = {
 const PAD_TO_GROUP = {};
 for (const [k, g] of Object.entries(PAD_GROUPS)) for (const pid of g.pads) PAD_TO_GROUP[pid] = k;
 
-// Patch panel rows: each entry is [groupKey, displayNumber, label]
+// Physical bay rows: [groupKey, displayNumber, label, optionalJackKey, optionalPadIds].
+// The optional fields distinguish the hi-hat trigger jack from its controller
+// while both continue to share the same HI-HAT editing group.
 // Top row = cymbal inputs (07-12); bottom row = drum inputs (01-06) + HH control
 const JACK_ROWS = [
-  [['HI-HAT', '07','HH'],      ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
+  [['HI-HAT', '07','HH','HI-HAT',['H1B','H1E']], ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
    ['RIDE 2',  '10','RIDE 2'],  ['CRASH 2','11','CRASH 2'], ['CRASH 3','12','CRASH 3']],
   [['KICK',   '01','KICK'],    ['SNARE',  '02','SNARE'],    ['TOM 1', '03','TOM 1'],
    ['TOM 2',  '04','TOM 2'],   ['TOM 3',  '05','TOM 3'],    ['TOM 4', '06','TOM 4'],
-   ['HI-HAT', '',  'HH CTRL']],
+   ['HI-HAT', '',  'HH CTRL','HH CTRL',['H1F']]],
 ];
+
+function jackPadIds(entry) {
+  return entry[4] || PAD_GROUPS[entry[0]]?.pads || [];
+}
+
+function inputJackForPad(padId) {
+  if (!padId) return null;
+  for (const row of JACK_ROWS) for (const entry of row) {
+    if (jackPadIds(entry).includes(padId)) return entry;
+  }
+  return null;
+}
 
 // Return [id, type, cx, cy, rx, ry, lbl] with any user overrides applied
 function effectivePadDef(id) {
@@ -5088,12 +5969,21 @@ function effectivePadDef(id) {
 
 function savePadOverrides() {
   try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  syncActiveSetupProfile();
   updateLayoutBadge();
 }
 
 function updateLayoutBadge() {
   const count = Object.keys(padOverrides).length;
   const btn   = document.getElementById('reset-layout-btn');
+  const setupBtn = document.getElementById('setup-profiles-btn');
+  const active = activeSetupProfile();
+  if (setupBtn) {
+    setupBtn.textContent = active ? `◉ ${active.name}` : '◉ Setup profiles';
+    setupBtn.title = active
+      ? `${active.name} is active. Map changes save to this physical setup automatically.`
+      : 'Save and switch between physical drum and cymbal arrangements.';
+  }
   if (!btn) return;
   if (count) {
     btn.textContent   = 'Reset layout ●';
@@ -5194,10 +6084,186 @@ function resetAllOverrides() {
 
 // ── Save / load kit layout (positions, sizes, rotation, finish, mirrors) ────────
 const VALID_PAD_IDS = new Set(PAD_DEFS.map(d => d[0]));
+function cleanLayoutOverrides(overrides) {
+  const clean = {};
+  if (!overrides || typeof overrides !== 'object') return clean;
+  for (const [id, value] of Object.entries(overrides)) {
+    if (VALID_PAD_IDS.has(id) && value && typeof value === 'object' && !Array.isArray(value)) {
+      clean[id] = JSON.parse(JSON.stringify(value));
+    }
+  }
+  return clean;
+}
+
+function persistSetupProfiles() {
+  try { localStorage.setItem(SETUP_PROFILE_KEY, JSON.stringify(setupProfileStore)); } catch(e) {}
+}
+
+function activeSetupProfile() {
+  return setupProfileStore.profiles.find(p => p.id === setupProfileStore.activeId) || null;
+}
+
+function syncActiveSetupProfile() {
+  const active = activeSetupProfile();
+  if (!active) return;
+  active.overrides = cleanLayoutOverrides(padOverrides);
+  active.updated = new Date().toISOString();
+  persistSetupProfiles();
+}
+
+function initializeSetupProfiles() {
+  const now = new Date().toISOString();
+  setupProfileStore = {
+    version: 1,
+    activeId: typeof setupProfileStore.activeId === 'string' ? setupProfileStore.activeId : null,
+    profiles: (setupProfileStore.profiles || []).filter(p => p && typeof p === 'object').map((p, i) => ({
+      id: String(p.id || `setup-${Date.now()}-${i}`),
+      name: String(p.name || `Setup ${i + 1}`).trim().slice(0, 48) || `Setup ${i + 1}`,
+      created: p.created || now,
+      updated: p.updated || p.created || now,
+      overrides: cleanLayoutOverrides(p.overrides),
+    })),
+  };
+  const active = activeSetupProfile();
+  if (active) {
+    padOverrides = cleanLayoutOverrides(active.overrides);
+  } else if (Object.keys(cleanLayoutOverrides(padOverrides)).length) {
+    // Migrate the layout users already built before profiles existed.
+    const migrated = {
+      id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'My current setup', created: now, updated: now,
+      overrides: cleanLayoutOverrides(padOverrides),
+    };
+    setupProfileStore.profiles.unshift(migrated);
+    setupProfileStore.activeId = migrated.id;
+  } else {
+    setupProfileStore.activeId = null;
+  }
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+}
+initializeSetupProfiles();
+
+function setupProfileName(fallback = '') {
+  const input = document.getElementById('setup-profile-name');
+  const value = (fallback || input?.value || '').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 48);
+  return value || `Setup ${setupProfileStore.profiles.length + 1}`;
+}
+
+function createSetupProfile(name, overrides = padOverrides) {
+  const now = new Date().toISOString();
+  const profile = {
+    id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: setupProfileName(name), created: now, updated: now,
+    overrides: cleanLayoutOverrides(overrides),
+  };
+  setupProfileStore.profiles.unshift(profile);
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  setMsg(`Saved physical setup: ${profile.name}`);
+  return profile;
+}
+
+function saveCurrentSetupProfile() {
+  createSetupProfile(document.getElementById('setup-profile-name')?.value || '');
+  const input = document.getElementById('setup-profile-name');
+  if (input) input.value = '';
+}
+
+function applySetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Physical setup active: ${profile.name}`);
+}
+
+function duplicateSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  createSetupProfile(`${profile.name} copy`, profile.overrides);
+}
+
+async function deleteSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile || !await appConfirm(`Delete physical setup “${profile.name}”?\n\nYour current kit and sounds will not change.`, 'Delete setup')) return;
+  setupProfileStore.profiles = setupProfileStore.profiles.filter(p => p.id !== id);
+  if (setupProfileStore.activeId === id) setupProfileStore.activeId = null;
+  persistSetupProfiles(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Deleted physical setup: ${profile.name}`);
+}
+
+function applyFactorySetup() {
+  setupProfileStore.activeId = null;
+  padOverrides = {};
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', '{}'); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg('Factory physical layout active');
+}
+
+function setupFingerprint(overrides) {
+  const ov = overrides || {};
+  return JACK_ROWS.flat().map(entry => {
+    const ids = jackPadIds(entry);
+    const changed = ids.some(id => ov[id] && Object.keys(ov[id]).length);
+    const split = ids.some(id => ov[id]?.mirror);
+    const label = entry[3] || entry[2];
+    return `<i class="${changed ? 'wired' : ''}${split ? ' split' : ''}" title="${escHtml(label)}"><span>${escHtml(entry[1] || 'C')}</span></i>`;
+  }).join('');
+}
+
+function renderSetupProfiles() {
+  const list = document.getElementById('setup-profile-list');
+  const count = document.getElementById('setup-profile-count');
+  if (!list) return;
+  if (count) count.textContent = `${setupProfileStore.profiles.length} saved slot${setupProfileStore.profiles.length === 1 ? '' : 's'}`;
+  const active = activeSetupProfile();
+  const factory = `<article class="setup-slot${active ? '' : ' active'}" data-profile-id="factory">
+    <div class="setup-slot-top"><span class="setup-slot-id">FACTORY</span>${active ? '' : '<span class="setup-active">ACTIVE</span>'}</div>
+    <strong>Strike default layout</strong><p>Standard module arrangement · no visual overrides</p>
+    <div class="setup-fingerprint">${setupFingerprint({})}</div>
+    <div class="setup-slot-actions"><button onclick="applyFactorySetup()" ${active ? '' : 'disabled'}>Use factory layout</button></div>
+  </article>`;
+  const cards = setupProfileStore.profiles.map((profile, index) => {
+    const isActive = profile.id === setupProfileStore.activeId;
+    const changed = Object.keys(profile.overrides || {}).length;
+    const when = new Date(profile.updated || profile.created).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    return `<article class="setup-slot${isActive ? ' active' : ''}" data-profile-id="${profile.id}">
+      <div class="setup-slot-top"><span class="setup-slot-id">RIG ${String(index + 1).padStart(2, '0')}</span>${isActive ? '<span class="setup-active">ACTIVE · AUTO-SAVING</span>' : `<span class="setup-date">${escHtml(when)}</span>`}</div>
+      <strong>${escHtml(profile.name)}</strong><p>${changed} customized zone${changed === 1 ? '' : 's'} · sounds stay with the kit</p>
+      <div class="setup-fingerprint">${setupFingerprint(profile.overrides)}</div>
+      <div class="setup-slot-actions">
+        <button class="${isActive ? '' : 'primary'}" onclick="applySetupProfile('${profile.id}')" ${isActive ? 'disabled' : ''}>${isActive ? 'In use' : 'Use this setup'}</button>
+        <button onclick="duplicateSetupProfile('${profile.id}')">Duplicate</button>
+        <button class="danger" onclick="deleteSetupProfile('${profile.id}')">Delete</button>
+      </div>
+    </article>`;
+  }).join('');
+  list.innerHTML = factory + cards;
+}
+
+function openSetupProfiles() {
+  renderSetupProfiles();
+  document.getElementById('setup-modal').classList.add('open');
+  setTimeout(() => document.getElementById('setup-profile-name')?.focus(), 0);
+}
+function closeSetupProfiles() { document.getElementById('setup-modal').classList.remove('open'); }
+
 function exportLayout() {
+  const active = activeSetupProfile();
   const payload = {
     format: 'strike-remap-layout', version: 1,
-    saved: new Date().toISOString(), overrides: padOverrides,
+    saved: new Date().toISOString(), name: active?.name || 'Physical setup', overrides: padOverrides,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -5217,17 +6283,11 @@ async function importLayout(file) {
     const ov = (data && data.overrides && typeof data.overrides === 'object') ? data.overrides
              : (data && typeof data === 'object' && !data.format) ? data : null;  // tolerate a bare overrides object
     if (!ov) { setMsg('Not a valid layout file', true); return; }
-    // Keep only recognized pad IDs; ignore anything else.
-    const clean = {};
-    for (const [id, o] of Object.entries(ov)) {
-      if (VALID_PAD_IDS.has(id) && o && typeof o === 'object') clean[id] = o;
-    }
-    padOverrides = clean;
-    savePadOverrides();
-    renderDrumMap();
-    renderPadDetail();
+    const clean = cleanLayoutOverrides(ov);
+    const fileName = file.name?.replace(/\.json$/i, '').replace(/^strike-kit-layout-/, '') || 'Imported setup';
+    const profile = createSetupProfile(data.name || fileName, clean);
     const n = Object.keys(clean).length;
-    setMsg(`Loaded layout (${n} customized pad${n === 1 ? '' : 's'})`);
+    setMsg(`Imported ${profile.name} (${n} customized pad${n === 1 ? '' : 's'})`);
   } catch (err) {
     setMsg('Could not read layout file: ' + err.message, true);
   }
@@ -5246,15 +6306,90 @@ function renderPatchPanel() {
         + `<div class="jack-lbl">${escHtml(lbl)}</div></div>`;
     }).join('')}</div>`
   ).join('');
+  renderInputBay();
 }
 
-function selectGroupFromPanel(grpKey) {
+function inputGroupSummary(group) {
+  const assigned = [];
+  let missing = 0;
+  for (const pid of group.pads) {
+    const pad = pads.find(p => p.id === pid);
+    if (!pad) continue;
+    for (const layer of ['a', 'b']) {
+      const path = pad[`layer_${layer}_path`];
+      const name = pad[`layer_${layer}_name`];
+      if (path && brokenPaths.has(path)) missing++;
+      if (name && name !== '—' && !assigned.includes(name)) assigned.push(name);
+    }
+  }
+  if (!assigned.length) return pads.length ? 'No sound assigned' : 'Load a kit to inspect assignments';
+  const visible = assigned.slice(0, 2).join(' + ');
+  return visible + (assigned.length > 2 ? ` +${assigned.length - 2}` : '') + (missing ? ' · missing file' : '');
+}
+
+function renderInputBay() {
+  const body = document.getElementById('input-bay-body');
+  if (!body) return;
+  const bankLabels = ['CYMBALS · INPUTS 07–12', 'DRUMS · INPUTS 01–06 + HH CONTROL'];
+  body.innerHTML = '<div class="input-backplane">' + JACK_ROWS.map((row, rowIndex) =>
+    `<section class="input-back-bank"><div class="input-bank-label">${bankLabels[rowIndex]}</div>`
+    + `<div class="input-back-row" style="--jack-count:${row.length}">`
+    + row.map(entry => {
+      const [key, num, label] = entry;
+      const jackKey = entry[3] || key;
+      const group = PAD_GROUPS[key];
+      const activeJack = inputJackForPad(selectedMapPad);
+      const isCurrent = activeJack ? (activeJack[3] || activeJack[0]) === jackKey : selectedGroup === key;
+      const current = isCurrent ? ' current' : '';
+      const summary = inputGroupSummary({...group, pads:jackPadIds(entry)});
+      return `<button type="button" class="input-back-jack${current}" onclick="chooseInputFromBay('${key}','${jackKey}')"`
+        + ` aria-pressed="${isCurrent ? 'true' : 'false'}" title="${escHtml(summary)}">`
+        + `<span class="input-back-plug" aria-hidden="true"></span>`
+        + `<span class="input-back-num">${escHtml(num || 'CTRL')}</span>`
+        + `<span class="input-back-name">${escHtml(label)}</span>`
+        + `<span class="input-back-dest">${escHtml(jackPadIds(entry).join(' · '))}</span></button>`;
+    }).join('') + '</div></section>'
+  ).join('') + '</div>';
+  const route = document.getElementById('input-bay-route');
+  if (route) {
+    const activeJack = inputJackForPad(selectedMapPad);
+    const group = activeJack && PAD_GROUPS[activeJack[0]];
+    const jackLabel = activeJack ? `${activeJack[1] || 'CTRL'} ${activeJack[2]}` : '';
+    route.innerHTML = group
+      ? `<strong>${escHtml(jackLabel)}</strong> &rarr; ${escHtml(jackPadIds(activeJack).join(' · '))}`
+      : 'SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP';
+  }
+}
+
+function chooseInputFromBay(grpKey, jackKey) {
+  let entry = null;
+  for (const row of JACK_ROWS) for (const candidate of row) {
+    if (candidate[0] === grpKey && (candidate[3] || candidate[0]) === jackKey) entry = candidate;
+  }
+  selectGroupFromPanel(grpKey, entry ? jackPadIds(entry)[0] : null);
+  setWorkspaceMode('pad');
+}
+
+function focusInputBay() {
+  setWorkspaceMode('pad');
+  const dock = document.getElementById('input-bay-dock');
+  if (!dock) return;
+  dock.classList.remove('attention');
+  void dock.offsetWidth;
+  dock.classList.add('attention');
+  if (window.innerWidth <= 900) dock.scrollIntoView({behavior:'smooth', block:'center'});
+  const current = dock.querySelector('.input-back-jack.current') || dock.querySelector('.input-back-jack');
+  if (current) current.focus({preventScroll:true});
+  setTimeout(() => dock.classList.remove('attention'), 560);
+}
+
+function selectGroupFromPanel(grpKey, preferredPad) {
   selectedGroup = grpKey;
   const g = PAD_GROUPS[grpKey];
   if (g && g.pads.length) {
     // Keep selectedPad if it's already in this group, otherwise default to first pad / layer A
-    const keepPad = selectedPad && g.pads.includes(selectedPad.id);
-    const pid = keepPad ? selectedPad.id : g.pads[0];
+    const keepPad = !preferredPad && selectedPad && g.pads.includes(selectedPad.id);
+    const pid = preferredPad && g.pads.includes(preferredPad) ? preferredPad : (keepPad ? selectedPad.id : g.pads[0]);
     selectedMapPad = pid;
     if (!keepPad) selectedPad = {id: pid, layer: 'a'};
   }
@@ -5448,6 +6583,9 @@ function setMsg(txt, err=false) {
   const el = document.getElementById('msg');
   el.textContent = txt;
   el.className = err ? 'err' : '';
+  el.onclick = null;
+  el.title = '';
+  el.style.cursor = '';
 }
 
 function setDirtyState(dirty, cnt, labels) {
@@ -5498,8 +6636,151 @@ function menuToggle(id) {
   if (!isOpen) el.style.display = '';
 }
 
+function setWorkspaceMode(mode) {
+  const modes = ['pad', 'sounds', 'fx', 'history', 'tools', 'repair', 'layout'];
+  if (!modes.includes(mode)) return;
+  document.body.dataset.workspace = mode;
+  const navMode = ['repair', 'layout'].includes(mode) ? 'tools' : mode;
+  document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
+    const active = btn.dataset.workspace === navMode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  if (mode === 'sounds') {
+    renderInstruments();
+  } else if (['fx', 'history', 'tools', 'repair', 'layout'].includes(mode)) {
+    renderAdvancedWorkspace(mode);
+  }
+  const contextEyebrow = document.getElementById('context-eyebrow');
+  const contextTitle = document.getElementById('context-title');
+  const contextAction = document.getElementById('context-action');
+  if (contextEyebrow && contextTitle && contextAction) {
+    contextEyebrow.textContent = 'Pad workspace';
+    contextTitle.textContent = 'Selected trigger';
+    contextAction.textContent = 'Browse sounds';
+    contextAction.onclick = () => setWorkspaceMode('sounds');
+  }
+  try { localStorage.setItem('strike_workspace', mode); } catch(e) {}
+}
+
+function openWorkspaceUtility(kind) {
+  if (kind === 'kit') { menuToggle('kit-menu'); return; }
+  if (['fx', 'history', 'tools'].includes(kind)) setWorkspaceMode(kind);
+}
+
+function awModule(channel, title, copy, actions='', content='') {
+  return `<section class="aw-module" data-channel="${channel}">
+    <div class="aw-module-head"><div><h3>${title}</h3><p>${copy}</p></div></div>
+    ${actions ? `<div class="aw-actions">${actions}</div>` : ''}${content}
+  </section>`;
+}
+
+function fxName(d, fx) {
+  return fx.type === 255 ? 'Off' : (d.fx_types[fx.type] || `Type ${fx.type}`);
+}
+
+async function renderAdvancedWorkspace(kind) {
+  const body = document.getElementById('advanced-body');
+  const eyebrow = document.getElementById('advanced-eyebrow');
+  const title = document.getElementById('advanced-title');
+  if (!body || !eyebrow || !title) return;
+  const headings = {
+    fx: ['Kit processing', 'FX / EQ / compressor'],
+    history: ['Kit ledger', 'History and comparison'],
+    tools: ['Utility bank', 'Module and editor tools'],
+    repair: ['Library integrity', 'Repair missing sounds'],
+    layout: ['Performance surface', 'Layout mode'],
+  };
+  const head = headings[kind] || headings.tools;
+  eyebrow.textContent = head[0]; title.textContent = head[1];
+  body.innerHTML = '<div class="aw-empty">Reading the current kit state…</div>';
+
+  if (kind === 'fx') {
+    if (!pads.length) {
+      body.innerHTML = '<div class="aw-intro">Load a kit to inspect and edit its master processing chain.</div>'
+        + awModule('FX', 'No kit loaded', 'FX settings belong to a kit. Open one from the Kits menu to continue.');
+      return;
+    }
+    const d = await fetch('/api/kit_fx').then(r => r.json()).catch(() => ({error:'FX state unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    if (d.error) { body.innerHTML = `<div class="aw-empty">${escHtml(d.error)}</div>`; return; }
+    const rvName = d.reverb_names[d.reverb.type] || `Type ${d.reverb.type}`;
+    const compName = d.comp_presets[d.eq_comp.comp_preset] || `Preset ${d.eq_comp.comp_preset}`;
+    body.innerHTML = `<div class="aw-intro">The kit master chain sits after every pad. Per-pad send levels remain in the Pad workspace; these controls shape the shared returns and output.</div>
+      <div class="aw-status-line">Loaded chain · changes join kit undo history</div>
+      ${awModule('REV', `Reverb · ${escHtml(rvName)}`, 'Shared ambience return for the loaded kit.',
+        '<button class="primary" onclick="showKitFxModal()">Open full FX editor</button>',
+        `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.reverb.level}%"></i></span><b>${d.reverb.level}</b></div><div class="aw-meter"><em>Size</em><span class="aw-meter-track"><i style="--meter:${d.reverb.size}%"></i></span><b>${d.reverb.size}</b></div><div class="aw-meter"><em>Color</em><span class="aw-meter-track"><i style="--meter:${d.reverb.color}%"></i></span><b>${d.reverb.color}</b></div></div>`)}
+      ${awModule('FX1', `FX1 · ${escHtml(fxName(d,d.fx1))}`, 'First shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx1.level}%"></i></span><b>${d.fx1.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx1.feedback}%"></i></span><b>${d.fx1.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx1.depth}%"></i></span><b>${d.fx1.depth}</b></div></div>`)}
+      ${awModule('FX2', `FX2 · ${escHtml(fxName(d,d.fx2))}`, 'Second shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx2.level}%"></i></span><b>${d.fx2.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx2.feedback}%"></i></span><b>${d.fx2.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx2.depth}%"></i></span><b>${d.fx2.depth}</b></div></div>`)}
+      ${awModule('OUT', `Output · ${escHtml(compName)}`, `Compressor threshold ${d.eq_comp.threshold_db} dB · output ${d.eq_comp.output_db} dB.`, '<button onclick="showKitFxModal()">Edit EQ and compressor</button>')}`;
+    return;
+  }
+
+  if (kind === 'history') {
+    const data = await fetch('/api/snapshots').then(r => r.json()).catch(() => ({snapshots:[], error:'History unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    const snaps = data.snapshots || [];
+    const rows = snaps.slice(0, 5).map(s => `<div class="aw-ledger-row"><span>${escHtml(s.kind || 'manual')}</span><strong>${escHtml(s.label || s.id)}</strong><span>${tmFmtTime(s.iso,s.ts)}</span></div>`).join('');
+    body.innerHTML = `<div class="aw-intro">Snapshots are restore points for the working kit. Restores remain undoable; comparison never changes kit data.</div>
+      <div class="aw-status-line${data.error ? ' warn' : ''}">${data.error ? escHtml(data.error) : `${snaps.length} snapshot${snaps.length===1?'':'s'} · ${escHtml(data.kit || kitName || 'current kit')}`}</div>
+      ${awModule('TIME', 'Kit time machine', 'Scrub, pin, compare, restore, or delete exact kit snapshots.', '<button class="primary" onclick="openTimeMachine()">Open timeline</button><button onclick="advancedSnapshotNow()">Snapshot now</button>', rows ? `<div class="aw-ledger">${rows}</div>` : '<div class="aw-empty">No snapshots yet. Loading or saving a kit creates them automatically.</div>')}
+      ${awModule('DIFF', 'Compare with another kit', 'See exact per-pad assignment and parameter differences without modifying either kit.', '<button onclick="showDiffModal()">Choose comparison kit</button>')}`;
+    return;
+  }
+
+  if (kind === 'repair') {
+    const count = brokenPaths.size;
+    body.innerHTML = `<div class="aw-intro">Repair reconnects instrument references when a library moved between computers or storage volumes. The kit stays lossless until you save it.</div>
+      <div class="aw-status-line${count ? ' warn' : ''}">${count ? `${count} missing instrument reference${count===1?'':'s'}` : 'All assigned instrument paths resolve on this computer'}</div>
+      ${awModule('PATH', count ? 'Review suggested replacements' : 'Library paths are healthy', count ? 'The repair wizard ranks filename and library matches, but nothing changes until you apply the selected replacements.' : 'No repair action is required for the loaded kit.', count ? '<button class="primary" onclick="showRelinkModal()">Open guided repair</button>' : '<button onclick="checkPaths();renderAdvancedWorkspace(\'repair\')">Check again</button>')}
+      ${awModule('MOVE', 'Moving between Windows and macOS', 'Keep relative Instruments and Samples folders together. Repair is for changed roots or renamed content, not conversion of kit data.')}`;
+    return;
+  }
+
+  if (kind === 'layout') {
+    const changed = Object.values(padOverrides).filter(v => v && Object.keys(v).length).length;
+    const activeSetup = activeSetupProfile();
+    body.innerHTML = `<div class="aw-intro">Physical setups describe the kit you actually sit behind—pad positions, shapes, finishes, and mirrored/Y-split pieces. Sound assignments remain with the loaded kit.</div>
+      <div class="aw-status-line">${activeSetup ? `Active rig · ${escHtml(activeSetup.name)} · auto-saving` : 'Factory layout active'} · ${changed} customized map element${changed===1?'':'s'}</div>
+      ${awModule('RIG', 'Physical setup profiles', 'Switch your hardware visualization without changing the loaded kit. Active profile edits save automatically.', '<button class="primary" onclick="openSetupProfiles()">Manage setup profiles</button>')}
+      ${awModule('MAP', 'Customize the kit map', 'Select a pad, then drag it or use the Pad workspace customization controls.', '<button class="primary" onclick="setWorkspaceMode(\'pad\')">Select and edit pads</button><button onclick="resetAllOverrides();renderAdvancedWorkspace(\'layout\')">Reset layout</button>')}
+      ${awModule('FILE', 'Move a setup between computers', 'Export the active rig as JSON, then import it on Windows or macOS.', '<button onclick="exportLayout()">Export active setup</button><button onclick="document.getElementById(\'layout-file\').click()">Import setup file</button>')}
+      ${awModule('BATCH', 'Batch parameter editing', 'Select multiple pads on the map and apply one confirmed parameter value to all of them.', `<button onclick="advancedStartBatch()">${batchMode ? 'Return to active batch' : 'Start batch edit'}</button>`)}`;
+    return;
+  }
+
+  const toolData = await api('/tools').catch(() => ({tools:[]}));
+  if (document.body.dataset.workspace !== kind) return;
+  const toolRows = (toolData.tools || []).map(t => `<div class="tool-item"><span title="${escHtml(t.name)}">${escHtml(t.label)}</span><button class="btn-secondary" onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button></div>`).join('');
+  body.innerHTML = `<div class="aw-intro">Utilities that affect playback, hardware communication, file repair, or developer output live here—separate from routine pad editing.</div>
+    <div class="aw-status-line">Editor utilities ready</div>
+    ${awModule('PLAY', 'Audition system', 'Live Loop, the virtual kit, and MIDI monitoring share one drawer beneath the map.', `<button class="primary" onclick="advancedOpenAudition()">Open audition drawer</button><button onclick="advancedToggleVirtual()">Virtual ${vmActive?'on':'off'}</button><button onclick="advancedToggleMidi()">MIDI ${midiActive?'on':'off'}</button>`)}
+    ${awModule('MAP', 'Map and batch tools', 'Customize the performance surface or edit several pads at once.', '<button onclick="setWorkspaceMode(\'layout\')">Open layout mode</button><button onclick="advancedStartBatch()">Start batch edit</button>')}
+    ${awModule('PATH', 'Library repair', `${brokenPaths.size ? brokenPaths.size + ' missing instrument reference(s)' : 'All assigned paths currently resolve.'}`, '<button onclick="setWorkspaceMode(\'repair\')">Open repair workspace</button>')}
+    ${awModule('MIDI', 'Trigger settings backup', 'Capture, save, load, and cautiously restore the module\'s raw SysEx trigger dump. Web MIDI requires Chrome or Edge.', '<button onclick="showTrigModal()">Open trigger backup</button>')}
+    ${awModule('DEV', 'Developer scripts', 'Low-level inspection and kit-generation utilities. Output remains local to this session.', '', `<div id="advanced-tools-list" class="aw-tool-list">${toolRows || '<div class="aw-empty">No developer scripts available.</div>'}</div><div id="advanced-tool-output" class="advanced-tool-output"></div>`)}`;
+}
+
+async function advancedSnapshotNow() {
+  const data = await api('/snapshot', {kind:'manual'});
+  if (data.error) { setMsg(data.error, true); return; }
+  setMsg(data.snapshot?.deduped ? 'No changes since the last snapshot' : 'Snapshot saved');
+  renderAdvancedWorkspace('history');
+}
+
+function advancedOpenAudition() {
+  if (!loopPanelOpen) toggleLoopPanel();
+  document.getElementById('loop-panel')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+  setMsg('Audition drawer open');
+}
+
+async function advancedToggleVirtual() { await toggleVirtualModule(); renderAdvancedWorkspace('tools'); }
+async function advancedToggleMidi() { await toggleMidi(); renderAdvancedWorkspace('tools'); }
+function advancedStartBatch() { if (!batchMode) batchToggle(); setWorkspaceMode('pad'); }
+
 document.addEventListener('click', e => {
-  if (!e.target.closest('.tb-group')) {
+  if (!e.target.closest('.tb-group') && !e.target.closest('.workspace-tab')) {
     closeAllPopovers();
   }
 });
@@ -5547,7 +6828,7 @@ function applyKitData(data, path, opts) {
   kitNameEl.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = data.skt_lossless === false ? '' : 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -5560,6 +6841,9 @@ function applyKitData(data, path, opts) {
   if (liveLoop?.ctx) liveLoop.prefetchAll();
   refreshKitSize();
   checkPaths();
+  if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+    renderAdvancedWorkspace(document.body.dataset.workspace);
+  }
 }
 
 async function openKit(idx) {
@@ -5748,7 +7032,10 @@ function renderDrumMap() {
   // Which pad IDs are in the currently selected group?
   const groupMembers = new Set();
   if (selectedGroup && PAD_GROUPS[selectedGroup]) {
-    for (const pid of PAD_GROUPS[selectedGroup].pads) groupMembers.add(pid);
+    const activeJack = inputJackForPad(selectedMapPad);
+    const routedPads = activeJack && activeJack[0] === selectedGroup
+      ? jackPadIds(activeJack) : PAD_GROUPS[selectedGroup].pads;
+    for (const pid of routedPads) groupMembers.add(pid);
   }
 
   const parts = [];
@@ -5797,19 +7084,20 @@ function renderDrumMap() {
     if (isBatchSel) {
       ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#e0a030" stroke-width="2.4" stroke-dasharray="4,2" pointer-events="none"${ringRot}/>`;
     } else if (inGroup && !isSel && !isAssT) {
-      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#4a7fd0" stroke-width="1.6" opacity="0.75" pointer-events="none"${ringRot}/>`;
+      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#d0aa5b" stroke-width="2.2" opacity="0.92" pointer-events="none"${ringRot}/>`;
     }
 
     let glow = '';
     if (isSel)           glow = 'filter:drop-shadow(0 0 6px #f0b32e) drop-shadow(0 0 13px #f0b32e70);';
     else if (isAssT)     glow = 'filter:drop-shadow(0 0 6px #44aaff) drop-shadow(0 0 12px #44aaff70);';
     else if (isBatchSel) glow = 'filter:drop-shadow(0 0 6px #e0a030a0);';
+    else if (inGroup)    glow = 'filter:drop-shadow(0 0 5px #d0aa5baa) drop-shadow(0 0 10px #d0aa5b45);';
 
     // Label (base pads only — rim/bell labels are empty in PAD_DEFS)
     let textEl = '';
     if (lbl) {
       const fs = Math.max(7, Math.min(13, ry * 1.2));
-      const lblFill = isSel ? '#ffd86a' : (isBatchSel ? '#e0c060' : (inGroup ? '#dde8ff' : '#eef1f6'));
+      const lblFill = isSel ? '#ffe29a' : (isBatchSel ? '#e0c060' : (inGroup ? '#f0cf87' : '#eef1f6'));
       textEl = `<text x="${cx}" y="${cy + fs * 0.35}" text-anchor="middle" `
         + `font-size="${fs}" fill="${lblFill}" font-family="system-ui,sans-serif" font-weight="700" `
         + `paint-order="stroke" stroke="#000000cc" stroke-width="2.4" stroke-linejoin="round" `
@@ -5843,7 +7131,7 @@ function renderDrumMap() {
 
     const inner = titleEl + sprite + ring + textEl + warnEl;
     (isOverlay ? overlays : parts).push(
-      `<g class="map-pad" data-pid="${id}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
+      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
       + inner + `</g>`);
 
     // Mirror pad: same zone drawn a second time (e.g. dual hi-hats on a Y-splitter)
@@ -5852,7 +7140,7 @@ function renderDrumMap() {
       const link = `<text x="${(scx + srx - 6).toFixed(1)}" y="${(scy - sry + 8).toFixed(1)}" font-size="9" `
         + `fill="#7f8a9c" pointer-events="none" font-family="system-ui,sans-serif">&#x29C9;</text>`;
       (isOverlay ? overlays : parts).push(
-        `<g class="map-pad" data-pid="${id}" transform="translate(${mir.dx},${mir.dy})" `
+        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
         + `style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}',true)">`
         + `<title>${escHtml((padMap[id]?.label || id) + ' (mirror — same zone, shared settings)')}</title>`
         + sprite + ring + textEl + warnEl + link + `</g>`);
@@ -6012,10 +7300,89 @@ function paramSlider(pid, param, val, lo, hi, disabled) {
     + `</div>`;
 }
 
+function inlinePathArg(path) {
+  return encodeURIComponent(String(path || '')).replace(/'/g, '%27');
+}
+
+function rackParamSlider(padId, param, label, value, lo, hi, suffix='') {
+  return `<div class="rack-param">
+    <label>${label}</label>
+    <input type="range" min="${lo}" max="${hi}" value="${Math.min(hi, Math.max(lo, value))}"
+      aria-label="${label}" oninput="this.nextElementSibling.value=this.value+'${suffix}'"
+      onchange="setParam('${padId}','${param}',+this.value)">
+    <output>${value}${suffix}</output>
+  </div>`;
+}
+
+function renderLayerRack() {
+  const el = document.getElementById('layer-rack');
+  if (!el) return;
+  if (!selectedPad || !pads.length) {
+    el.innerHTML = '<div class="layer-rack-empty">Select a pad to open its Layer A / B signal path</div>';
+    return;
+  }
+
+  const pad = pads.find(p => p.id === selectedPad.id);
+  if (!pad) {
+    el.innerHTML = '<div class="layer-rack-empty">The selected trigger is not present in this kit</div>';
+    return;
+  }
+
+  const layerCard = layer => {
+    const upper = layer.toUpperCase();
+    const prefix = layer === 'a' ? 'la' : 'lb';
+    const path = pad[`layer_${layer}_path`];
+    const name = pad[`layer_${layer}_name`] || 'No instrument assigned';
+    const active = selectedPad.layer === layer;
+    const broken = path && brokenPaths.has(path);
+    const encoded = inlinePathArg(path);
+    const status = broken ? 'Missing file' : path ? 'Ready' : 'Empty slot';
+    const actions = path ? `
+      <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Replace</button>
+      <button class="rack-action" title="Preview Layer ${upper}" onclick="previewInstrument(decodeURIComponent('${encoded}'))">&#9654;</button>
+      <button class="rack-action" title="Edit instrument" onclick="openSinEditor(decodeURIComponent('${encoded}'))">Edit</button>
+      <button class="rack-action" title="Find similar sounds" onclick="openSimilar(decodeURIComponent('${encoded}'))">Similar</button>
+      <button class="rack-action danger" title="Clear Layer ${upper}" onclick="clearLayer('${pad.id}','${layer}')">&#x2715;</button>` : `
+      <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Choose sound</button>`;
+    return `<article class="rack-layer${active ? ' active' : ''}${path ? '' : ' empty'}${broken ? ' broken' : ''}">
+      <div class="rack-layer-head">
+        <button class="rack-layer-key" title="Target Layer ${upper}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
+        <div class="rack-layer-title"><small>Layer ${upper}</small><strong title="${escHtml(path || '')}">${escHtml(name)}</strong></div>
+        <span class="rack-layer-status">${status}</span>
+      </div>
+      <div class="rack-actions">${actions}</div>
+      <div class="rack-params">
+        ${rackParamSlider(pad.id, `${prefix}_level`, 'Level', pad[`${prefix}_level`], 0, 127)}
+        ${rackParamSlider(pad.id, `${prefix}_pan`, 'Pan', pad[`${prefix}_pan`], -50, 50)}
+        ${rackParamSlider(pad.id, `${prefix}_pitch`, 'Tune', pad[`${prefix}_pitch`], -12, 12, 'st')}
+      </div>
+    </article>`;
+  };
+
+  const hasBoth = !!(pad.layer_a_path && pad.layer_b_path);
+  const xfade = Number.isFinite(+pad.xfade_vel) ? +pad.xfade_vel : 0;
+  const xfadeText = hasBoth ? (xfade === 0 ? 'Both layers always active' : `Layer B enters at velocity ${xfade}`) : 'Assign Layer B to blend';
+  el.innerHTML = `${layerCard('a')}
+    <div class="rack-blend">
+      <div class="rack-pad-id"><small>Selected trigger</small>${escHtml(pad.id)}<span>${escHtml(pad.label || '')} / MIDI ${pad.midi_note}</span></div>
+      <div class="rack-xfade">
+        <div class="rack-xfade-meta"><span>Layer A</span><span>Layer B</span></div>
+        <input type="range" min="0" max="127" value="${xfade}" ${hasBoth ? '' : 'disabled'}
+          aria-label="Layer B crossfade velocity"
+          oninput="this.nextElementSibling.textContent=(+this.value===0?'Both layers always active':'Layer B enters at velocity '+this.value)"
+          onchange="setParam('${pad.id}','xfade_vel',+this.value)">
+        <div class="rack-xfade-value">${xfadeText}</div>
+      </div>
+      <button class="rack-action" onclick="previewBlend('${pad.id}')" ${hasBoth ? '' : 'disabled'}>&#9654; Audition A + B</button>
+    </div>
+    ${layerCard('b')}`;
+}
+
 // ── Pad detail panel ──────────────────────────────────────────────────────────
 function renderPadDetail() {
   const el = document.getElementById('pad-detail');
   if (!el) return;
+  renderLayerRack();
 
   if (!selectedGroup || !pads.length) {
     el.innerHTML = '<div class="det-empty">Click a pad or jack to view and edit</div>';
@@ -6724,10 +8091,15 @@ async function checkPaths() {
   const data = await fetch('/api/check_paths').then(r => r.json()).catch(() => ({broken: []}));
   brokenPaths = new Set(data.broken || []);
   if (brokenPaths.size) {
-    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found on this machine — use 🔧 Fix broken paths in the Kits menu`, true);
+    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found — open Repair`, true);
+    const msg = document.getElementById('msg');
+    msg.onclick = () => setWorkspaceMode('repair');
+    msg.title = 'Open the guided repair workspace';
+    msg.style.cursor = 'pointer';
   }
   renderDrumMap();
   renderPadDetail();
+  if (['repair','tools'].includes(document.body.dataset.workspace)) renderAdvancedWorkspace(document.body.dataset.workspace);
 }
 
 // ── Sample relink wizard ──────────────────────────────────────────────────────
@@ -7612,6 +8984,7 @@ async function runTemplate(name) {
   kne.textContent    = '— ' + kitName;
   kne.contentEditable = 'true';
   document.getElementById('save-lib-btn').disabled   = !libSavePath;
+  document.getElementById('save-sd-btn').disabled    = !pads.length;
   document.getElementById('dup-btn').disabled        = false;
   document.getElementById('clear-pads-btn').disabled = false;
   document.getElementById('save-path').value = libSavePath;
@@ -7912,28 +9285,31 @@ async function previewBlend(padId) {
 // ── Script runner ─────────────────────────────────────────────────────────────
 async function loadTools() {
   const data = await api('/tools');
-  const el   = document.getElementById('tools-list');
-  if (!el || !data.tools) return;
-  el.innerHTML = data.tools.map(t =>
+  if (!data.tools) return;
+  const html = data.tools.map(t =>
     `<div class="tool-item">
        <span title="${escHtml(t.name)}">${escHtml(t.label)}</span>
        <button class="btn-secondary" style="font-size:.65rem;padding:2px 6px;"
-         onclick="runTool('${escHtml(t.name)}')">Run</button>
+         onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button>
      </div>`
   ).join('');
+  const menuList = document.getElementById('tools-list');
+  const advancedList = document.getElementById('advanced-tools-list');
+  if (menuList) menuList.innerHTML = html;
+  if (advancedList) advancedList.innerHTML = html;
 }
 
 async function runTool(name) {
-  const outEl = document.getElementById('tool-output');
-  if (outEl) { outEl.textContent = `Running ${name}…`; outEl.classList.add('visible'); }
+  const outputs = [document.getElementById('tool-output'), document.getElementById('advanced-tool-output')].filter(Boolean);
+  outputs.forEach(el => { el.textContent = `Running ${name}…`; el.classList.add('visible'); });
   setMsg(`Running ${name}…`);
   const data = await api('/run_tool', {name});
   if (data.error) {
-    if (outEl) outEl.textContent = 'Error: ' + data.error;
+    outputs.forEach(el => { el.textContent = 'Error: ' + data.error; });
     setMsg(data.error, true);
     return;
   }
-  if (outEl) outEl.textContent = data.output || '(no output)';
+  outputs.forEach(el => { el.textContent = data.output || '(no output)'; });
   if (data.kits) { kits = data.kits; renderKitList(); }
   setMsg(`${name} finished`);
 }
@@ -8122,11 +9498,135 @@ async function _doSave(path) {
   setMsg(data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
-async function saveToSD()      { await _doSave(sdSavePath);  }
 async function saveCustom() {
   const path = document.getElementById('save-path').value.trim();
   if (!path) { setMsg('Enter a save path', true); return; }
   await _doSave(path);
+}
+
+// ── Deploy to Module ────────────────────────────────────────────────────────
+let deployPlan = null;
+let deployBusy = false;
+
+function formatDeployBytes(bytes) {
+  if (bytes == null) return 'Unknown';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function setDeployStage(name, state) {
+  const el = document.getElementById('deploy-stage-' + name);
+  if (!el) return;
+  el.className = 'deploy-stage' + (state ? ' ' + state : '');
+  const icon = el.querySelector('i');
+  if (icon) icon.textContent = state === 'done' ? '✓' : state === 'failed' ? '!' : ({preflight:'1',transfer:'2',verify:'3'}[name]);
+}
+
+function openDeploy() {
+  if (!pads.length) { setMsg('Open or create a kit before deploying', true); return; }
+  document.getElementById('deploy-modal').classList.add('open');
+  loadDeployPreflight();
+}
+
+function closeDeploy() {
+  if (deployBusy) return;
+  document.getElementById('deploy-modal').classList.remove('open');
+}
+
+async function loadDeployPreflight() {
+  if (deployBusy) return;
+  deployPlan = null;
+  setDeployStage('preflight', 'active'); setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  action.disabled = true; action.style.display = ''; refresh.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Inspecting the deployment path</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Checking the user card, kit references, conflicts, and free space.</span></div>';
+  try {
+    const plan = await api('/deploy_preflight');
+    if (plan.error) throw new Error(plan.error);
+    deployPlan = plan;
+    renderDeployPreflight(plan);
+  } catch (err) {
+    setDeployStage('preflight', 'failed');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Preflight could not run</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+  } finally {
+    refresh.disabled = false;
+  }
+}
+
+function renderDeployPreflight(plan) {
+  const counts = plan.asset_counts || {};
+  const issues = (plan.issues || []).map(issue =>
+    `<div class="deploy-issue ${escHtml(issue.severity)}"><i></i><div><strong>${escHtml(issue.title)}</strong><span>${escHtml(issue.detail)}</span></div></div>`
+  ).join('') || '<div class="deploy-issue"><i></i><div><strong>Preflight passed</strong><span>The destination and every referenced asset are ready.</span></div></div>';
+  const available = (counts.available || 0) + (counts.present || 0);
+  const cardState = plan.user_mounted ? 'ready' : 'warn';
+  document.getElementById('deploy-body').innerHTML = `
+    <div class="deploy-destination">
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${cardState}"></i>User card destination</div>
+        <strong>${escHtml(plan.user_mounted ? plan.kit_name : 'Waiting for a writable user card')}</strong>
+        <span class="deploy-path">${escHtml(plan.target_path || 'Insert the card and run preflight again')}</span></div>
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${plan.ready ? 'ready' : 'warn'}"></i>Transfer summary</div>
+        <div class="deploy-stats"><div class="deploy-stat"><b>${plan.used_instruments || 0}</b><span>Instruments</span></div>
+        <div class="deploy-stat"><b>${counts.copy || 0}</b><span>Assets to copy</span></div>
+        <div class="deploy-stat"><b>${formatDeployBytes(plan.bytes_to_copy || 0)}</b><span>Total write</span></div></div></div>
+    </div>
+    <div class="deploy-route">
+      <div class="deploy-route-box"><small>Working copy</small><span>${escHtml(plan.local_path || 'Local kit library')}</span></div>
+      <div class="deploy-route-arrow">→</div>
+      <div class="deploy-route-box"><small>Module copy · ${available} assets already available</small><span>${escHtml(plan.target_path || 'User card not mounted')}</span></div>
+    </div>
+    <div class="deploy-issues">${issues}</div>`;
+  setDeployStage('preflight', plan.ready ? 'done' : 'failed');
+  setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const action = document.getElementById('deploy-action');
+  action.disabled = !plan.ready;
+  action.textContent = plan.target_exists ? 'Back up & replace module copy' : 'Deploy now';
+  document.getElementById('deploy-action-note').textContent = plan.ready
+    ? 'Custom local instruments and samples are copied; factory-card content is reused in place.'
+    : 'Resolve the blocking checks, then run preflight again.';
+}
+
+async function runDeploy() {
+  if (!deployPlan?.ready || deployBusy) return;
+  deployBusy = true;
+  setDeployStage('preflight', 'done'); setDeployStage('transfer', 'active'); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  const cancel = document.getElementById('deploy-cancel');
+  action.disabled = true; refresh.disabled = true; cancel.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Writing the module package</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Custom assets transfer first. The kit file is published last, then read back for verification.</span></div>';
+  try {
+    const data = await api('/deploy', {});
+    if (data.error) throw new Error(data.error);
+    setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
+    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+      + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
+      + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
+    kits = data.kits || kits;
+    libSavePath = data.lib_save_path || libSavePath;
+    sdSavePath = data.sd_save_path || sdSavePath;
+    state_kitPath = libSavePath;
+    document.getElementById('save-path').value = libSavePath;
+    setDirtyState(false, null);
+    renderKitList();
+    setMsg(data.message);
+    document.getElementById('deploy-action-note').textContent = 'The card copy was read back successfully. It is safe to eject after pending OS writes finish.';
+    action.style.display = 'none';
+    await checkStatus();
+  } catch (err) {
+    setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+  } finally {
+    deployBusy = false;
+    refresh.disabled = false; cancel.disabled = false;
+  }
 }
 
 // ── New kit ───────────────────────────────────────────────────────────────────
@@ -8158,7 +9658,7 @@ async function confirmNewKit() {
   kitNameEl2.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -8192,7 +9692,6 @@ async function checkStatus() {
 }
 
 (async () => {
-  applyTheme();
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
@@ -8297,8 +9796,15 @@ async function checkStatus() {
       // Close any open modal first (Esc previously worked on some modals but
       // not others, e.g. Kit FX — finding A0-1); only then clear selection.
       const openModal = document.querySelector(
-        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open');
-      if (openModal) { openModal.classList.remove('open'); return; }
+        '#deploy-modal.open, #setup-modal.open, #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
+      if (openModal) {
+        if (openModal.id !== 'deploy-modal' || !deployBusy) openModal.classList.remove('open');
+        return;
+      }
+      if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+        setWorkspaceMode('pad');
+        return;
+      }
       clearSelection();
       return;
     }
@@ -8340,6 +9846,10 @@ async function checkStatus() {
   });
 
   applyPatchPanelState();
+  let initialWorkspace = 'pad';
+  try { initialWorkspace = localStorage.getItem('strike_workspace') || 'pad'; } catch(e) {}
+  if (!['pad','sounds','fx','history','tools','repair','layout'].includes(initialWorkspace)) initialWorkspace = 'pad';
+  setWorkspaceMode(initialWorkspace);
   updateLayoutBadge();
 
   // Apply saved browser toolbar prefs
@@ -8471,6 +9981,55 @@ async function dismissAllAutosaves() {
 }
 </script>
 <div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
+
+<!-- Deploy to Module workflow -->
+<div id="deploy-modal" role="dialog" aria-modal="true" aria-labelledby="deploy-title"
+     onclick="if(event.target===this)closeDeploy()">
+  <div class="deploy-console">
+    <div class="deploy-head">
+      <div class="deploy-mark" aria-hidden="true">SD</div>
+      <div class="deploy-head-copy"><small>Hardware transfer channel</small><strong id="deploy-title">Deploy to Module</strong></div>
+      <button class="deploy-close" type="button" onclick="closeDeploy()" aria-label="Close deployment">&#x2715;</button>
+    </div>
+    <div class="deploy-rail" aria-label="Deployment progress">
+      <div id="deploy-stage-preflight" class="deploy-stage active"><i>1</i><span>Preflight</span></div>
+      <div id="deploy-stage-transfer" class="deploy-stage"><i>2</i><span>Transfer</span></div>
+      <div id="deploy-stage-verify" class="deploy-stage"><i>3</i><span>Verify</span></div>
+    </div>
+    <div id="deploy-body" class="deploy-body"></div>
+    <div class="deploy-actions">
+      <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
+      <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
+      <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Physical setup profiles -->
+<div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title"
+     onclick="if(event.target===this)closeSetupProfiles()">
+  <div class="setup-rack">
+    <header class="setup-head">
+      <div class="setup-emblem" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><small>Performance hardware library</small><strong id="setup-title">Physical setup profiles</strong></div>
+      <span id="setup-profile-count">0 saved slots</span>
+      <button type="button" onclick="closeSetupProfiles()" aria-label="Close physical setup profiles">&#x2715;</button>
+    </header>
+    <section class="setup-capture">
+      <div><small>Capture the map in front of you</small><strong>Save current arrangement as a rig</strong><p>Positions, shapes, finishes, labels, and mirrored/Y-split pieces are saved. Kit sounds are not.</p></div>
+      <div class="setup-name-row"><input id="setup-profile-name" maxlength="48" placeholder="e.g. Open-hand dual hi-hat"
+        onkeydown="if(event.key==='Enter')saveCurrentSetupProfile()"><button class="btn-primary" onclick="saveCurrentSetupProfile()">Save new setup</button></div>
+    </section>
+    <div id="setup-profile-list" class="setup-slot-grid"></div>
+    <footer class="setup-foot">
+      <span>Edits auto-save to the active rig slot.</span>
+      <button onclick="exportLayout()">Export active JSON</button>
+      <button onclick="document.getElementById('layout-file').click()">Import setup JSON</button>
+      <button onclick="closeSetupProfiles()">Done</button>
+    </footer>
+  </div>
+</div>
 
 <!-- Kit diff modal -->
 <div id="diff-modal" onclick="if(event.target===this)closeDiffModal()">
@@ -8686,6 +10245,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/status':
             self.send_json(volume_status())
+            return
+
+        if path == '/api/deploy_preflight':
+            try:
+                self.send_json(deploy_preflight())
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/session':
@@ -9130,6 +10696,20 @@ class Handler(BaseHTTPRequestHandler):
                     'lib_save_path': str(LIBRARY_DIR / 'kits' / kit_name),
                     'sd_save_path':  _sd_save_path(user, state['kit_path']),
                 })
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
+            return
+
+        if path == '/api/deploy':
+            try:
+                result = deploy_kit()
+                user, _ = get_volumes()
+                result.update({
+                    'kits': find_kit_files(),
+                    'lib_save_path': str(LIBRARY_DIR / 'kits' / Path(state['kit_path']).name),
+                    'sd_save_path': _sd_save_path(user, state['kit_path']),
+                })
+                self.send_json(result)
             except Exception as e:
                 self.send_json({'error': _friendly_error(e)})
             return
