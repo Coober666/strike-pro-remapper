@@ -4,8 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Strike Pro Remapper — Viewer</title>
-<!-- Extracted verbatim from strike_remap.py HTML string. app.css = <style> contents,
-     app.js = <script> contents. engine.js (added) provides a client-side read-only
+<!-- Extracted from strike_remap.py's HTML string by tools/extract_viewer.py —
+     DO NOT hand-edit index.html/app.css/app.js; edit strike_remap.py and re-run
+     the extractor. engine.js (viewer-authored) provides a client-side read-only
      replacement for the Python /api server via fetch interception. -->
 <link rel="stylesheet" href="app.css">
 </head>
@@ -122,8 +123,11 @@
       <button class="btn-secondary" style="width:100%;font-size:.72rem;margin-bottom:6px;"
         title="Back up / restore the module's trigger settings (sensitivity, xTalk, scan time) via MIDI SysEx — Chrome/Edge only"
         onclick="showTrigModal()">&#x1F39B; Trigger settings backup&#x2026;</button>
-      <div id="tools-list"></div>
-      <div id="tool-output" class="tool-output"></div>
+      <details style="margin-top:4px;">
+        <summary style="font-size:.7rem;color:#667;cursor:pointer;">Developer scripts&#x2026;</summary>
+        <div id="tools-list"></div>
+        <div id="tool-output" class="tool-output"></div>
+      </details>
     </div>
   </div>
 
@@ -309,7 +313,10 @@
   </section>
 
 </div>
-
+<!-- engine.js installs the /api fetch interceptor and sets window.VIEWER BEFORE
+     app.js runs, then dynamically injects app.js as a classic script so the
+     extracted frontend (global funcs + inline onclick) works unchanged. -->
+<script type="module" src="engine.js"></script>
 <div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
 
 <!-- Kit diff modal -->
@@ -424,9 +431,5 @@
     </div>
   </div>
 </div>
-<!-- engine.js installs the /api fetch interceptor and sets window.VIEWER BEFORE
-     app.js runs, then dynamically injects app.js as a classic script so the
-     extracted frontend (global funcs + inline onclick) works unchanged. -->
-<script type="module" src="engine.js"></script>
 </body>
 </html>

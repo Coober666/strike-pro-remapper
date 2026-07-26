@@ -38,32 +38,28 @@ jobs:
       - name: JS↔Python similarity k-NN parity
         run: node web/test_similar.mjs
 
+      - name: Viewer extraction in sync with embedded UI
+        run: python tools/extract_viewer.py --check
+
       - name: Single-file viewer bundle (build + validate)
         run: python tools/build_viewer.py --check
 
-      - name: Audio fingerprint + similarity ranking
-        run: python tools/test_fingerprint.py
-
-      - name: Kit time machine (snapshots / diff / restore / retention)
-        run: python tools/test_time_machine.py
-
-      - name: Playback manifest (kit_playback_manifest endpoint)
-        run: python tools/test_playback_manifest.py
-
-      - name: SD volume classification (content + writability, issue 3)
-        run: python tools/test_volume_classify.py
-
-      - name: Kit size meter (index translation, issue 6)
-        run: python tools/test_kit_size.py
-
-      - name: WAV-level path check + assign validation (issue 4)
-        run: python tools/test_check_paths.py
-
-      - name: Error layer + no-kit save guard (issue 8)
-        run: python tools/test_error_layer.py
-
-      - name: Autosave hygiene (location, dedup, display, FX no-op — issue 9)
-        run: python tools/test_autosave_hygiene.py
+      # Every no-arg tools/test_*.py runs automatically — new test files need no
+      # registration here. Only the two fixture-arg round-trip tests (invoked
+      # explicitly above) are skipped.
+      - name: All regression tests (auto-discovered)
+        run: |
+          set -e
+          found=0
+          for t in tools/test_*.py; do
+            case "$t" in
+              tools/test_roundtrip.py|tools/test_sin_roundtrip.py) continue ;;
+            esac
+            found=1
+            echo "=== $t"
+            python "$t"
+          done
+          test "$found" -eq 1  # glob must match — an empty tools/ is a failure
 
       - name: Embedded JS syntax check
         run: |
