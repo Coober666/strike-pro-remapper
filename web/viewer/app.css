@@ -1,3 +1,4 @@
+
 :root {
   --bg: #0d0f15; --bg-deep: #0a0c11; --panel: #161a23; --raised: #1b202b;
   --field: #0b0e15; --border: #242c3d; --border-lt: #313a4d;
@@ -321,6 +322,53 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .confirm-box { background:#171c26; border:1px solid #2e3749; border-radius:12px; padding:18px; width:min(440px,92vw); display:flex; flex-direction:column; gap:14px; box-shadow:0 12px 40px #000000b0; }
 .confirm-box p { margin:0; font-size:.82rem; color:#bcd; white-space:pre-wrap; line-height:1.45; }
 .confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+/* Physical setups are presented as rack-memory slots, because they describe
+   the player's connected hardware rather than a kit document or sound preset. */
+#setup-modal { display:none; position:fixed; inset:0; z-index:410; padding:18px; align-items:center; justify-content:center; background:#050706dc; backdrop-filter:blur(5px); }
+#setup-modal.open { display:flex; }
+.setup-rack { width:min(900px,96vw); max-height:min(850px,94vh); display:flex; flex-direction:column; overflow:hidden; border:1px solid #665738; border-radius:5px; background:#101310; box-shadow:0 24px 70px #000d,inset 0 1px #ffffff0b; }
+.setup-head { display:flex; align-items:center; gap:12px; min-height:65px; padding:10px 14px; border-bottom:1px solid #3b403a; background:linear-gradient(180deg,#252a25,#181c19); }
+.setup-emblem { display:flex; align-items:center; justify-content:center; gap:3px; width:42px; height:34px; border:1px solid #5f5642; background:#101310; box-shadow:inset 0 0 0 3px #1b1f1b; }
+.setup-emblem i { width:7px; height:7px; border:1px solid #a2864f; border-radius:50%; background:#26251f; box-shadow:0 0 5px #d0aa5b35; }
+.setup-head div:nth-child(2) { min-width:0; }
+.setup-head small,.setup-capture small { display:block; margin-bottom:4px; color:#7a827b; font:.5rem/1 Consolas,monospace; letter-spacing:.15em; text-transform:uppercase; }
+.setup-head strong { color:#edf0eb; font:620 1rem/1 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:.02em; }
+.setup-head > span { margin-left:auto; color:#7f897f; font:.55rem/1 Consolas,monospace; text-transform:uppercase; letter-spacing:.1em; }
+.setup-head > button { width:29px; height:29px; padding:0; border:1px solid #485049; background:#151916; color:#899189; }
+.setup-capture { display:grid; grid-template-columns:minmax(0,1fr) minmax(270px,.7fr); gap:18px; align-items:end; padding:14px 16px; border-bottom:1px solid #303630; background:#141815; }
+.setup-capture strong { color:#d9ded8; font:600 .78rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-capture p { margin:4px 0 0; color:#737c74; font:.55rem/1.45 Consolas,monospace; }
+.setup-name-row { display:flex; gap:6px; }
+.setup-name-row input { min-width:0; flex:1; padding:7px 9px; border:1px solid #3c443d; border-radius:3px; background:#0b0e0c; color:#e4e8e2; font:.67rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-name-row input:focus { outline:1px solid #b79659; border-color:#b79659; }
+.setup-slot-grid { min-height:0; padding:13px 14px 16px; overflow:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.setup-slot { min-width:0; padding:11px; border:1px solid #343b35; border-radius:3px; background:linear-gradient(145deg,#1b201c,#111411); box-shadow:inset 0 1px #ffffff05; }
+.setup-slot.active { border-color:#8f7748; background:linear-gradient(145deg,#24241c,#141612); box-shadow:inset 3px 0 #d0aa5b,0 0 16px #d0aa5b0b; }
+.setup-slot-top { display:flex; align-items:center; min-height:16px; margin-bottom:5px; }
+.setup-slot-id,.setup-date,.setup-active { font:.47rem/1 Consolas,monospace; letter-spacing:.11em; text-transform:uppercase; }
+.setup-slot-id { color:#858e86; }
+.setup-date { margin-left:auto; color:#606961; }
+.setup-active { margin-left:auto; color:#dfbd75; }
+.setup-slot > strong { display:block; overflow:hidden; color:#e0e4df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.setup-slot > p { margin:3px 0 9px; color:#6f7871; font:.52rem/1.35 Consolas,monospace; }
+.setup-fingerprint { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; padding:8px; border:1px solid #2e342f; background:#090c0a; }
+.setup-fingerprint i { position:relative; display:grid; place-items:center; aspect-ratio:1; max-height:25px; border:1px solid #404741; border-radius:50%; background:radial-gradient(circle,#0b0e0c 0 34%,#242925 37% 50%,#0a0c0a 53%); color:#586059; font:400 .38rem/1 Consolas,monospace; font-style:normal; }
+.setup-fingerprint i.wired { border-color:#a68a53; color:#d5b66f; box-shadow:0 0 6px #d0aa5b30,inset 0 0 5px #d0aa5b16; }
+.setup-fingerprint i.split::after { content:"Y"; position:absolute; right:-2px; top:-4px; display:grid; place-items:center; width:10px; height:10px; border-radius:50%; background:#795d2f; color:#f3d99e; font:700 .36rem/1 Consolas,monospace; }
+.setup-slot-actions { display:flex; gap:5px; margin-top:9px; }
+.setup-slot-actions button,.setup-foot button { border:1px solid #414941; border-radius:3px; background:#171b18; color:#aeb6af; cursor:pointer; }
+.setup-slot-actions button:hover,.setup-foot button:hover { border-color:#71644b; background:#24251e; color:#eee9dc; }
+.setup-slot-actions button:disabled { opacity:.48; cursor:default; }
+.setup-slot-actions button.primary { border-color:#967b47; background:#b9924e; color:#15120c; }
+.setup-slot-actions button { min-height:25px; padding:3px 7px; font-size:.58rem; }
+.setup-slot-actions button:first-child { flex:1; }
+.setup-slot-actions .danger { color:#b9796e; }
+.setup-slot-actions .danger:hover { border-color:#74443c; background:#2a1714; color:#e4a096; }
+.setup-foot { display:flex; align-items:center; justify-content:flex-end; gap:7px; padding:10px 14px; border-top:1px solid #343b35; background:#0d100e; }
+.setup-foot span { margin-right:auto; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
+.setup-foot button { min-height:28px; padding:4px 9px; }
+@media (max-width:680px) { #setup-modal{padding:7px;align-items:flex-start}.setup-rack{width:100%;max-height:calc(100vh - 14px)}.setup-capture{grid-template-columns:1fr}.setup-slot-grid{grid-template-columns:1fr}.setup-foot{flex-wrap:wrap}.setup-foot span{flex-basis:100%} }
 
 /* Deploy is a hardware handoff, not another save dialog. Its signal rail
    mirrors the real sequence: inspect the card, transfer, then verify. */

@@ -3695,6 +3695,53 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .confirm-box p { margin:0; font-size:.82rem; color:#bcd; white-space:pre-wrap; line-height:1.45; }
 .confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
 
+/* Physical setups are presented as rack-memory slots, because they describe
+   the player's connected hardware rather than a kit document or sound preset. */
+#setup-modal { display:none; position:fixed; inset:0; z-index:410; padding:18px; align-items:center; justify-content:center; background:#050706dc; backdrop-filter:blur(5px); }
+#setup-modal.open { display:flex; }
+.setup-rack { width:min(900px,96vw); max-height:min(850px,94vh); display:flex; flex-direction:column; overflow:hidden; border:1px solid #665738; border-radius:5px; background:#101310; box-shadow:0 24px 70px #000d,inset 0 1px #ffffff0b; }
+.setup-head { display:flex; align-items:center; gap:12px; min-height:65px; padding:10px 14px; border-bottom:1px solid #3b403a; background:linear-gradient(180deg,#252a25,#181c19); }
+.setup-emblem { display:flex; align-items:center; justify-content:center; gap:3px; width:42px; height:34px; border:1px solid #5f5642; background:#101310; box-shadow:inset 0 0 0 3px #1b1f1b; }
+.setup-emblem i { width:7px; height:7px; border:1px solid #a2864f; border-radius:50%; background:#26251f; box-shadow:0 0 5px #d0aa5b35; }
+.setup-head div:nth-child(2) { min-width:0; }
+.setup-head small,.setup-capture small { display:block; margin-bottom:4px; color:#7a827b; font:.5rem/1 Consolas,monospace; letter-spacing:.15em; text-transform:uppercase; }
+.setup-head strong { color:#edf0eb; font:620 1rem/1 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:.02em; }
+.setup-head > span { margin-left:auto; color:#7f897f; font:.55rem/1 Consolas,monospace; text-transform:uppercase; letter-spacing:.1em; }
+.setup-head > button { width:29px; height:29px; padding:0; border:1px solid #485049; background:#151916; color:#899189; }
+.setup-capture { display:grid; grid-template-columns:minmax(0,1fr) minmax(270px,.7fr); gap:18px; align-items:end; padding:14px 16px; border-bottom:1px solid #303630; background:#141815; }
+.setup-capture strong { color:#d9ded8; font:600 .78rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-capture p { margin:4px 0 0; color:#737c74; font:.55rem/1.45 Consolas,monospace; }
+.setup-name-row { display:flex; gap:6px; }
+.setup-name-row input { min-width:0; flex:1; padding:7px 9px; border:1px solid #3c443d; border-radius:3px; background:#0b0e0c; color:#e4e8e2; font:.67rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.setup-name-row input:focus { outline:1px solid #b79659; border-color:#b79659; }
+.setup-slot-grid { min-height:0; padding:13px 14px 16px; overflow:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.setup-slot { min-width:0; padding:11px; border:1px solid #343b35; border-radius:3px; background:linear-gradient(145deg,#1b201c,#111411); box-shadow:inset 0 1px #ffffff05; }
+.setup-slot.active { border-color:#8f7748; background:linear-gradient(145deg,#24241c,#141612); box-shadow:inset 3px 0 #d0aa5b,0 0 16px #d0aa5b0b; }
+.setup-slot-top { display:flex; align-items:center; min-height:16px; margin-bottom:5px; }
+.setup-slot-id,.setup-date,.setup-active { font:.47rem/1 Consolas,monospace; letter-spacing:.11em; text-transform:uppercase; }
+.setup-slot-id { color:#858e86; }
+.setup-date { margin-left:auto; color:#606961; }
+.setup-active { margin-left:auto; color:#dfbd75; }
+.setup-slot > strong { display:block; overflow:hidden; color:#e0e4df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.setup-slot > p { margin:3px 0 9px; color:#6f7871; font:.52rem/1.35 Consolas,monospace; }
+.setup-fingerprint { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; padding:8px; border:1px solid #2e342f; background:#090c0a; }
+.setup-fingerprint i { position:relative; display:grid; place-items:center; aspect-ratio:1; max-height:25px; border:1px solid #404741; border-radius:50%; background:radial-gradient(circle,#0b0e0c 0 34%,#242925 37% 50%,#0a0c0a 53%); color:#586059; font:400 .38rem/1 Consolas,monospace; font-style:normal; }
+.setup-fingerprint i.wired { border-color:#a68a53; color:#d5b66f; box-shadow:0 0 6px #d0aa5b30,inset 0 0 5px #d0aa5b16; }
+.setup-fingerprint i.split::after { content:"Y"; position:absolute; right:-2px; top:-4px; display:grid; place-items:center; width:10px; height:10px; border-radius:50%; background:#795d2f; color:#f3d99e; font:700 .36rem/1 Consolas,monospace; }
+.setup-slot-actions { display:flex; gap:5px; margin-top:9px; }
+.setup-slot-actions button,.setup-foot button { border:1px solid #414941; border-radius:3px; background:#171b18; color:#aeb6af; cursor:pointer; }
+.setup-slot-actions button:hover,.setup-foot button:hover { border-color:#71644b; background:#24251e; color:#eee9dc; }
+.setup-slot-actions button:disabled { opacity:.48; cursor:default; }
+.setup-slot-actions button.primary { border-color:#967b47; background:#b9924e; color:#15120c; }
+.setup-slot-actions button { min-height:25px; padding:3px 7px; font-size:.58rem; }
+.setup-slot-actions button:first-child { flex:1; }
+.setup-slot-actions .danger { color:#b9796e; }
+.setup-slot-actions .danger:hover { border-color:#74443c; background:#2a1714; color:#e4a096; }
+.setup-foot { display:flex; align-items:center; justify-content:flex-end; gap:7px; padding:10px 14px; border-top:1px solid #343b35; background:#0d100e; }
+.setup-foot span { margin-right:auto; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
+.setup-foot button { min-height:28px; padding:4px 9px; }
+@media (max-width:680px) { #setup-modal{padding:7px;align-items:flex-start}.setup-rack{width:100%;max-height:calc(100vh - 14px)}.setup-capture{grid-template-columns:1fr}.setup-slot-grid{grid-template-columns:1fr}.setup-foot{flex-wrap:wrap}.setup-foot span{flex-basis:100%} }
+
 /* Deploy is a hardware handoff, not another save dialog. Its signal rail
    mirrors the real sequence: inspect the card, transfer, then verify. */
 #deploy-modal { display:none; position:fixed; inset:0; z-index:420; padding:18px; align-items:center; justify-content:center; background:#050706d9; backdrop-filter:blur(5px); }
@@ -4563,10 +4610,8 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="exportLayout()" title="Save your customized kit layout (positions, sizes, rotation, finish) to a file.">&#x2913; Save layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="document.getElementById('layout-file').click()" title="Load a kit layout file saved earlier.">&#x2912; Load layout</button>
+      <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="openSetupProfiles()" title="Save and switch between physical drum and cymbal arrangements.">&#x25C9; Setup profiles</button>
       <input type="file" id="layout-file" accept="application/json,.json" style="display:none"
         onchange="importLayout(this.files[0]); this.value=''">
     </div>
@@ -5714,6 +5759,16 @@ function togglePatchPanel() {
 let padOverrides = {};
 try { padOverrides = JSON.parse(localStorage.getItem('strike_pad_overrides') || '{}'); } catch(e) {}
 
+// Physical setup profiles live independently from kits. A profile describes the
+// hardware shown on the performance surface — including mirrors/Y-splits — while
+// kit assignments and sound parameters remain untouched.
+const SETUP_PROFILE_KEY = 'strike_setup_profiles_v1';
+let setupProfileStore = {version:1, activeId:null, profiles:[]};
+try {
+  const storedSetups = JSON.parse(localStorage.getItem(SETUP_PROFILE_KEY) || 'null');
+  if (storedSetups && Array.isArray(storedSetups.profiles)) setupProfileStore = storedSetups;
+} catch(e) {}
+
 // Drag state
 let dragState = null;  // {id, origCx, origCy, startX, startY, moved}
 
@@ -5914,12 +5969,21 @@ function effectivePadDef(id) {
 
 function savePadOverrides() {
   try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  syncActiveSetupProfile();
   updateLayoutBadge();
 }
 
 function updateLayoutBadge() {
   const count = Object.keys(padOverrides).length;
   const btn   = document.getElementById('reset-layout-btn');
+  const setupBtn = document.getElementById('setup-profiles-btn');
+  const active = activeSetupProfile();
+  if (setupBtn) {
+    setupBtn.textContent = active ? `◉ ${active.name}` : '◉ Setup profiles';
+    setupBtn.title = active
+      ? `${active.name} is active. Map changes save to this physical setup automatically.`
+      : 'Save and switch between physical drum and cymbal arrangements.';
+  }
   if (!btn) return;
   if (count) {
     btn.textContent   = 'Reset layout ●';
@@ -6020,10 +6084,186 @@ function resetAllOverrides() {
 
 // ── Save / load kit layout (positions, sizes, rotation, finish, mirrors) ────────
 const VALID_PAD_IDS = new Set(PAD_DEFS.map(d => d[0]));
+function cleanLayoutOverrides(overrides) {
+  const clean = {};
+  if (!overrides || typeof overrides !== 'object') return clean;
+  for (const [id, value] of Object.entries(overrides)) {
+    if (VALID_PAD_IDS.has(id) && value && typeof value === 'object' && !Array.isArray(value)) {
+      clean[id] = JSON.parse(JSON.stringify(value));
+    }
+  }
+  return clean;
+}
+
+function persistSetupProfiles() {
+  try { localStorage.setItem(SETUP_PROFILE_KEY, JSON.stringify(setupProfileStore)); } catch(e) {}
+}
+
+function activeSetupProfile() {
+  return setupProfileStore.profiles.find(p => p.id === setupProfileStore.activeId) || null;
+}
+
+function syncActiveSetupProfile() {
+  const active = activeSetupProfile();
+  if (!active) return;
+  active.overrides = cleanLayoutOverrides(padOverrides);
+  active.updated = new Date().toISOString();
+  persistSetupProfiles();
+}
+
+function initializeSetupProfiles() {
+  const now = new Date().toISOString();
+  setupProfileStore = {
+    version: 1,
+    activeId: typeof setupProfileStore.activeId === 'string' ? setupProfileStore.activeId : null,
+    profiles: (setupProfileStore.profiles || []).filter(p => p && typeof p === 'object').map((p, i) => ({
+      id: String(p.id || `setup-${Date.now()}-${i}`),
+      name: String(p.name || `Setup ${i + 1}`).trim().slice(0, 48) || `Setup ${i + 1}`,
+      created: p.created || now,
+      updated: p.updated || p.created || now,
+      overrides: cleanLayoutOverrides(p.overrides),
+    })),
+  };
+  const active = activeSetupProfile();
+  if (active) {
+    padOverrides = cleanLayoutOverrides(active.overrides);
+  } else if (Object.keys(cleanLayoutOverrides(padOverrides)).length) {
+    // Migrate the layout users already built before profiles existed.
+    const migrated = {
+      id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'My current setup', created: now, updated: now,
+      overrides: cleanLayoutOverrides(padOverrides),
+    };
+    setupProfileStore.profiles.unshift(migrated);
+    setupProfileStore.activeId = migrated.id;
+  } else {
+    setupProfileStore.activeId = null;
+  }
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+}
+initializeSetupProfiles();
+
+function setupProfileName(fallback = '') {
+  const input = document.getElementById('setup-profile-name');
+  const value = (fallback || input?.value || '').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 48);
+  return value || `Setup ${setupProfileStore.profiles.length + 1}`;
+}
+
+function createSetupProfile(name, overrides = padOverrides) {
+  const now = new Date().toISOString();
+  const profile = {
+    id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: setupProfileName(name), created: now, updated: now,
+    overrides: cleanLayoutOverrides(overrides),
+  };
+  setupProfileStore.profiles.unshift(profile);
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  setMsg(`Saved physical setup: ${profile.name}`);
+  return profile;
+}
+
+function saveCurrentSetupProfile() {
+  createSetupProfile(document.getElementById('setup-profile-name')?.value || '');
+  const input = document.getElementById('setup-profile-name');
+  if (input) input.value = '';
+}
+
+function applySetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Physical setup active: ${profile.name}`);
+}
+
+function duplicateSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  createSetupProfile(`${profile.name} copy`, profile.overrides);
+}
+
+async function deleteSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile || !await appConfirm(`Delete physical setup “${profile.name}”?\n\nYour current kit and sounds will not change.`, 'Delete setup')) return;
+  setupProfileStore.profiles = setupProfileStore.profiles.filter(p => p.id !== id);
+  if (setupProfileStore.activeId === id) setupProfileStore.activeId = null;
+  persistSetupProfiles(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Deleted physical setup: ${profile.name}`);
+}
+
+function applyFactorySetup() {
+  setupProfileStore.activeId = null;
+  padOverrides = {};
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', '{}'); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg('Factory physical layout active');
+}
+
+function setupFingerprint(overrides) {
+  const ov = overrides || {};
+  return JACK_ROWS.flat().map(entry => {
+    const ids = jackPadIds(entry);
+    const changed = ids.some(id => ov[id] && Object.keys(ov[id]).length);
+    const split = ids.some(id => ov[id]?.mirror);
+    const label = entry[3] || entry[2];
+    return `<i class="${changed ? 'wired' : ''}${split ? ' split' : ''}" title="${escHtml(label)}"><span>${escHtml(entry[1] || 'C')}</span></i>`;
+  }).join('');
+}
+
+function renderSetupProfiles() {
+  const list = document.getElementById('setup-profile-list');
+  const count = document.getElementById('setup-profile-count');
+  if (!list) return;
+  if (count) count.textContent = `${setupProfileStore.profiles.length} saved slot${setupProfileStore.profiles.length === 1 ? '' : 's'}`;
+  const active = activeSetupProfile();
+  const factory = `<article class="setup-slot${active ? '' : ' active'}" data-profile-id="factory">
+    <div class="setup-slot-top"><span class="setup-slot-id">FACTORY</span>${active ? '' : '<span class="setup-active">ACTIVE</span>'}</div>
+    <strong>Strike default layout</strong><p>Standard module arrangement · no visual overrides</p>
+    <div class="setup-fingerprint">${setupFingerprint({})}</div>
+    <div class="setup-slot-actions"><button onclick="applyFactorySetup()" ${active ? '' : 'disabled'}>Use factory layout</button></div>
+  </article>`;
+  const cards = setupProfileStore.profiles.map((profile, index) => {
+    const isActive = profile.id === setupProfileStore.activeId;
+    const changed = Object.keys(profile.overrides || {}).length;
+    const when = new Date(profile.updated || profile.created).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    return `<article class="setup-slot${isActive ? ' active' : ''}" data-profile-id="${profile.id}">
+      <div class="setup-slot-top"><span class="setup-slot-id">RIG ${String(index + 1).padStart(2, '0')}</span>${isActive ? '<span class="setup-active">ACTIVE · AUTO-SAVING</span>' : `<span class="setup-date">${escHtml(when)}</span>`}</div>
+      <strong>${escHtml(profile.name)}</strong><p>${changed} customized zone${changed === 1 ? '' : 's'} · sounds stay with the kit</p>
+      <div class="setup-fingerprint">${setupFingerprint(profile.overrides)}</div>
+      <div class="setup-slot-actions">
+        <button class="${isActive ? '' : 'primary'}" onclick="applySetupProfile('${profile.id}')" ${isActive ? 'disabled' : ''}>${isActive ? 'In use' : 'Use this setup'}</button>
+        <button onclick="duplicateSetupProfile('${profile.id}')">Duplicate</button>
+        <button class="danger" onclick="deleteSetupProfile('${profile.id}')">Delete</button>
+      </div>
+    </article>`;
+  }).join('');
+  list.innerHTML = factory + cards;
+}
+
+function openSetupProfiles() {
+  renderSetupProfiles();
+  document.getElementById('setup-modal').classList.add('open');
+  setTimeout(() => document.getElementById('setup-profile-name')?.focus(), 0);
+}
+function closeSetupProfiles() { document.getElementById('setup-modal').classList.remove('open'); }
+
 function exportLayout() {
+  const active = activeSetupProfile();
   const payload = {
     format: 'strike-remap-layout', version: 1,
-    saved: new Date().toISOString(), overrides: padOverrides,
+    saved: new Date().toISOString(), name: active?.name || 'Physical setup', overrides: padOverrides,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -6043,17 +6283,11 @@ async function importLayout(file) {
     const ov = (data && data.overrides && typeof data.overrides === 'object') ? data.overrides
              : (data && typeof data === 'object' && !data.format) ? data : null;  // tolerate a bare overrides object
     if (!ov) { setMsg('Not a valid layout file', true); return; }
-    // Keep only recognized pad IDs; ignore anything else.
-    const clean = {};
-    for (const [id, o] of Object.entries(ov)) {
-      if (VALID_PAD_IDS.has(id) && o && typeof o === 'object') clean[id] = o;
-    }
-    padOverrides = clean;
-    savePadOverrides();
-    renderDrumMap();
-    renderPadDetail();
+    const clean = cleanLayoutOverrides(ov);
+    const fileName = file.name?.replace(/\.json$/i, '').replace(/^strike-kit-layout-/, '') || 'Imported setup';
+    const profile = createSetupProfile(data.name || fileName, clean);
     const n = Object.keys(clean).length;
-    setMsg(`Loaded layout (${n} customized pad${n === 1 ? '' : 's'})`);
+    setMsg(`Imported ${profile.name} (${n} customized pad${n === 1 ? '' : 's'})`);
   } catch (err) {
     setMsg('Could not read layout file: ' + err.message, true);
   }
@@ -6506,10 +6740,12 @@ async function renderAdvancedWorkspace(kind) {
 
   if (kind === 'layout') {
     const changed = Object.values(padOverrides).filter(v => v && Object.keys(v).length).length;
-    body.innerHTML = `<div class="aw-intro">Layout mode changes only the browser performance surface—pad positions, shapes, finishes, mirrors, and labels. It does not rewrite module trigger geometry.</div>
-      <div class="aw-status-line">${changed} customized map element${changed===1?'':'s'} · stored in this browser</div>
+    const activeSetup = activeSetupProfile();
+    body.innerHTML = `<div class="aw-intro">Physical setups describe the kit you actually sit behind—pad positions, shapes, finishes, and mirrored/Y-split pieces. Sound assignments remain with the loaded kit.</div>
+      <div class="aw-status-line">${activeSetup ? `Active rig · ${escHtml(activeSetup.name)} · auto-saving` : 'Factory layout active'} · ${changed} customized map element${changed===1?'':'s'}</div>
+      ${awModule('RIG', 'Physical setup profiles', 'Switch your hardware visualization without changing the loaded kit. Active profile edits save automatically.', '<button class="primary" onclick="openSetupProfiles()">Manage setup profiles</button>')}
       ${awModule('MAP', 'Customize the kit map', 'Select a pad, then drag it or use the Pad workspace customization controls.', '<button class="primary" onclick="setWorkspaceMode(\'pad\')">Select and edit pads</button><button onclick="resetAllOverrides();renderAdvancedWorkspace(\'layout\')">Reset layout</button>')}
-      ${awModule('FILE', 'Portable layout file', 'Save the visual map as JSON or load a layout created on another computer.', '<button onclick="exportLayout()">Save layout file</button><button onclick="document.getElementById(\'layout-file\').click()">Load layout file</button>')}
+      ${awModule('FILE', 'Move a setup between computers', 'Export the active rig as JSON, then import it on Windows or macOS.', '<button onclick="exportLayout()">Export active setup</button><button onclick="document.getElementById(\'layout-file\').click()">Import setup file</button>')}
       ${awModule('BATCH', 'Batch parameter editing', 'Select multiple pads on the map and apply one confirmed parameter value to all of them.', `<button onclick="advancedStartBatch()">${batchMode ? 'Return to active batch' : 'Start batch edit'}</button>`)}`;
     return;
   }
@@ -9560,7 +9796,7 @@ async function checkStatus() {
       // Close any open modal first (Esc previously worked on some modals but
       // not others, e.g. Kit FX — finding A0-1); only then clear selection.
       const openModal = document.querySelector(
-        '#deploy-modal.open, #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
+        '#deploy-modal.open, #setup-modal.open, #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
       if (openModal) {
         if (openModal.id !== 'deploy-modal' || !deployBusy) openModal.classList.remove('open');
         return;
@@ -9767,6 +10003,31 @@ async function dismissAllAutosaves() {
       <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
       <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>
     </div>
+  </div>
+</div>
+
+<!-- Physical setup profiles -->
+<div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title"
+     onclick="if(event.target===this)closeSetupProfiles()">
+  <div class="setup-rack">
+    <header class="setup-head">
+      <div class="setup-emblem" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><small>Performance hardware library</small><strong id="setup-title">Physical setup profiles</strong></div>
+      <span id="setup-profile-count">0 saved slots</span>
+      <button type="button" onclick="closeSetupProfiles()" aria-label="Close physical setup profiles">&#x2715;</button>
+    </header>
+    <section class="setup-capture">
+      <div><small>Capture the map in front of you</small><strong>Save current arrangement as a rig</strong><p>Positions, shapes, finishes, labels, and mirrored/Y-split pieces are saved. Kit sounds are not.</p></div>
+      <div class="setup-name-row"><input id="setup-profile-name" maxlength="48" placeholder="e.g. Open-hand dual hi-hat"
+        onkeydown="if(event.key==='Enter')saveCurrentSetupProfile()"><button class="btn-primary" onclick="saveCurrentSetupProfile()">Save new setup</button></div>
+    </section>
+    <div id="setup-profile-list" class="setup-slot-grid"></div>
+    <footer class="setup-foot">
+      <span>Edits auto-save to the active rig slot.</span>
+      <button onclick="exportLayout()">Export active JSON</button>
+      <button onclick="document.getElementById('layout-file').click()">Import setup JSON</button>
+      <button onclick="closeSetupProfiles()">Done</button>
+    </footer>
   </div>
 </div>
 

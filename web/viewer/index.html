@@ -10,10 +10,20 @@
      replacement for the Python /api server via fetch interception. -->
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
-<header>
-  <h1>Strike Pro Remapper</h1>
+<body data-workspace="pad">
+<header class="app-topbar">
+  <div class="brand-lockup">
+    <span class="brand-hardware" aria-hidden="true"></span>
+    <span><strong>Strike Remapper</strong><small>Kit workstation</small></span>
+  </div>
 
+  <div class="kit-identity">
+    <span class="kit-eyebrow">Editing kit</span>
+    <span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit">No kit loaded</span>
+    <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+  </div>
+
+  <div class="primary-actions">
   <!-- Kit picker -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
@@ -43,10 +53,9 @@
           <input type="file" accept=".csv,.txt" style="display:none;"
             onchange="if(this.files[0])importAssignCSV(this.files[0]);this.value=''">
         </label>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showDiffModal()">&#x1F50D; Compare with kit&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="openTimeMachine()">&#x1F570;&#xFE0F; Kit time machine&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showRelinkModal()">&#x1F527; Fix broken paths&#x2026;</button>
-        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="showKitFxModal()">&#x1F39A; Kit FX editor&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('history')">&#x1F50D; History and comparison</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('repair')">&#x1F527; Fix broken paths&#x2026;</button>
+        <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="setWorkspaceMode('fx')">&#x1F39A; Kit FX workspace</button>
         <button class="btn-secondary" style="width:100%;font-size:.72rem;" onclick="exportBundle()">&#x1F4E6; Export kit bundle (.zip)</button>
         <label class="btn-secondary" style="width:100%;font-size:.72rem;display:block;text-align:center;cursor:pointer;box-sizing:border-box;"
           title="Accepts strike_remap bundles, official Strike Editor exports, and commercial pack zips (eDrumWorkshop, drum-tec, …)">
@@ -75,8 +84,6 @@
               style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
     </div>
     <div id="save-menu" class="tb-popover" style="display:none;min-width:220px;">
-      <button id="save-sd-btn" class="btn-secondary" onclick="saveToSD()" disabled
-              style="width:100%;margin-bottom:6px;">Save to SD card</button>
       <details>
         <summary style="font-size:.72rem;color:#666;cursor:pointer;">Custom path&#x2026;</summary>
         <div style="margin-top:5px;display:flex;flex-direction:column;gap:4px;">
@@ -88,7 +95,10 @@
       <p id="save-hint" style="font-size:.7rem;color:#666;margin-top:6px;"></p>
     </div>
   </div>
+  <button id="save-sd-btn" class="btn-primary tb-btn deploy-btn" onclick="openDeploy()" disabled>Deploy to Module</button>
+  </div><!-- /primary-actions -->
 
+  <div class="utility-strip">
   <!-- Duplicate -->
   <div class="tb-group">
     <button class="btn-secondary tb-btn" id="dup-btn" onclick="showDuplicateForm()" disabled>Duplicate&#x2026;</button>
@@ -131,19 +141,43 @@
     </div>
   </div>
 
-  <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
-          title="Virtual module — play the kit being edited from the pads or number keys" style="flex-shrink:0;">Virtual</button>
-  <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;flex-shrink:0;font-size:.7rem;color:#888;">
-    <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:64px;vertical-align:middle;"
-           title="Keyboard-hit velocity (number keys 1–0)"></span>
-  <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
-          title="Enable MIDI monitor — hit a pad to see it light up" style="flex-shrink:0;">MIDI</button>
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
+  </div><!-- /utility-strip -->
 </header>
 <div class="main">
 
+  <nav id="workspace-rail" class="workspace-rail" aria-label="Editor workspaces">
+    <button class="workspace-tab" type="button" onclick="openWorkspaceUtility('kit')" title="Kit library and kit actions">
+      <span class="workspace-glyph" aria-hidden="true">K</span><span>Kit</span>
+    </button>
+    <button class="workspace-tab active" type="button" data-workspace="pad" onclick="setWorkspaceMode('pad')" title="Selected pad settings">
+      <span class="workspace-glyph" aria-hidden="true">P</span><span>Pad</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="sounds" onclick="setWorkspaceMode('sounds')" title="Browse and assign instruments">
+      <span class="workspace-glyph" aria-hidden="true">S</span><span>Sounds</span>
+    </button>
+    <button id="inputs-quick-btn" class="workspace-tab" type="button"
+      onclick="focusInputBay()" title="Jump to the always-visible physical input bay">
+      <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
+    </button>
+    <span class="workspace-spacer"></span>
+    <button class="workspace-tab" type="button" data-workspace="fx" onclick="openWorkspaceUtility('fx')" title="Kit FX">
+      <span class="workspace-glyph" aria-hidden="true">FX</span><span>FX</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="history" onclick="openWorkspaceUtility('history')" title="Kit history and comparison">
+      <span class="workspace-glyph" aria-hidden="true">H</span><span>History</span>
+    </button>
+    <button class="workspace-tab" type="button" data-workspace="tools" onclick="openWorkspaceUtility('tools')" title="Module and developer tools">
+      <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
+    </button>
+  </nav>
+
   <!-- Left: back panel jacks + pad editor -->
   <div id="left-panel">
+    <div class="context-head">
+      <div><span id="context-eyebrow" class="context-eyebrow">Pad workspace</span><strong id="context-title">Selected trigger</strong></div>
+      <button id="context-action" type="button" onclick="setWorkspaceMode('sounds')">Browse sounds</button>
+    </div>
     <div id="patch-panel-wrap">
       <div class="patch-hdr" onclick="togglePatchPanel()">
         <span class="patch-hdr-lbl">Back panel jacks</span>
@@ -159,16 +193,13 @@
   <!-- Center: drum map + live loop -->
   <section id="center-panel">
     <div class="center-hdr">
-      Drum Map&nbsp;<span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit"></span>
-      <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+      <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="exportLayout()" title="Save your customized kit layout (positions, sizes, rotation, finish) to a file.">&#x2913; Save layout</button>
-      <button class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
-        onclick="document.getElementById('layout-file').click()" title="Load a kit layout file saved earlier.">&#x2912; Load layout</button>
+      <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
+        onclick="openSetupProfiles()" title="Save and switch between physical drum and cymbal arrangements.">&#x25C9; Setup profiles</button>
       <input type="file" id="layout-file" accept="application/json,.json" style="display:none"
         onchange="importLayout(this.files[0]); this.value=''">
     </div>
@@ -221,10 +252,31 @@
     <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
       <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
+    <section id="input-bay-dock" class="input-bay-dock" aria-labelledby="input-bay-title">
+      <div class="input-bay-head">
+        <div><small>Module rear panel</small><strong id="input-bay-title">Trigger input bay</strong></div>
+        <span id="input-bay-route" class="input-bay-route">SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP</span>
+        <span class="input-bay-note"><b>HH CTRL</b> follows Hi-Hat</span>
+      </div>
+      <div id="input-bay-body" class="input-bay-scroll"></div>
+    </section>
+    <div id="layer-rack" class="layer-rack" aria-label="Selected pad layer controls" aria-live="polite">
+      <div class="layer-rack-empty">Select a pad to open its Layer A / B signal path</div>
+    </div>
     <div id="loop-panel">
       <div class="loop-hdr" onclick="toggleLoopPanel()">
-        <span class="loop-hdr-lbl">Live Loop</span>
-        <span id="loop-toggle-arrow" style="font-size:.6rem;color:#445;margin-left:auto;">&#9654;</span>
+        <span class="loop-hdr-lbl">Audition</span>
+        <span class="audition-sub">Live loop · virtual kit · MIDI monitor</span>
+        <div class="audition-inline" onclick="event.stopPropagation()">
+          <button id="vmod-btn" class="btn-secondary tb-btn" onclick="toggleVirtualModule()"
+            title="Virtual module — play the kit being edited from the pads or number keys">Virtual</button>
+          <span id="vm-vel-wrap" style="display:none;align-items:center;gap:3px;font-size:.7rem;color:#888;">
+            <input id="vm-vel" type="range" min="1" max="127" value="100" style="width:54px;vertical-align:middle;"
+              title="Keyboard-hit velocity (number keys 1–0)"></span>
+          <button id="midi-btn" class="btn-secondary tb-btn" onclick="toggleMidi()"
+            title="Enable MIDI monitor — hit a pad to see it light up">MIDI</button>
+          <span id="loop-toggle-arrow" style="font-size:.6rem;color:#657066;margin-left:3px;">&#9654;</span>
+        </div>
       </div>
       <div id="loop-body" style="display:none;">
         <div class="loop-controls">
@@ -251,6 +303,10 @@
 
   <!-- Right: instrument browser -->
   <section id="inst-panel">
+    <div class="context-head">
+      <div><span class="context-eyebrow">Sounds workspace</span><strong>Instrument library</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
     <div style="padding:6px 12px 0;">
     <div id="assign-target" class="assign-target empty">Click a pad or jack to assign instruments</div>
     <!-- Import WAV form -->
@@ -311,12 +367,70 @@
     </div><!-- /padding wrapper -->
   </section>
 
+  <!-- Right: advanced contextual workspaces -->
+  <section id="advanced-panel" aria-label="Advanced workspace">
+    <div class="context-head">
+      <div><span id="advanced-eyebrow" class="context-eyebrow">Advanced workspace</span><strong id="advanced-title">Module controls</strong></div>
+      <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
+    </div>
+    <div id="advanced-body" class="advanced-body"></div>
+  </section>
+
 </div>
 <!-- engine.js installs the /api fetch interceptor and sets window.VIEWER BEFORE
      app.js runs, then dynamically injects app.js as a classic script so the
      extracted frontend (global funcs + inline onclick) works unchanged. -->
 <script type="module" src="engine.js"></script>
 <div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
+
+<!-- Deploy to Module workflow -->
+<div id="deploy-modal" role="dialog" aria-modal="true" aria-labelledby="deploy-title"
+     onclick="if(event.target===this)closeDeploy()">
+  <div class="deploy-console">
+    <div class="deploy-head">
+      <div class="deploy-mark" aria-hidden="true">SD</div>
+      <div class="deploy-head-copy"><small>Hardware transfer channel</small><strong id="deploy-title">Deploy to Module</strong></div>
+      <button class="deploy-close" type="button" onclick="closeDeploy()" aria-label="Close deployment">&#x2715;</button>
+    </div>
+    <div class="deploy-rail" aria-label="Deployment progress">
+      <div id="deploy-stage-preflight" class="deploy-stage active"><i>1</i><span>Preflight</span></div>
+      <div id="deploy-stage-transfer" class="deploy-stage"><i>2</i><span>Transfer</span></div>
+      <div id="deploy-stage-verify" class="deploy-stage"><i>3</i><span>Verify</span></div>
+    </div>
+    <div id="deploy-body" class="deploy-body"></div>
+    <div class="deploy-actions">
+      <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
+      <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
+      <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Physical setup profiles -->
+<div id="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setup-title"
+     onclick="if(event.target===this)closeSetupProfiles()">
+  <div class="setup-rack">
+    <header class="setup-head">
+      <div class="setup-emblem" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div><small>Performance hardware library</small><strong id="setup-title">Physical setup profiles</strong></div>
+      <span id="setup-profile-count">0 saved slots</span>
+      <button type="button" onclick="closeSetupProfiles()" aria-label="Close physical setup profiles">&#x2715;</button>
+    </header>
+    <section class="setup-capture">
+      <div><small>Capture the map in front of you</small><strong>Save current arrangement as a rig</strong><p>Positions, shapes, finishes, labels, and mirrored/Y-split pieces are saved. Kit sounds are not.</p></div>
+      <div class="setup-name-row"><input id="setup-profile-name" maxlength="48" placeholder="e.g. Open-hand dual hi-hat"
+        onkeydown="if(event.key==='Enter')saveCurrentSetupProfile()"><button class="btn-primary" onclick="saveCurrentSetupProfile()">Save new setup</button></div>
+    </section>
+    <div id="setup-profile-list" class="setup-slot-grid"></div>
+    <footer class="setup-foot">
+      <span>Edits auto-save to the active rig slot.</span>
+      <button onclick="exportLayout()">Export active JSON</button>
+      <button onclick="document.getElementById('layout-file').click()">Import setup JSON</button>
+      <button onclick="closeSetupProfiles()">Done</button>
+    </footer>
+  </div>
+</div>
 
 <!-- Kit diff modal -->
 <div id="diff-modal" onclick="if(event.target===this)closeDiffModal()">

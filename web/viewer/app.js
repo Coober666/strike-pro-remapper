@@ -969,6 +969,16 @@ function togglePatchPanel() {
 let padOverrides = {};
 try { padOverrides = JSON.parse(localStorage.getItem('strike_pad_overrides') || '{}'); } catch(e) {}
 
+// Physical setup profiles live independently from kits. A profile describes the
+// hardware shown on the performance surface — including mirrors/Y-splits — while
+// kit assignments and sound parameters remain untouched.
+const SETUP_PROFILE_KEY = 'strike_setup_profiles_v1';
+let setupProfileStore = {version:1, activeId:null, profiles:[]};
+try {
+  const storedSetups = JSON.parse(localStorage.getItem(SETUP_PROFILE_KEY) || 'null');
+  if (storedSetups && Array.isArray(storedSetups.profiles)) setupProfileStore = storedSetups;
+} catch(e) {}
+
 // Drag state
 let dragState = null;  // {id, origCx, origCy, startX, startY, moved}
 
@@ -1128,15 +1138,29 @@ const PAD_GROUPS = {
 const PAD_TO_GROUP = {};
 for (const [k, g] of Object.entries(PAD_GROUPS)) for (const pid of g.pads) PAD_TO_GROUP[pid] = k;
 
-// Patch panel rows: each entry is [groupKey, displayNumber, label]
+// Physical bay rows: [groupKey, displayNumber, label, optionalJackKey, optionalPadIds].
+// The optional fields distinguish the hi-hat trigger jack from its controller
+// while both continue to share the same HI-HAT editing group.
 // Top row = cymbal inputs (07-12); bottom row = drum inputs (01-06) + HH control
 const JACK_ROWS = [
-  [['HI-HAT', '07','HH'],      ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
+  [['HI-HAT', '07','HH','HI-HAT',['H1B','H1E']], ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
    ['RIDE 2',  '10','RIDE 2'],  ['CRASH 2','11','CRASH 2'], ['CRASH 3','12','CRASH 3']],
   [['KICK',   '01','KICK'],    ['SNARE',  '02','SNARE'],    ['TOM 1', '03','TOM 1'],
    ['TOM 2',  '04','TOM 2'],   ['TOM 3',  '05','TOM 3'],    ['TOM 4', '06','TOM 4'],
-   ['HI-HAT', '',  'HH CTRL']],
+   ['HI-HAT', '',  'HH CTRL','HH CTRL',['H1F']]],
 ];
+
+function jackPadIds(entry) {
+  return entry[4] || PAD_GROUPS[entry[0]]?.pads || [];
+}
+
+function inputJackForPad(padId) {
+  if (!padId) return null;
+  for (const row of JACK_ROWS) for (const entry of row) {
+    if (jackPadIds(entry).includes(padId)) return entry;
+  }
+  return null;
+}
 
 // Return [id, type, cx, cy, rx, ry, lbl] with any user overrides applied
 function effectivePadDef(id) {
@@ -1155,12 +1179,21 @@ function effectivePadDef(id) {
 
 function savePadOverrides() {
   try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  syncActiveSetupProfile();
   updateLayoutBadge();
 }
 
 function updateLayoutBadge() {
   const count = Object.keys(padOverrides).length;
   const btn   = document.getElementById('reset-layout-btn');
+  const setupBtn = document.getElementById('setup-profiles-btn');
+  const active = activeSetupProfile();
+  if (setupBtn) {
+    setupBtn.textContent = active ? `◉ ${active.name}` : '◉ Setup profiles';
+    setupBtn.title = active
+      ? `${active.name} is active. Map changes save to this physical setup automatically.`
+      : 'Save and switch between physical drum and cymbal arrangements.';
+  }
   if (!btn) return;
   if (count) {
     btn.textContent   = 'Reset layout ●';
@@ -1261,10 +1294,186 @@ function resetAllOverrides() {
 
 // ── Save / load kit layout (positions, sizes, rotation, finish, mirrors) ────────
 const VALID_PAD_IDS = new Set(PAD_DEFS.map(d => d[0]));
+function cleanLayoutOverrides(overrides) {
+  const clean = {};
+  if (!overrides || typeof overrides !== 'object') return clean;
+  for (const [id, value] of Object.entries(overrides)) {
+    if (VALID_PAD_IDS.has(id) && value && typeof value === 'object' && !Array.isArray(value)) {
+      clean[id] = JSON.parse(JSON.stringify(value));
+    }
+  }
+  return clean;
+}
+
+function persistSetupProfiles() {
+  try { localStorage.setItem(SETUP_PROFILE_KEY, JSON.stringify(setupProfileStore)); } catch(e) {}
+}
+
+function activeSetupProfile() {
+  return setupProfileStore.profiles.find(p => p.id === setupProfileStore.activeId) || null;
+}
+
+function syncActiveSetupProfile() {
+  const active = activeSetupProfile();
+  if (!active) return;
+  active.overrides = cleanLayoutOverrides(padOverrides);
+  active.updated = new Date().toISOString();
+  persistSetupProfiles();
+}
+
+function initializeSetupProfiles() {
+  const now = new Date().toISOString();
+  setupProfileStore = {
+    version: 1,
+    activeId: typeof setupProfileStore.activeId === 'string' ? setupProfileStore.activeId : null,
+    profiles: (setupProfileStore.profiles || []).filter(p => p && typeof p === 'object').map((p, i) => ({
+      id: String(p.id || `setup-${Date.now()}-${i}`),
+      name: String(p.name || `Setup ${i + 1}`).trim().slice(0, 48) || `Setup ${i + 1}`,
+      created: p.created || now,
+      updated: p.updated || p.created || now,
+      overrides: cleanLayoutOverrides(p.overrides),
+    })),
+  };
+  const active = activeSetupProfile();
+  if (active) {
+    padOverrides = cleanLayoutOverrides(active.overrides);
+  } else if (Object.keys(cleanLayoutOverrides(padOverrides)).length) {
+    // Migrate the layout users already built before profiles existed.
+    const migrated = {
+      id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'My current setup', created: now, updated: now,
+      overrides: cleanLayoutOverrides(padOverrides),
+    };
+    setupProfileStore.profiles.unshift(migrated);
+    setupProfileStore.activeId = migrated.id;
+  } else {
+    setupProfileStore.activeId = null;
+  }
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+}
+initializeSetupProfiles();
+
+function setupProfileName(fallback = '') {
+  const input = document.getElementById('setup-profile-name');
+  const value = (fallback || input?.value || '').trim().replace(/[\\/:*?"<>|]/g, '').slice(0, 48);
+  return value || `Setup ${setupProfileStore.profiles.length + 1}`;
+}
+
+function createSetupProfile(name, overrides = padOverrides) {
+  const now = new Date().toISOString();
+  const profile = {
+    id: `setup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: setupProfileName(name), created: now, updated: now,
+    overrides: cleanLayoutOverrides(overrides),
+  };
+  setupProfileStore.profiles.unshift(profile);
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  setMsg(`Saved physical setup: ${profile.name}`);
+  return profile;
+}
+
+function saveCurrentSetupProfile() {
+  createSetupProfile(document.getElementById('setup-profile-name')?.value || '');
+  const input = document.getElementById('setup-profile-name');
+  if (input) input.value = '';
+}
+
+function applySetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  setupProfileStore.activeId = profile.id;
+  padOverrides = cleanLayoutOverrides(profile.overrides);
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', JSON.stringify(padOverrides)); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Physical setup active: ${profile.name}`);
+}
+
+function duplicateSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile) return;
+  createSetupProfile(`${profile.name} copy`, profile.overrides);
+}
+
+async function deleteSetupProfile(id) {
+  const profile = setupProfileStore.profiles.find(p => p.id === id);
+  if (!profile || !await appConfirm(`Delete physical setup “${profile.name}”?\n\nYour current kit and sounds will not change.`, 'Delete setup')) return;
+  setupProfileStore.profiles = setupProfileStore.profiles.filter(p => p.id !== id);
+  if (setupProfileStore.activeId === id) setupProfileStore.activeId = null;
+  persistSetupProfiles(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg(`Deleted physical setup: ${profile.name}`);
+}
+
+function applyFactorySetup() {
+  setupProfileStore.activeId = null;
+  padOverrides = {};
+  persistSetupProfiles();
+  try { localStorage.setItem('strike_pad_overrides', '{}'); } catch(e) {}
+  renderDrumMap(); renderPadDetail(); updateLayoutBadge(); renderSetupProfiles();
+  if (document.body.dataset.workspace === 'layout') renderAdvancedWorkspace('layout');
+  setMsg('Factory physical layout active');
+}
+
+function setupFingerprint(overrides) {
+  const ov = overrides || {};
+  return JACK_ROWS.flat().map(entry => {
+    const ids = jackPadIds(entry);
+    const changed = ids.some(id => ov[id] && Object.keys(ov[id]).length);
+    const split = ids.some(id => ov[id]?.mirror);
+    const label = entry[3] || entry[2];
+    return `<i class="${changed ? 'wired' : ''}${split ? ' split' : ''}" title="${escHtml(label)}"><span>${escHtml(entry[1] || 'C')}</span></i>`;
+  }).join('');
+}
+
+function renderSetupProfiles() {
+  const list = document.getElementById('setup-profile-list');
+  const count = document.getElementById('setup-profile-count');
+  if (!list) return;
+  if (count) count.textContent = `${setupProfileStore.profiles.length} saved slot${setupProfileStore.profiles.length === 1 ? '' : 's'}`;
+  const active = activeSetupProfile();
+  const factory = `<article class="setup-slot${active ? '' : ' active'}" data-profile-id="factory">
+    <div class="setup-slot-top"><span class="setup-slot-id">FACTORY</span>${active ? '' : '<span class="setup-active">ACTIVE</span>'}</div>
+    <strong>Strike default layout</strong><p>Standard module arrangement · no visual overrides</p>
+    <div class="setup-fingerprint">${setupFingerprint({})}</div>
+    <div class="setup-slot-actions"><button onclick="applyFactorySetup()" ${active ? '' : 'disabled'}>Use factory layout</button></div>
+  </article>`;
+  const cards = setupProfileStore.profiles.map((profile, index) => {
+    const isActive = profile.id === setupProfileStore.activeId;
+    const changed = Object.keys(profile.overrides || {}).length;
+    const when = new Date(profile.updated || profile.created).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    return `<article class="setup-slot${isActive ? ' active' : ''}" data-profile-id="${profile.id}">
+      <div class="setup-slot-top"><span class="setup-slot-id">RIG ${String(index + 1).padStart(2, '0')}</span>${isActive ? '<span class="setup-active">ACTIVE · AUTO-SAVING</span>' : `<span class="setup-date">${escHtml(when)}</span>`}</div>
+      <strong>${escHtml(profile.name)}</strong><p>${changed} customized zone${changed === 1 ? '' : 's'} · sounds stay with the kit</p>
+      <div class="setup-fingerprint">${setupFingerprint(profile.overrides)}</div>
+      <div class="setup-slot-actions">
+        <button class="${isActive ? '' : 'primary'}" onclick="applySetupProfile('${profile.id}')" ${isActive ? 'disabled' : ''}>${isActive ? 'In use' : 'Use this setup'}</button>
+        <button onclick="duplicateSetupProfile('${profile.id}')">Duplicate</button>
+        <button class="danger" onclick="deleteSetupProfile('${profile.id}')">Delete</button>
+      </div>
+    </article>`;
+  }).join('');
+  list.innerHTML = factory + cards;
+}
+
+function openSetupProfiles() {
+  renderSetupProfiles();
+  document.getElementById('setup-modal').classList.add('open');
+  setTimeout(() => document.getElementById('setup-profile-name')?.focus(), 0);
+}
+function closeSetupProfiles() { document.getElementById('setup-modal').classList.remove('open'); }
+
 function exportLayout() {
+  const active = activeSetupProfile();
   const payload = {
     format: 'strike-remap-layout', version: 1,
-    saved: new Date().toISOString(), overrides: padOverrides,
+    saved: new Date().toISOString(), name: active?.name || 'Physical setup', overrides: padOverrides,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -1284,17 +1493,11 @@ async function importLayout(file) {
     const ov = (data && data.overrides && typeof data.overrides === 'object') ? data.overrides
              : (data && typeof data === 'object' && !data.format) ? data : null;  // tolerate a bare overrides object
     if (!ov) { setMsg('Not a valid layout file', true); return; }
-    // Keep only recognized pad IDs; ignore anything else.
-    const clean = {};
-    for (const [id, o] of Object.entries(ov)) {
-      if (VALID_PAD_IDS.has(id) && o && typeof o === 'object') clean[id] = o;
-    }
-    padOverrides = clean;
-    savePadOverrides();
-    renderDrumMap();
-    renderPadDetail();
+    const clean = cleanLayoutOverrides(ov);
+    const fileName = file.name?.replace(/\.json$/i, '').replace(/^strike-kit-layout-/, '') || 'Imported setup';
+    const profile = createSetupProfile(data.name || fileName, clean);
     const n = Object.keys(clean).length;
-    setMsg(`Loaded layout (${n} customized pad${n === 1 ? '' : 's'})`);
+    setMsg(`Imported ${profile.name} (${n} customized pad${n === 1 ? '' : 's'})`);
   } catch (err) {
     setMsg('Could not read layout file: ' + err.message, true);
   }
@@ -1313,15 +1516,90 @@ function renderPatchPanel() {
         + `<div class="jack-lbl">${escHtml(lbl)}</div></div>`;
     }).join('')}</div>`
   ).join('');
+  renderInputBay();
 }
 
-function selectGroupFromPanel(grpKey) {
+function inputGroupSummary(group) {
+  const assigned = [];
+  let missing = 0;
+  for (const pid of group.pads) {
+    const pad = pads.find(p => p.id === pid);
+    if (!pad) continue;
+    for (const layer of ['a', 'b']) {
+      const path = pad[`layer_${layer}_path`];
+      const name = pad[`layer_${layer}_name`];
+      if (path && brokenPaths.has(path)) missing++;
+      if (name && name !== '—' && !assigned.includes(name)) assigned.push(name);
+    }
+  }
+  if (!assigned.length) return pads.length ? 'No sound assigned' : 'Load a kit to inspect assignments';
+  const visible = assigned.slice(0, 2).join(' + ');
+  return visible + (assigned.length > 2 ? ` +${assigned.length - 2}` : '') + (missing ? ' · missing file' : '');
+}
+
+function renderInputBay() {
+  const body = document.getElementById('input-bay-body');
+  if (!body) return;
+  const bankLabels = ['CYMBALS · INPUTS 07–12', 'DRUMS · INPUTS 01–06 + HH CONTROL'];
+  body.innerHTML = '<div class="input-backplane">' + JACK_ROWS.map((row, rowIndex) =>
+    `<section class="input-back-bank"><div class="input-bank-label">${bankLabels[rowIndex]}</div>`
+    + `<div class="input-back-row" style="--jack-count:${row.length}">`
+    + row.map(entry => {
+      const [key, num, label] = entry;
+      const jackKey = entry[3] || key;
+      const group = PAD_GROUPS[key];
+      const activeJack = inputJackForPad(selectedMapPad);
+      const isCurrent = activeJack ? (activeJack[3] || activeJack[0]) === jackKey : selectedGroup === key;
+      const current = isCurrent ? ' current' : '';
+      const summary = inputGroupSummary({...group, pads:jackPadIds(entry)});
+      return `<button type="button" class="input-back-jack${current}" onclick="chooseInputFromBay('${key}','${jackKey}')"`
+        + ` aria-pressed="${isCurrent ? 'true' : 'false'}" title="${escHtml(summary)}">`
+        + `<span class="input-back-plug" aria-hidden="true"></span>`
+        + `<span class="input-back-num">${escHtml(num || 'CTRL')}</span>`
+        + `<span class="input-back-name">${escHtml(label)}</span>`
+        + `<span class="input-back-dest">${escHtml(jackPadIds(entry).join(' · '))}</span></button>`;
+    }).join('') + '</div></section>'
+  ).join('') + '</div>';
+  const route = document.getElementById('input-bay-route');
+  if (route) {
+    const activeJack = inputJackForPad(selectedMapPad);
+    const group = activeJack && PAD_GROUPS[activeJack[0]];
+    const jackLabel = activeJack ? `${activeJack[1] || 'CTRL'} ${activeJack[2]}` : '';
+    route.innerHTML = group
+      ? `<strong>${escHtml(jackLabel)}</strong> &rarr; ${escHtml(jackPadIds(activeJack).join(' · '))}`
+      : 'SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP';
+  }
+}
+
+function chooseInputFromBay(grpKey, jackKey) {
+  let entry = null;
+  for (const row of JACK_ROWS) for (const candidate of row) {
+    if (candidate[0] === grpKey && (candidate[3] || candidate[0]) === jackKey) entry = candidate;
+  }
+  selectGroupFromPanel(grpKey, entry ? jackPadIds(entry)[0] : null);
+  setWorkspaceMode('pad');
+}
+
+function focusInputBay() {
+  setWorkspaceMode('pad');
+  const dock = document.getElementById('input-bay-dock');
+  if (!dock) return;
+  dock.classList.remove('attention');
+  void dock.offsetWidth;
+  dock.classList.add('attention');
+  if (window.innerWidth <= 900) dock.scrollIntoView({behavior:'smooth', block:'center'});
+  const current = dock.querySelector('.input-back-jack.current') || dock.querySelector('.input-back-jack');
+  if (current) current.focus({preventScroll:true});
+  setTimeout(() => dock.classList.remove('attention'), 560);
+}
+
+function selectGroupFromPanel(grpKey, preferredPad) {
   selectedGroup = grpKey;
   const g = PAD_GROUPS[grpKey];
   if (g && g.pads.length) {
     // Keep selectedPad if it's already in this group, otherwise default to first pad / layer A
-    const keepPad = selectedPad && g.pads.includes(selectedPad.id);
-    const pid = keepPad ? selectedPad.id : g.pads[0];
+    const keepPad = !preferredPad && selectedPad && g.pads.includes(selectedPad.id);
+    const pid = preferredPad && g.pads.includes(preferredPad) ? preferredPad : (keepPad ? selectedPad.id : g.pads[0]);
     selectedMapPad = pid;
     if (!keepPad) selectedPad = {id: pid, layer: 'a'};
   }
@@ -1515,6 +1793,9 @@ function setMsg(txt, err=false) {
   const el = document.getElementById('msg');
   el.textContent = txt;
   el.className = err ? 'err' : '';
+  el.onclick = null;
+  el.title = '';
+  el.style.cursor = '';
 }
 
 function setDirtyState(dirty, cnt, labels) {
@@ -1565,8 +1846,151 @@ function menuToggle(id) {
   if (!isOpen) el.style.display = '';
 }
 
+function setWorkspaceMode(mode) {
+  const modes = ['pad', 'sounds', 'fx', 'history', 'tools', 'repair', 'layout'];
+  if (!modes.includes(mode)) return;
+  document.body.dataset.workspace = mode;
+  const navMode = ['repair', 'layout'].includes(mode) ? 'tools' : mode;
+  document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
+    const active = btn.dataset.workspace === navMode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  if (mode === 'sounds') {
+    renderInstruments();
+  } else if (['fx', 'history', 'tools', 'repair', 'layout'].includes(mode)) {
+    renderAdvancedWorkspace(mode);
+  }
+  const contextEyebrow = document.getElementById('context-eyebrow');
+  const contextTitle = document.getElementById('context-title');
+  const contextAction = document.getElementById('context-action');
+  if (contextEyebrow && contextTitle && contextAction) {
+    contextEyebrow.textContent = 'Pad workspace';
+    contextTitle.textContent = 'Selected trigger';
+    contextAction.textContent = 'Browse sounds';
+    contextAction.onclick = () => setWorkspaceMode('sounds');
+  }
+  try { localStorage.setItem('strike_workspace', mode); } catch(e) {}
+}
+
+function openWorkspaceUtility(kind) {
+  if (kind === 'kit') { menuToggle('kit-menu'); return; }
+  if (['fx', 'history', 'tools'].includes(kind)) setWorkspaceMode(kind);
+}
+
+function awModule(channel, title, copy, actions='', content='') {
+  return `<section class="aw-module" data-channel="${channel}">
+    <div class="aw-module-head"><div><h3>${title}</h3><p>${copy}</p></div></div>
+    ${actions ? `<div class="aw-actions">${actions}</div>` : ''}${content}
+  </section>`;
+}
+
+function fxName(d, fx) {
+  return fx.type === 255 ? 'Off' : (d.fx_types[fx.type] || `Type ${fx.type}`);
+}
+
+async function renderAdvancedWorkspace(kind) {
+  const body = document.getElementById('advanced-body');
+  const eyebrow = document.getElementById('advanced-eyebrow');
+  const title = document.getElementById('advanced-title');
+  if (!body || !eyebrow || !title) return;
+  const headings = {
+    fx: ['Kit processing', 'FX / EQ / compressor'],
+    history: ['Kit ledger', 'History and comparison'],
+    tools: ['Utility bank', 'Module and editor tools'],
+    repair: ['Library integrity', 'Repair missing sounds'],
+    layout: ['Performance surface', 'Layout mode'],
+  };
+  const head = headings[kind] || headings.tools;
+  eyebrow.textContent = head[0]; title.textContent = head[1];
+  body.innerHTML = '<div class="aw-empty">Reading the current kit state…</div>';
+
+  if (kind === 'fx') {
+    if (!pads.length) {
+      body.innerHTML = '<div class="aw-intro">Load a kit to inspect and edit its master processing chain.</div>'
+        + awModule('FX', 'No kit loaded', 'FX settings belong to a kit. Open one from the Kits menu to continue.');
+      return;
+    }
+    const d = await fetch('/api/kit_fx').then(r => r.json()).catch(() => ({error:'FX state unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    if (d.error) { body.innerHTML = `<div class="aw-empty">${escHtml(d.error)}</div>`; return; }
+    const rvName = d.reverb_names[d.reverb.type] || `Type ${d.reverb.type}`;
+    const compName = d.comp_presets[d.eq_comp.comp_preset] || `Preset ${d.eq_comp.comp_preset}`;
+    body.innerHTML = `<div class="aw-intro">The kit master chain sits after every pad. Per-pad send levels remain in the Pad workspace; these controls shape the shared returns and output.</div>
+      <div class="aw-status-line">Loaded chain · changes join kit undo history</div>
+      ${awModule('REV', `Reverb · ${escHtml(rvName)}`, 'Shared ambience return for the loaded kit.',
+        '<button class="primary" onclick="showKitFxModal()">Open full FX editor</button>',
+        `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.reverb.level}%"></i></span><b>${d.reverb.level}</b></div><div class="aw-meter"><em>Size</em><span class="aw-meter-track"><i style="--meter:${d.reverb.size}%"></i></span><b>${d.reverb.size}</b></div><div class="aw-meter"><em>Color</em><span class="aw-meter-track"><i style="--meter:${d.reverb.color}%"></i></span><b>${d.reverb.color}</b></div></div>`)}
+      ${awModule('FX1', `FX1 · ${escHtml(fxName(d,d.fx1))}`, 'First shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx1.level}%"></i></span><b>${d.fx1.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx1.feedback}%"></i></span><b>${d.fx1.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx1.depth}%"></i></span><b>${d.fx1.depth}</b></div></div>`)}
+      ${awModule('FX2', `FX2 · ${escHtml(fxName(d,d.fx2))}`, 'Second shared effect return.', '', `<div class="aw-meters"><div class="aw-meter"><em>Level</em><span class="aw-meter-track"><i style="--meter:${d.fx2.level}%"></i></span><b>${d.fx2.level}</b></div><div class="aw-meter"><em>Feedback</em><span class="aw-meter-track"><i style="--meter:${d.fx2.feedback}%"></i></span><b>${d.fx2.feedback}</b></div><div class="aw-meter"><em>Depth</em><span class="aw-meter-track"><i style="--meter:${d.fx2.depth}%"></i></span><b>${d.fx2.depth}</b></div></div>`)}
+      ${awModule('OUT', `Output · ${escHtml(compName)}`, `Compressor threshold ${d.eq_comp.threshold_db} dB · output ${d.eq_comp.output_db} dB.`, '<button onclick="showKitFxModal()">Edit EQ and compressor</button>')}`;
+    return;
+  }
+
+  if (kind === 'history') {
+    const data = await fetch('/api/snapshots').then(r => r.json()).catch(() => ({snapshots:[], error:'History unavailable'}));
+    if (document.body.dataset.workspace !== kind) return;
+    const snaps = data.snapshots || [];
+    const rows = snaps.slice(0, 5).map(s => `<div class="aw-ledger-row"><span>${escHtml(s.kind || 'manual')}</span><strong>${escHtml(s.label || s.id)}</strong><span>${tmFmtTime(s.iso,s.ts)}</span></div>`).join('');
+    body.innerHTML = `<div class="aw-intro">Snapshots are restore points for the working kit. Restores remain undoable; comparison never changes kit data.</div>
+      <div class="aw-status-line${data.error ? ' warn' : ''}">${data.error ? escHtml(data.error) : `${snaps.length} snapshot${snaps.length===1?'':'s'} · ${escHtml(data.kit || kitName || 'current kit')}`}</div>
+      ${awModule('TIME', 'Kit time machine', 'Scrub, pin, compare, restore, or delete exact kit snapshots.', '<button class="primary" onclick="openTimeMachine()">Open timeline</button><button onclick="advancedSnapshotNow()">Snapshot now</button>', rows ? `<div class="aw-ledger">${rows}</div>` : '<div class="aw-empty">No snapshots yet. Loading or saving a kit creates them automatically.</div>')}
+      ${awModule('DIFF', 'Compare with another kit', 'See exact per-pad assignment and parameter differences without modifying either kit.', '<button onclick="showDiffModal()">Choose comparison kit</button>')}`;
+    return;
+  }
+
+  if (kind === 'repair') {
+    const count = brokenPaths.size;
+    body.innerHTML = `<div class="aw-intro">Repair reconnects instrument references when a library moved between computers or storage volumes. The kit stays lossless until you save it.</div>
+      <div class="aw-status-line${count ? ' warn' : ''}">${count ? `${count} missing instrument reference${count===1?'':'s'}` : 'All assigned instrument paths resolve on this computer'}</div>
+      ${awModule('PATH', count ? 'Review suggested replacements' : 'Library paths are healthy', count ? 'The repair wizard ranks filename and library matches, but nothing changes until you apply the selected replacements.' : 'No repair action is required for the loaded kit.', count ? '<button class="primary" onclick="showRelinkModal()">Open guided repair</button>' : '<button onclick="checkPaths();renderAdvancedWorkspace(\'repair\')">Check again</button>')}
+      ${awModule('MOVE', 'Moving between Windows and macOS', 'Keep relative Instruments and Samples folders together. Repair is for changed roots or renamed content, not conversion of kit data.')}`;
+    return;
+  }
+
+  if (kind === 'layout') {
+    const changed = Object.values(padOverrides).filter(v => v && Object.keys(v).length).length;
+    const activeSetup = activeSetupProfile();
+    body.innerHTML = `<div class="aw-intro">Physical setups describe the kit you actually sit behind—pad positions, shapes, finishes, and mirrored/Y-split pieces. Sound assignments remain with the loaded kit.</div>
+      <div class="aw-status-line">${activeSetup ? `Active rig · ${escHtml(activeSetup.name)} · auto-saving` : 'Factory layout active'} · ${changed} customized map element${changed===1?'':'s'}</div>
+      ${awModule('RIG', 'Physical setup profiles', 'Switch your hardware visualization without changing the loaded kit. Active profile edits save automatically.', '<button class="primary" onclick="openSetupProfiles()">Manage setup profiles</button>')}
+      ${awModule('MAP', 'Customize the kit map', 'Select a pad, then drag it or use the Pad workspace customization controls.', '<button class="primary" onclick="setWorkspaceMode(\'pad\')">Select and edit pads</button><button onclick="resetAllOverrides();renderAdvancedWorkspace(\'layout\')">Reset layout</button>')}
+      ${awModule('FILE', 'Move a setup between computers', 'Export the active rig as JSON, then import it on Windows or macOS.', '<button onclick="exportLayout()">Export active setup</button><button onclick="document.getElementById(\'layout-file\').click()">Import setup file</button>')}
+      ${awModule('BATCH', 'Batch parameter editing', 'Select multiple pads on the map and apply one confirmed parameter value to all of them.', `<button onclick="advancedStartBatch()">${batchMode ? 'Return to active batch' : 'Start batch edit'}</button>`)}`;
+    return;
+  }
+
+  const toolData = await api('/tools').catch(() => ({tools:[]}));
+  if (document.body.dataset.workspace !== kind) return;
+  const toolRows = (toolData.tools || []).map(t => `<div class="tool-item"><span title="${escHtml(t.name)}">${escHtml(t.label)}</span><button class="btn-secondary" onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button></div>`).join('');
+  body.innerHTML = `<div class="aw-intro">Utilities that affect playback, hardware communication, file repair, or developer output live here—separate from routine pad editing.</div>
+    <div class="aw-status-line">Editor utilities ready</div>
+    ${awModule('PLAY', 'Audition system', 'Live Loop, the virtual kit, and MIDI monitoring share one drawer beneath the map.', `<button class="primary" onclick="advancedOpenAudition()">Open audition drawer</button><button onclick="advancedToggleVirtual()">Virtual ${vmActive?'on':'off'}</button><button onclick="advancedToggleMidi()">MIDI ${midiActive?'on':'off'}</button>`)}
+    ${awModule('MAP', 'Map and batch tools', 'Customize the performance surface or edit several pads at once.', '<button onclick="setWorkspaceMode(\'layout\')">Open layout mode</button><button onclick="advancedStartBatch()">Start batch edit</button>')}
+    ${awModule('PATH', 'Library repair', `${brokenPaths.size ? brokenPaths.size + ' missing instrument reference(s)' : 'All assigned paths currently resolve.'}`, '<button onclick="setWorkspaceMode(\'repair\')">Open repair workspace</button>')}
+    ${awModule('MIDI', 'Trigger settings backup', 'Capture, save, load, and cautiously restore the module\'s raw SysEx trigger dump. Web MIDI requires Chrome or Edge.', '<button onclick="showTrigModal()">Open trigger backup</button>')}
+    ${awModule('DEV', 'Developer scripts', 'Low-level inspection and kit-generation utilities. Output remains local to this session.', '', `<div id="advanced-tools-list" class="aw-tool-list">${toolRows || '<div class="aw-empty">No developer scripts available.</div>'}</div><div id="advanced-tool-output" class="advanced-tool-output"></div>`)}`;
+}
+
+async function advancedSnapshotNow() {
+  const data = await api('/snapshot', {kind:'manual'});
+  if (data.error) { setMsg(data.error, true); return; }
+  setMsg(data.snapshot?.deduped ? 'No changes since the last snapshot' : 'Snapshot saved');
+  renderAdvancedWorkspace('history');
+}
+
+function advancedOpenAudition() {
+  if (!loopPanelOpen) toggleLoopPanel();
+  document.getElementById('loop-panel')?.scrollIntoView({behavior:'smooth', block:'nearest'});
+  setMsg('Audition drawer open');
+}
+
+async function advancedToggleVirtual() { await toggleVirtualModule(); renderAdvancedWorkspace('tools'); }
+async function advancedToggleMidi() { await toggleMidi(); renderAdvancedWorkspace('tools'); }
+function advancedStartBatch() { if (!batchMode) batchToggle(); setWorkspaceMode('pad'); }
+
 document.addEventListener('click', e => {
-  if (!e.target.closest('.tb-group')) {
+  if (!e.target.closest('.tb-group') && !e.target.closest('.workspace-tab')) {
     closeAllPopovers();
   }
 });
@@ -1614,7 +2038,7 @@ function applyKitData(data, path, opts) {
   kitNameEl.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = data.skt_lossless === false ? '' : 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -1627,6 +2051,9 @@ function applyKitData(data, path, opts) {
   if (liveLoop?.ctx) liveLoop.prefetchAll();
   refreshKitSize();
   checkPaths();
+  if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+    renderAdvancedWorkspace(document.body.dataset.workspace);
+  }
 }
 
 async function openKit(idx) {
@@ -1815,7 +2242,10 @@ function renderDrumMap() {
   // Which pad IDs are in the currently selected group?
   const groupMembers = new Set();
   if (selectedGroup && PAD_GROUPS[selectedGroup]) {
-    for (const pid of PAD_GROUPS[selectedGroup].pads) groupMembers.add(pid);
+    const activeJack = inputJackForPad(selectedMapPad);
+    const routedPads = activeJack && activeJack[0] === selectedGroup
+      ? jackPadIds(activeJack) : PAD_GROUPS[selectedGroup].pads;
+    for (const pid of routedPads) groupMembers.add(pid);
   }
 
   const parts = [];
@@ -1864,19 +2294,20 @@ function renderDrumMap() {
     if (isBatchSel) {
       ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#e0a030" stroke-width="2.4" stroke-dasharray="4,2" pointer-events="none"${ringRot}/>`;
     } else if (inGroup && !isSel && !isAssT) {
-      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#4a7fd0" stroke-width="1.6" opacity="0.75" pointer-events="none"${ringRot}/>`;
+      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#d0aa5b" stroke-width="2.2" opacity="0.92" pointer-events="none"${ringRot}/>`;
     }
 
     let glow = '';
     if (isSel)           glow = 'filter:drop-shadow(0 0 6px #f0b32e) drop-shadow(0 0 13px #f0b32e70);';
     else if (isAssT)     glow = 'filter:drop-shadow(0 0 6px #44aaff) drop-shadow(0 0 12px #44aaff70);';
     else if (isBatchSel) glow = 'filter:drop-shadow(0 0 6px #e0a030a0);';
+    else if (inGroup)    glow = 'filter:drop-shadow(0 0 5px #d0aa5baa) drop-shadow(0 0 10px #d0aa5b45);';
 
     // Label (base pads only — rim/bell labels are empty in PAD_DEFS)
     let textEl = '';
     if (lbl) {
       const fs = Math.max(7, Math.min(13, ry * 1.2));
-      const lblFill = isSel ? '#ffd86a' : (isBatchSel ? '#e0c060' : (inGroup ? '#dde8ff' : '#eef1f6'));
+      const lblFill = isSel ? '#ffe29a' : (isBatchSel ? '#e0c060' : (inGroup ? '#f0cf87' : '#eef1f6'));
       textEl = `<text x="${cx}" y="${cy + fs * 0.35}" text-anchor="middle" `
         + `font-size="${fs}" fill="${lblFill}" font-family="system-ui,sans-serif" font-weight="700" `
         + `paint-order="stroke" stroke="#000000cc" stroke-width="2.4" stroke-linejoin="round" `
@@ -1910,7 +2341,7 @@ function renderDrumMap() {
 
     const inner = titleEl + sprite + ring + textEl + warnEl;
     (isOverlay ? overlays : parts).push(
-      `<g class="map-pad" data-pid="${id}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
+      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
       + inner + `</g>`);
 
     // Mirror pad: same zone drawn a second time (e.g. dual hi-hats on a Y-splitter)
@@ -1919,7 +2350,7 @@ function renderDrumMap() {
       const link = `<text x="${(scx + srx - 6).toFixed(1)}" y="${(scy - sry + 8).toFixed(1)}" font-size="9" `
         + `fill="#7f8a9c" pointer-events="none" font-family="system-ui,sans-serif">&#x29C9;</text>`;
       (isOverlay ? overlays : parts).push(
-        `<g class="map-pad" data-pid="${id}" transform="translate(${mir.dx},${mir.dy})" `
+        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
         + `style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}',true)">`
         + `<title>${escHtml((padMap[id]?.label || id) + ' (mirror — same zone, shared settings)')}</title>`
         + sprite + ring + textEl + warnEl + link + `</g>`);
@@ -2079,10 +2510,89 @@ function paramSlider(pid, param, val, lo, hi, disabled) {
     + `</div>`;
 }
 
+function inlinePathArg(path) {
+  return encodeURIComponent(String(path || '')).replace(/'/g, '%27');
+}
+
+function rackParamSlider(padId, param, label, value, lo, hi, suffix='') {
+  return `<div class="rack-param">
+    <label>${label}</label>
+    <input type="range" min="${lo}" max="${hi}" value="${Math.min(hi, Math.max(lo, value))}"
+      aria-label="${label}" oninput="this.nextElementSibling.value=this.value+'${suffix}'"
+      onchange="setParam('${padId}','${param}',+this.value)">
+    <output>${value}${suffix}</output>
+  </div>`;
+}
+
+function renderLayerRack() {
+  const el = document.getElementById('layer-rack');
+  if (!el) return;
+  if (!selectedPad || !pads.length) {
+    el.innerHTML = '<div class="layer-rack-empty">Select a pad to open its Layer A / B signal path</div>';
+    return;
+  }
+
+  const pad = pads.find(p => p.id === selectedPad.id);
+  if (!pad) {
+    el.innerHTML = '<div class="layer-rack-empty">The selected trigger is not present in this kit</div>';
+    return;
+  }
+
+  const layerCard = layer => {
+    const upper = layer.toUpperCase();
+    const prefix = layer === 'a' ? 'la' : 'lb';
+    const path = pad[`layer_${layer}_path`];
+    const name = pad[`layer_${layer}_name`] || 'No instrument assigned';
+    const active = selectedPad.layer === layer;
+    const broken = path && brokenPaths.has(path);
+    const encoded = inlinePathArg(path);
+    const status = broken ? 'Missing file' : path ? 'Ready' : 'Empty slot';
+    const actions = path ? `
+      <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Replace</button>
+      <button class="rack-action" title="Preview Layer ${upper}" onclick="previewInstrument(decodeURIComponent('${encoded}'))">&#9654;</button>
+      <button class="rack-action" title="Edit instrument" onclick="openSinEditor(decodeURIComponent('${encoded}'))">Edit</button>
+      <button class="rack-action" title="Find similar sounds" onclick="openSimilar(decodeURIComponent('${encoded}'))">Similar</button>
+      <button class="rack-action danger" title="Clear Layer ${upper}" onclick="clearLayer('${pad.id}','${layer}')">&#x2715;</button>` : `
+      <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Choose sound</button>`;
+    return `<article class="rack-layer${active ? ' active' : ''}${path ? '' : ' empty'}${broken ? ' broken' : ''}">
+      <div class="rack-layer-head">
+        <button class="rack-layer-key" title="Target Layer ${upper}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
+        <div class="rack-layer-title"><small>Layer ${upper}</small><strong title="${escHtml(path || '')}">${escHtml(name)}</strong></div>
+        <span class="rack-layer-status">${status}</span>
+      </div>
+      <div class="rack-actions">${actions}</div>
+      <div class="rack-params">
+        ${rackParamSlider(pad.id, `${prefix}_level`, 'Level', pad[`${prefix}_level`], 0, 127)}
+        ${rackParamSlider(pad.id, `${prefix}_pan`, 'Pan', pad[`${prefix}_pan`], -50, 50)}
+        ${rackParamSlider(pad.id, `${prefix}_pitch`, 'Tune', pad[`${prefix}_pitch`], -12, 12, 'st')}
+      </div>
+    </article>`;
+  };
+
+  const hasBoth = !!(pad.layer_a_path && pad.layer_b_path);
+  const xfade = Number.isFinite(+pad.xfade_vel) ? +pad.xfade_vel : 0;
+  const xfadeText = hasBoth ? (xfade === 0 ? 'Both layers always active' : `Layer B enters at velocity ${xfade}`) : 'Assign Layer B to blend';
+  el.innerHTML = `${layerCard('a')}
+    <div class="rack-blend">
+      <div class="rack-pad-id"><small>Selected trigger</small>${escHtml(pad.id)}<span>${escHtml(pad.label || '')} / MIDI ${pad.midi_note}</span></div>
+      <div class="rack-xfade">
+        <div class="rack-xfade-meta"><span>Layer A</span><span>Layer B</span></div>
+        <input type="range" min="0" max="127" value="${xfade}" ${hasBoth ? '' : 'disabled'}
+          aria-label="Layer B crossfade velocity"
+          oninput="this.nextElementSibling.textContent=(+this.value===0?'Both layers always active':'Layer B enters at velocity '+this.value)"
+          onchange="setParam('${pad.id}','xfade_vel',+this.value)">
+        <div class="rack-xfade-value">${xfadeText}</div>
+      </div>
+      <button class="rack-action" onclick="previewBlend('${pad.id}')" ${hasBoth ? '' : 'disabled'}>&#9654; Audition A + B</button>
+    </div>
+    ${layerCard('b')}`;
+}
+
 // ── Pad detail panel ──────────────────────────────────────────────────────────
 function renderPadDetail() {
   const el = document.getElementById('pad-detail');
   if (!el) return;
+  renderLayerRack();
 
   if (!selectedGroup || !pads.length) {
     el.innerHTML = '<div class="det-empty">Click a pad or jack to view and edit</div>';
@@ -2793,10 +3303,15 @@ async function checkPaths() {
   const data = await fetch('/api/check_paths').then(r => r.json()).catch(() => ({broken: []}));
   brokenPaths = new Set(data.broken || []);
   if (brokenPaths.size) {
-    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found on this machine — use 🔧 Fix broken paths in the Kits menu`, true);
+    setMsg(`⚠ ${brokenPaths.size} instrument(s) not found — open Repair`, true);
+    const msg = document.getElementById('msg');
+    msg.onclick = () => setWorkspaceMode('repair');
+    msg.title = 'Open the guided repair workspace';
+    msg.style.cursor = 'pointer';
   }
   renderDrumMap();
   renderPadDetail();
+  if (['repair','tools'].includes(document.body.dataset.workspace)) renderAdvancedWorkspace(document.body.dataset.workspace);
 }
 
 // ── Sample relink wizard ──────────────────────────────────────────────────────
@@ -3681,6 +4196,7 @@ async function runTemplate(name) {
   kne.textContent    = '— ' + kitName;
   kne.contentEditable = 'true';
   document.getElementById('save-lib-btn').disabled   = !libSavePath;
+  document.getElementById('save-sd-btn').disabled    = !pads.length;
   document.getElementById('dup-btn').disabled        = false;
   document.getElementById('clear-pads-btn').disabled = false;
   document.getElementById('save-path').value = libSavePath;
@@ -3981,28 +4497,31 @@ async function previewBlend(padId) {
 // ── Script runner ─────────────────────────────────────────────────────────────
 async function loadTools() {
   const data = await api('/tools');
-  const el   = document.getElementById('tools-list');
-  if (!el || !data.tools) return;
-  el.innerHTML = data.tools.map(t =>
+  if (!data.tools) return;
+  const html = data.tools.map(t =>
     `<div class="tool-item">
        <span title="${escHtml(t.name)}">${escHtml(t.label)}</span>
        <button class="btn-secondary" style="font-size:.65rem;padding:2px 6px;"
-         onclick="runTool('${escHtml(t.name)}')">Run</button>
+         onclick="runTool(decodeURIComponent('${inlinePathArg(t.name)}'))">Run</button>
      </div>`
   ).join('');
+  const menuList = document.getElementById('tools-list');
+  const advancedList = document.getElementById('advanced-tools-list');
+  if (menuList) menuList.innerHTML = html;
+  if (advancedList) advancedList.innerHTML = html;
 }
 
 async function runTool(name) {
-  const outEl = document.getElementById('tool-output');
-  if (outEl) { outEl.textContent = `Running ${name}…`; outEl.classList.add('visible'); }
+  const outputs = [document.getElementById('tool-output'), document.getElementById('advanced-tool-output')].filter(Boolean);
+  outputs.forEach(el => { el.textContent = `Running ${name}…`; el.classList.add('visible'); });
   setMsg(`Running ${name}…`);
   const data = await api('/run_tool', {name});
   if (data.error) {
-    if (outEl) outEl.textContent = 'Error: ' + data.error;
+    outputs.forEach(el => { el.textContent = 'Error: ' + data.error; });
     setMsg(data.error, true);
     return;
   }
-  if (outEl) outEl.textContent = data.output || '(no output)';
+  outputs.forEach(el => { el.textContent = data.output || '(no output)'; });
   if (data.kits) { kits = data.kits; renderKitList(); }
   setMsg(`${name} finished`);
 }
@@ -4191,11 +4710,135 @@ async function _doSave(path) {
   setMsg(data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
-async function saveToSD()      { await _doSave(sdSavePath);  }
 async function saveCustom() {
   const path = document.getElementById('save-path').value.trim();
   if (!path) { setMsg('Enter a save path', true); return; }
   await _doSave(path);
+}
+
+// ── Deploy to Module ────────────────────────────────────────────────────────
+let deployPlan = null;
+let deployBusy = false;
+
+function formatDeployBytes(bytes) {
+  if (bytes == null) return 'Unknown';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function setDeployStage(name, state) {
+  const el = document.getElementById('deploy-stage-' + name);
+  if (!el) return;
+  el.className = 'deploy-stage' + (state ? ' ' + state : '');
+  const icon = el.querySelector('i');
+  if (icon) icon.textContent = state === 'done' ? '✓' : state === 'failed' ? '!' : ({preflight:'1',transfer:'2',verify:'3'}[name]);
+}
+
+function openDeploy() {
+  if (!pads.length) { setMsg('Open or create a kit before deploying', true); return; }
+  document.getElementById('deploy-modal').classList.add('open');
+  loadDeployPreflight();
+}
+
+function closeDeploy() {
+  if (deployBusy) return;
+  document.getElementById('deploy-modal').classList.remove('open');
+}
+
+async function loadDeployPreflight() {
+  if (deployBusy) return;
+  deployPlan = null;
+  setDeployStage('preflight', 'active'); setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  action.disabled = true; action.style.display = ''; refresh.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Inspecting the deployment path</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Checking the user card, kit references, conflicts, and free space.</span></div>';
+  try {
+    const plan = await api('/deploy_preflight');
+    if (plan.error) throw new Error(plan.error);
+    deployPlan = plan;
+    renderDeployPreflight(plan);
+  } catch (err) {
+    setDeployStage('preflight', 'failed');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Preflight could not run</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+  } finally {
+    refresh.disabled = false;
+  }
+}
+
+function renderDeployPreflight(plan) {
+  const counts = plan.asset_counts || {};
+  const issues = (plan.issues || []).map(issue =>
+    `<div class="deploy-issue ${escHtml(issue.severity)}"><i></i><div><strong>${escHtml(issue.title)}</strong><span>${escHtml(issue.detail)}</span></div></div>`
+  ).join('') || '<div class="deploy-issue"><i></i><div><strong>Preflight passed</strong><span>The destination and every referenced asset are ready.</span></div></div>';
+  const available = (counts.available || 0) + (counts.present || 0);
+  const cardState = plan.user_mounted ? 'ready' : 'warn';
+  document.getElementById('deploy-body').innerHTML = `
+    <div class="deploy-destination">
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${cardState}"></i>User card destination</div>
+        <strong>${escHtml(plan.user_mounted ? plan.kit_name : 'Waiting for a writable user card')}</strong>
+        <span class="deploy-path">${escHtml(plan.target_path || 'Insert the card and run preflight again')}</span></div>
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${plan.ready ? 'ready' : 'warn'}"></i>Transfer summary</div>
+        <div class="deploy-stats"><div class="deploy-stat"><b>${plan.used_instruments || 0}</b><span>Instruments</span></div>
+        <div class="deploy-stat"><b>${counts.copy || 0}</b><span>Assets to copy</span></div>
+        <div class="deploy-stat"><b>${formatDeployBytes(plan.bytes_to_copy || 0)}</b><span>Total write</span></div></div></div>
+    </div>
+    <div class="deploy-route">
+      <div class="deploy-route-box"><small>Working copy</small><span>${escHtml(plan.local_path || 'Local kit library')}</span></div>
+      <div class="deploy-route-arrow">→</div>
+      <div class="deploy-route-box"><small>Module copy · ${available} assets already available</small><span>${escHtml(plan.target_path || 'User card not mounted')}</span></div>
+    </div>
+    <div class="deploy-issues">${issues}</div>`;
+  setDeployStage('preflight', plan.ready ? 'done' : 'failed');
+  setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const action = document.getElementById('deploy-action');
+  action.disabled = !plan.ready;
+  action.textContent = plan.target_exists ? 'Back up & replace module copy' : 'Deploy now';
+  document.getElementById('deploy-action-note').textContent = plan.ready
+    ? 'Custom local instruments and samples are copied; factory-card content is reused in place.'
+    : 'Resolve the blocking checks, then run preflight again.';
+}
+
+async function runDeploy() {
+  if (!deployPlan?.ready || deployBusy) return;
+  deployBusy = true;
+  setDeployStage('preflight', 'done'); setDeployStage('transfer', 'active'); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  const cancel = document.getElementById('deploy-cancel');
+  action.disabled = true; refresh.disabled = true; cancel.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Writing the module package</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Custom assets transfer first. The kit file is published last, then read back for verification.</span></div>';
+  try {
+    const data = await api('/deploy', {});
+    if (data.error) throw new Error(data.error);
+    setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
+    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+      + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
+      + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
+    kits = data.kits || kits;
+    libSavePath = data.lib_save_path || libSavePath;
+    sdSavePath = data.sd_save_path || sdSavePath;
+    state_kitPath = libSavePath;
+    document.getElementById('save-path').value = libSavePath;
+    setDirtyState(false, null);
+    renderKitList();
+    setMsg(data.message);
+    document.getElementById('deploy-action-note').textContent = 'The card copy was read back successfully. It is safe to eject after pending OS writes finish.';
+    action.style.display = 'none';
+    await checkStatus();
+  } catch (err) {
+    setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+  } finally {
+    deployBusy = false;
+    refresh.disabled = false; cancel.disabled = false;
+  }
 }
 
 // ── New kit ───────────────────────────────────────────────────────────────────
@@ -4227,7 +4870,7 @@ async function confirmNewKit() {
   kitNameEl2.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -4365,8 +5008,15 @@ async function checkStatus() {
       // Close any open modal first (Esc previously worked on some modals but
       // not others, e.g. Kit FX — finding A0-1); only then clear selection.
       const openModal = document.querySelector(
-        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open');
-      if (openModal) { openModal.classList.remove('open'); return; }
+        '#deploy-modal.open, #setup-modal.open, #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
+      if (openModal) {
+        if (openModal.id !== 'deploy-modal' || !deployBusy) openModal.classList.remove('open');
+        return;
+      }
+      if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
+        setWorkspaceMode('pad');
+        return;
+      }
       clearSelection();
       return;
     }
@@ -4408,6 +5058,10 @@ async function checkStatus() {
   });
 
   applyPatchPanelState();
+  let initialWorkspace = 'pad';
+  try { initialWorkspace = localStorage.getItem('strike_workspace') || 'pad'; } catch(e) {}
+  if (!['pad','sounds','fx','history','tools','repair','layout'].includes(initialWorkspace)) initialWorkspace = 'pad';
+  setWorkspaceMode(initialWorkspace);
   updateLayoutBadge();
 
   // Apply saved browser toolbar prefs
