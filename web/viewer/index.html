@@ -400,6 +400,7 @@
     <div id="deploy-body" class="deploy-body"></div>
     <div class="deploy-actions">
       <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-capture" class="btn-secondary" type="button" style="display:none;" onclick="capturePresetManifest()" title="Record what the factory card holds so later preflights can verify these references without the official editor open">Capture factory card</button>
       <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
       <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
       <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>

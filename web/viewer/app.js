@@ -4775,6 +4775,7 @@ function renderDeployPreflight(plan) {
     `<div class="deploy-issue ${escHtml(issue.severity)}"><i></i><div><strong>${escHtml(issue.title)}</strong><span>${escHtml(issue.detail)}</span></div></div>`
   ).join('') || '<div class="deploy-issue"><i></i><div><strong>Preflight passed</strong><span>The destination and every referenced asset are ready.</span></div></div>';
   const available = (counts.available || 0) + (counts.present || 0);
+  const unverified = counts.unverified || 0;
   const cardState = plan.user_mounted ? 'ready' : 'warn';
   document.getElementById('deploy-body').innerHTML = `
     <div class="deploy-destination">
@@ -4784,6 +4785,7 @@ function renderDeployPreflight(plan) {
       <div class="deploy-card"><div class="deploy-card-label"><i class="${plan.ready ? 'ready' : 'warn'}"></i>Transfer summary</div>
         <div class="deploy-stats"><div class="deploy-stat"><b>${plan.used_instruments || 0}</b><span>Instruments</span></div>
         <div class="deploy-stat"><b>${counts.copy || 0}</b><span>Assets to copy</span></div>
+        ${unverified ? `<div class="deploy-stat"><b>${unverified}</b><span>Unverified</span></div>` : ''}
         <div class="deploy-stat"><b>${formatDeployBytes(plan.bytes_to_copy || 0)}</b><span>Total write</span></div></div></div>
     </div>
     <div class="deploy-route">
@@ -4797,9 +4799,31 @@ function renderDeployPreflight(plan) {
   const action = document.getElementById('deploy-action');
   action.disabled = !plan.ready;
   action.textContent = plan.target_exists ? 'Back up & replace module copy' : 'Deploy now';
-  document.getElementById('deploy-action-note').textContent = plan.ready
-    ? 'Custom local instruments and samples are copied; factory-card content is reused in place.'
-    : 'Resolve the blocking checks, then run preflight again.';
+  // Capturing only helps while the factory card is actually exposed, and only
+  // matters when something went unverified.
+  const capture = document.getElementById('deploy-capture');
+  capture.style.display = (unverified && plan.preset_mounted) ? '' : 'none';
+  document.getElementById('deploy-action-note').textContent = !plan.ready
+    ? 'Resolve the blocking checks, then run preflight again.'
+    : unverified
+      ? 'Unverified references are resolved by the module itself; deployment is still safe.'
+      : 'Custom local instruments and samples are copied; factory-card content is reused in place.';
+}
+
+async function capturePresetManifest() {
+  if (deployBusy) return;
+  const capture = document.getElementById('deploy-capture');
+  capture.disabled = true;
+  try {
+    const data = await api('/preset_manifest_capture', {});
+    if (data.error) throw new Error(data.error);
+    setMsg(data.message);
+    await loadDeployPreflight();
+  } catch (err) {
+    setMsg(err.message, true);
+  } finally {
+    capture.disabled = false;
+  }
 }
 
 async function runDeploy() {

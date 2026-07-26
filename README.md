@@ -63,6 +63,14 @@ copies to the writable Strike SD card, and verifies the result. Put the card bac
 module and load the kit. (Live USB sync to the module is not supported — that protocol
 is still unmapped. See `RESEARCH.md`.)
 
+**"Could not be verified" in preflight.** The module only exposes its factory card while the
+official Alesis Strike Editor is running, so with that closed the app cannot see factory
+sounds your kit uses. Those references are reported as a warning, never as an error —
+the module resolves them itself, so deploying is still safe. To silence the warning, open
+the official editor once so the factory card appears, then press **Capture factory card**
+in the Deploy dialog; the inventory is saved to `library/preset_manifest.json` and reused
+from then on. If a sound really is gone, **Fix broken paths** is the tool for that.
+
 **Just want to look, not install anything?** Grab the read-only
 [Web Viewer](#web-viewer-read-only-zero-install) — a single HTML file that runs from a
 double-click.
@@ -155,8 +163,12 @@ double-click.
 - One-click full library sync from SD card (background, with progress)
 - **Deploy to Module** — a guided SD-card transfer with a readable preflight, explicit
   destination and asset plan, conflict blocking, backup of a replaced kit, progress, and
-  post-copy byte verification. Automated coverage uses temporary directories only; a real
-  Strike-module SD-card round trip is still pending owner verification.
+  post-copy byte verification. Verified on hardware (2026-07-26): deploy and
+  backup-and-replace both round-tripped to a real Strike user card and loaded on the module,
+  leaving every other kit on the card byte-identical.
+- **Capture factory card** — records the factory card's inventory to
+  `library/preset_manifest.json` while the official editor has it exposed, so later
+  preflights can tell "missing" from "not visible right now".
 - Instrument browser: search, tag filtering, favorites, recents, waveform thumbnails,
   audio preview at any velocity, A+B layer blend preview
 - **"More like this" similarity search** — instead of scrolling 168 snares, click the

@@ -3114,6 +3114,101 @@ def _atomic_write(path: Path, data: bytes):
         tmp.unlink(missing_ok=True)
 
 
+PRESET_MANIFEST_PATH = LIBRARY_DIR / 'preset_manifest.json'   # user sidecar (writable)
+PRESET_MANIFEST_SCHEMA = 1
+_preset_manifest_cache = None
+_preset_manifest_lock = threading.Lock()
+_factory_catalog_keys = None
+
+
+def load_preset_manifest() -> dict:
+    """Inventory of the factory card, captured once while it was mounted.
+
+    The module only exposes the factory LUN while the official Strike Editor is
+    running, so without this the app cannot tell "this instrument is missing"
+    from "I cannot see the card right now" (issue #33).
+    """
+    global _preset_manifest_cache
+    if _preset_manifest_cache is None:
+        data = {}
+        if PRESET_MANIFEST_PATH.exists():
+            try:
+                data = json.loads(PRESET_MANIFEST_PATH.read_text('utf-8'))
+            except Exception:
+                data = {}
+        _preset_manifest_cache = data if isinstance(data, dict) else {}
+    return _preset_manifest_cache
+
+
+def _factory_catalog_instruments() -> set:
+    """Fallback base layer: the committed catalog of stock factory instruments.
+
+    Covers an untouched module for free. It is one snapshot of one library, so a
+    path missing from it proves nothing — it can only ever upgrade a reference to
+    'available', never mark one absent.
+    """
+    global _factory_catalog_keys
+    if _factory_catalog_keys is None:
+        keys = set()
+        path = Path(__file__).resolve().parent / 'factory_catalog.json'
+        if path.exists():
+            try:
+                keys = set(json.loads(path.read_text('utf-8')).get('instruments', {}))
+            except Exception:
+                keys = set()
+        _factory_catalog_keys = keys
+    return _factory_catalog_keys
+
+
+def _preset_manifest_has(kind: str, rel: str) -> bool:
+    """True when the factory card is known to hold this path. User capture wins."""
+    key = 'instruments' if kind == 'instrument' else 'samples'
+    listed = load_preset_manifest().get(key)
+    if isinstance(listed, list) and rel in set(listed):
+        return True
+    return kind == 'instrument' and rel in _factory_catalog_instruments()
+
+
+def capture_preset_manifest() -> dict:
+    """Record what the mounted factory card holds, for later preflights.
+
+    Deliberately user-initiated: `_looks_like_preset_root()` cannot tell the real
+    card from a preset-shaped mirror, so capturing automatically could bake in a
+    wrong inventory. Names only — no parsing, so this stays fast.
+    """
+    global _preset_manifest_cache
+    _, preset = get_volumes()
+    if preset is None:
+        raise ValueError('Factory card not detected. Open the official Strike Editor so the '
+                         'module exposes it, then capture again.')
+
+    def rel_paths(root: Path, pattern: str) -> list:
+        if not root.is_dir():
+            return []
+        return sorted({str(p.relative_to(root)).replace('\\', '/')
+                       for p in root.rglob(pattern) if p.is_file()})
+
+    data = {
+        '_schema': PRESET_MANIFEST_SCHEMA,
+        'captured': datetime.datetime.now().isoformat(timespec='seconds'),
+        'source': str(preset),
+        'instruments': rel_paths(preset / 'Instruments', '*.sin'),
+        'samples': rel_paths(preset / 'Samples', '*.wav'),
+    }
+    PRESET_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PRESET_MANIFEST_PATH.with_suffix('.json.tmp')
+    with _preset_manifest_lock:
+        tmp.write_text(json.dumps(data, ensure_ascii=False), 'utf-8')
+        tmp.replace(PRESET_MANIFEST_PATH)
+        _preset_manifest_cache = data
+    return {
+        'captured': data['captured'], 'source': data['source'],
+        'instruments': len(data['instruments']), 'samples': len(data['samples']),
+        'message': f"Captured {len(data['instruments'])} factory instruments "
+                   f"and {len(data['samples'])} samples.",
+    }
+
+
 def _deploy_plan() -> dict:
     """Build a read-only deployment plan for the currently loaded kit."""
     user, preset = get_volumes()
@@ -3148,18 +3243,27 @@ def _deploy_plan() -> dict:
 
     assets = []
     seen_targets = set()
+    unverified = []
     roots = _sin_search_roots()
 
     def add_asset(kind: str, rel: str, src):
-        if not src:
-            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
-                           'title': f'Missing {kind}', 'detail': rel})
+        if not src or not Path(src).is_file():
+            # Unresolvable is not the same as absent. The factory card is only
+            # visible while the official Strike Editor is running, so with it
+            # closed most factory references cannot be resolved here even though
+            # the module resolves them itself. Record what we know and let the
+            # caller warn — never block (see issue #33).
+            unresolved_key = f'{kind}:{rel}'.casefold()
+            if unresolved_key in seen_targets:
+                return
+            seen_targets.add(unresolved_key)
+            status = 'available' if _preset_manifest_has(kind, rel) else 'unverified'
+            if status == 'unverified':
+                unverified.append(rel)
+            assets.append({'kind': kind, 'rel': rel, 'src': None, 'dst': None,
+                           'status': status, 'bytes': 0})
             return
         src = Path(src)
-        if not src.is_file():
-            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
-                           'title': f'Missing {kind}', 'detail': rel})
-            return
         if (user and _is_under(src, user)) or (preset and _is_under(src, preset)):
             assets.append({'kind': kind, 'rel': rel, 'src': src, 'dst': None,
                            'status': 'available', 'bytes': 0})
@@ -3199,6 +3303,17 @@ def _deploy_plan() -> dict:
         for wav_rel in wav_rels:
             add_asset('sample', wav_rel, _resolve_wav(wav_rel, roots))
 
+    if unverified:
+        shown = ', '.join(unverified[:3])
+        more = f' +{len(unverified) - 3} more' if len(unverified) > 3 else ''
+        issues.append({'severity': 'warning', 'code': 'unverified_assets',
+                       'title': f'{len(unverified)} reference(s) could not be verified',
+                       'detail': f'{shown}{more}. These usually live on the factory card, which is '
+                                 'only visible while the official Strike Editor is open — the module '
+                                 'resolves them itself, so deployment is still safe. Capture the '
+                                 'factory card to confirm, or use Fix broken paths if a sound is '
+                                 'genuinely missing.'})
+
     kit_bytes = (build_skt(state['kit_raw'], state['pads'], instruments, state['tail'])
                  if state.get('kit_raw') is not None else b'')
     bytes_to_copy = len(kit_bytes) + sum(a['bytes'] for a in assets if a['status'] == 'copy')
@@ -3234,12 +3349,14 @@ def _deploy_plan() -> dict:
 def deploy_preflight() -> dict:
     plan = _deploy_plan()
     counts = {s: sum(1 for a in plan['assets'] if a['status'] == s)
-              for s in ('copy', 'present', 'available', 'conflict')}
+              for s in ('copy', 'present', 'available', 'conflict', 'unverified')}
     counts['instruments'] = sum(1 for a in plan['assets'] if a['kind'] == 'instrument')
     counts['samples'] = sum(1 for a in plan['assets'] if a['kind'] == 'sample')
     return {
         'ready': plan['ready'], 'kit_name': plan['kit_name'],
         'user_mounted': plan['user'] is not None,
+        'preset_mounted': plan['preset'] is not None,
+        'preset_manifest': bool(load_preset_manifest().get('instruments')),
         'user_path': str(plan['user']) if plan['user'] else '',
         'target_path': str(plan['card_target']) if plan['card_target'] else '',
         'local_path': str(plan['local_target']),
@@ -3772,7 +3889,7 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .deploy-card-label i.warn { background:#d0aa5b; box-shadow:0 0 7px #d0aa5b70; }
 .deploy-card strong { display:block; overflow:hidden; color:#e1e5df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
 .deploy-path { display:block; margin-top:4px; overflow:hidden; color:#7c857d; font:.53rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
-.deploy-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.deploy-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(72px,1fr)); gap:5px; }
 .deploy-stat { padding:7px 8px; border:1px solid #323832; background:#101310; }
 .deploy-stat b { display:block; color:#d7bc7e; font:650 .82rem/1 Bahnschrift,"Arial Narrow",sans-serif; }
 .deploy-stat span { display:block; margin-top:3px; color:#687069; font:.45rem/1 Consolas,monospace; letter-spacing:.08em; text-transform:uppercase; }
@@ -9563,6 +9680,7 @@ function renderDeployPreflight(plan) {
     `<div class="deploy-issue ${escHtml(issue.severity)}"><i></i><div><strong>${escHtml(issue.title)}</strong><span>${escHtml(issue.detail)}</span></div></div>`
   ).join('') || '<div class="deploy-issue"><i></i><div><strong>Preflight passed</strong><span>The destination and every referenced asset are ready.</span></div></div>';
   const available = (counts.available || 0) + (counts.present || 0);
+  const unverified = counts.unverified || 0;
   const cardState = plan.user_mounted ? 'ready' : 'warn';
   document.getElementById('deploy-body').innerHTML = `
     <div class="deploy-destination">
@@ -9572,6 +9690,7 @@ function renderDeployPreflight(plan) {
       <div class="deploy-card"><div class="deploy-card-label"><i class="${plan.ready ? 'ready' : 'warn'}"></i>Transfer summary</div>
         <div class="deploy-stats"><div class="deploy-stat"><b>${plan.used_instruments || 0}</b><span>Instruments</span></div>
         <div class="deploy-stat"><b>${counts.copy || 0}</b><span>Assets to copy</span></div>
+        ${unverified ? `<div class="deploy-stat"><b>${unverified}</b><span>Unverified</span></div>` : ''}
         <div class="deploy-stat"><b>${formatDeployBytes(plan.bytes_to_copy || 0)}</b><span>Total write</span></div></div></div>
     </div>
     <div class="deploy-route">
@@ -9585,9 +9704,31 @@ function renderDeployPreflight(plan) {
   const action = document.getElementById('deploy-action');
   action.disabled = !plan.ready;
   action.textContent = plan.target_exists ? 'Back up & replace module copy' : 'Deploy now';
-  document.getElementById('deploy-action-note').textContent = plan.ready
-    ? 'Custom local instruments and samples are copied; factory-card content is reused in place.'
-    : 'Resolve the blocking checks, then run preflight again.';
+  // Capturing only helps while the factory card is actually exposed, and only
+  // matters when something went unverified.
+  const capture = document.getElementById('deploy-capture');
+  capture.style.display = (unverified && plan.preset_mounted) ? '' : 'none';
+  document.getElementById('deploy-action-note').textContent = !plan.ready
+    ? 'Resolve the blocking checks, then run preflight again.'
+    : unverified
+      ? 'Unverified references are resolved by the module itself; deployment is still safe.'
+      : 'Custom local instruments and samples are copied; factory-card content is reused in place.';
+}
+
+async function capturePresetManifest() {
+  if (deployBusy) return;
+  const capture = document.getElementById('deploy-capture');
+  capture.disabled = true;
+  try {
+    const data = await api('/preset_manifest_capture', {});
+    if (data.error) throw new Error(data.error);
+    setMsg(data.message);
+    await loadDeployPreflight();
+  } catch (err) {
+    setMsg(err.message, true);
+  } finally {
+    capture.disabled = false;
+  }
 }
 
 async function runDeploy() {
@@ -9999,6 +10140,7 @@ async function dismissAllAutosaves() {
     <div id="deploy-body" class="deploy-body"></div>
     <div class="deploy-actions">
       <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-capture" class="btn-secondary" type="button" style="display:none;" onclick="capturePresetManifest()" title="Record what the factory card holds so later preflights can verify these references without the official editor open">Capture factory card</button>
       <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
       <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
       <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>
@@ -10710,6 +10852,13 @@ class Handler(BaseHTTPRequestHandler):
                     'sd_save_path': _sd_save_path(user, state['kit_path']),
                 })
                 self.send_json(result)
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
+            return
+
+        if path == '/api/preset_manifest_capture':
+            try:
+                self.send_json(capture_preset_manifest())
             except Exception as e:
                 self.send_json({'error': _friendly_error(e)})
             return
