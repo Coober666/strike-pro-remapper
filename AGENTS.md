@@ -334,6 +334,19 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
     snapshot_restore|snapshot_delete|snapshot_pin`. Test: `tools/test_time_machine.py`.
 - `check_paths()` — return sin_rel paths in current kit not found in avail
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
+- **Deploy asset resolution has three states, not two** (issue #33). The module only exposes
+  its factory card while the official Strike Editor runs, so an unresolvable path does NOT
+  mean the file is gone. In `_deploy_plan()`'s `add_asset()`: resolved on a mounted volume →
+  `available`/`copy`/`present`/`conflict` as before; unresolvable but listed in the preset
+  manifest → `available`; otherwise → `unverified`, which rolls up into ONE `warning` issue
+  and **never blocks** (writing the `.skt` is harmless — the module resolves paths itself).
+  Only `no_kit`, `no_user_card`, `unsafe_asset_path`, `asset_conflict` and
+  `insufficient_space` are blockers. `load_preset_manifest()` / `_preset_manifest_has()` /
+  `capture_preset_manifest()` mirror the two-layer fingerprint pattern: writable
+  `library/preset_manifest.json` over the committed `factory_catalog.json` keys as a
+  fallback. **Capture stays user-initiated** — `_looks_like_preset_root()` cannot tell the
+  real card from a preset-shaped mirror, so auto-capture could bake in a wrong inventory.
+  The manifest may only ever upgrade a reference to `available`, never prove absence.
 - **"More like this" similarity search** (audio fingerprints; READ-ONLY, never writes any
   WAV/.sin/.skt). Feature vector `FP_FEATURES` = 5 stdlib, sample-rate-aware features:
   `centroid` (Hz), `rolloff` (85%-energy, Hz), `zcr` (crossings/s, no-FFT brightness proxy),
@@ -477,6 +490,8 @@ library/                     # git-ignored — populate from SD card or copy bet
   snapshots/                 # Kit time machine: <id>.skt blobs + index.json metadata
   tags.json                  # instrument tag sidecar {sin_rel: [tag, ...]}
   fingerprints.json          # "More like this" audio-fingerprint sidecar (keyed by sin_rel)
+  preset_manifest.json       # factory-card inventory captured while the official editor exposed it
+  deploy-backups/            # module kits replaced by Deploy to Module, kept before overwrite
 web/                         # pure-browser port (stage 1 = read-only viewer). See web/README.md
   bytes.js skt.js sin.js     # JS parsers (read-only), Python-parity tested
   similar.js                 # JS k-NN similarity port, Python-parity tested
