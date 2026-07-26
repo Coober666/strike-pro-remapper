@@ -63,12 +63,13 @@ copies to the writable Strike SD card, and verifies the result. Put the card bac
 module and load the kit. (Live USB sync to the module is not supported — that protocol
 is still unmapped. See `RESEARCH.md`.)
 
-**"The SD card dropped off the USB connection".** The module keeps its card mounted internally
-while also sharing it over USB, and under heavy use it takes the card back for a few seconds —
-the drive really does disconnect and reconnect. Nothing is damaged. The app waits it out
-automatically, so you will usually never see this; if the message does appear, give it a few
-seconds and try again. If it keeps happening, leave the official Strike Editor open while you
-work — the module appears to hold on to the card when the editor is closed.
+**"The SD card stopped responding for a moment".** The module keeps its card mounted internally
+while also sharing it over USB, and under heavy use the card goes unresponsive for a few
+seconds. It stays plugged in and nothing is damaged — Windows may make it look like the drive
+vanished, but it did not. The app waits these out automatically, so you will usually never see
+this; if the message does appear, give it a few seconds and try again. If it keeps happening,
+leave the official Strike Editor open while you work — the module appears to hold on to the
+card when the editor is closed.
 
 **"Could not be verified" in preflight.** The module only exposes its factory card while the
 official Alesis Strike Editor is running, so with that closed the app cannot see factory

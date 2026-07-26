@@ -332,20 +332,26 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
     `delete_snapshot(id)`, `set_snapshot_pin(id, pinned)`. `_SNAP_LOCK` guards index writes.
   - Routes: `GET /api/snapshots` (`?all=1`), `POST /api/snapshot|snapshot_diff|
     snapshot_restore|snapshot_delete|snapshot_pin`. Test: `tools/test_time_machine.py`.
-- **The SD card drops off the bus and re-enumerates while you are using it** (issue #35).
-  The module keeps its card mounted internally while also exporting it over USB, and under
-  sustained host access it takes the card back — the volume genuinely disconnects and
-  reconnects seconds later (observed directly, repeatedly). In-flight reads fail with
-  `EINVAL` or `WinError 55/1006`. Observed only with the official Strike Editor closed; the
-  working theory is that the editor's handshake makes the module yield the card, but this is
-  intermittent on a timescale of hours, so a single clean run proves nothing.
+- **The SD card stops answering for seconds at a time; it does NOT disconnect** (issue #35).
+  Under sustained host access the Strike card goes unresponsive in bursts. Established from
+  the Windows event log, not guessed: 40× `disk` event 153 ("The IO operation … for Disk N was
+  retried") plus event 51 on the Strike disk, and **zero** surprise-removal (157) or
+  Kernel-PnP arrival/removal events. The device never leaves the bus; the storage stack times
+  out and retries and the volume dismounts under open handles (exactly what `WinError 1006`
+  says). It looks like a disconnect in Explorer, so do not trust that impression — check the
+  event log. Reads fail with `EINVAL` or `WinError 55/1006`.
   **Read card files through `read_card_bytes()`, never `Path.read_bytes()`** — it retries on
-  `_is_transient_volume_error()`. Waits (`_CARD_RETRY_DELAYS`, ~5s total) are sized for a USB
-  re-enumeration, **not** for a stalled read: sub-second retries all land inside the same drop
-  and fail together. `get_volumes()` waits the same window before reporting a previously-seen
-  card as missing, so a drop cannot raise a false `no_user_card` blocker. Recoveries print a
-  `[card]` line to the server console — that log is the only way to tell a recovered drop from
-  a clean run when diagnosing. Test: `tools/test_card_resilience.py`.
+  `_is_transient_volume_error()`. Waits (`_CARD_RETRY_DELAYS`, ~5s total) are sized for the
+  observed outage; sub-second retries all land inside the same one and fail together.
+  `get_volumes()` waits the same window before reporting a previously-seen card as missing, so
+  an outage cannot raise a false `no_user_card` blocker. Recoveries print a `[card]` line to
+  the server console — that log is the only way to tell a recovered outage from a clean run.
+  Observed only with the official Strike Editor closed, and intermittent on a timescale of
+  hours, so a single clean run proves nothing. Test: `tools/test_card_resilience.py`.
+- **The module exposes both card LUNs at all times.** With the editor closed, `Get-Disk` shows
+  two `ALESIS STRIKE` USB disks: the user card online, and a second one reporting **`No
+  Media`**. That second entry is the factory/preset LUN — present but empty until the official
+  editor handshakes. Useful for diagnosing preset-card questions (see #33).
 - `check_paths()` — return sin_rel paths in current kit not found in avail
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
 - **Deploy asset resolution has three states, not two** (issue #33). The module only exposes
