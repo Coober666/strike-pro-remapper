@@ -8,6 +8,7 @@ pad zone via a local web UI at http://localhost:8765
 
 import base64
 import datetime
+import errno
 import hashlib
 import io
 import json
@@ -159,9 +160,63 @@ def _classify_volumes(vols: dict):
     return user, preset
 
 
+# The module keeps its SD card mounted internally while also exporting it over
+# USB. Under sustained host access it takes the card back: the drive genuinely
+# drops off the bus and re-enumerates a few seconds later (observed directly —
+# the volume disconnects and reconnects repeatedly, issue #35). In-flight reads
+# fail with EINVAL or WinError 55/1006 in the gap.
+#
+# So the waits below are sized for a USB re-enumeration, not for a stalled read:
+# sub-second retries all land inside the same gap and fail together.
+_TRANSIENT_WINERRORS = {21, 55, 1006, 1117}   # not ready, no longer available,
+                                              # volume externally altered, I/O device
+_CARD_RETRY_DELAYS = (0.5, 1.5, 3.0)          # ~5s total, covers a re-enumeration
+
+
+def _is_transient_volume_error(e: OSError) -> bool:
+    """True when the card dropped off the bus, as opposed to a real failure."""
+    if getattr(e, 'winerror', None) in _TRANSIENT_WINERRORS:
+        return True
+    return e.errno in (errno.EINVAL, errno.EIO)
+
+
+def read_card_bytes(path: Path, tries: int = len(_CARD_RETRY_DELAYS) + 1) -> bytes:
+    """Read a file on removable media, waiting out a card that re-enumerates."""
+    for attempt in range(tries):
+        try:
+            data = path.read_bytes()
+            if attempt:
+                # Worth surfacing: this is the signature of issue #35, and the
+                # only way to tell a recovered drop from a clean run.
+                print(f'[card] read of {path} recovered after {attempt} '
+                      f'retr{"y" if attempt == 1 else "ies"}')
+            return data
+        except OSError as e:
+            if attempt == tries - 1 or not _is_transient_volume_error(e):
+                raise
+            time.sleep(_CARD_RETRY_DELAYS[min(attempt, len(_CARD_RETRY_DELAYS) - 1)])
+
+
+_last_seen_user_volume = None
+
+
 def get_volumes():
     """Return (user_volume_root, preset_volume_root). Either may be None if not mounted."""
-    return _classify_volumes(_find_strike_volumes())
+    global _last_seen_user_volume
+    user, preset = _classify_volumes(_find_strike_volumes())
+    if user is None and _last_seen_user_volume is not None:
+        # A card that was mounted a moment ago is probably mid-re-enumeration,
+        # not ejected — wait it out before reporting it gone (issue #35).
+        for delay in _CARD_RETRY_DELAYS:
+            time.sleep(delay)
+            user, preset = _classify_volumes(_find_strike_volumes())
+            if user is not None:
+                print(f'[card] user volume reappeared at {user} after a drop')
+                break
+    # Track the outcome either way, so a genuinely ejected card costs the
+    # re-scan once rather than on every call.
+    _last_seen_user_volume = user
+    return user, preset
 
 
 def _is_under(path: Path, root: Path) -> bool:
@@ -170,6 +225,10 @@ def _is_under(path: Path, root: Path) -> bool:
         path.resolve().relative_to(root.resolve())
         return True
     except ValueError:
+        return False
+    except OSError:
+        # The volume stalled mid-resolve (issue #35). Treating this as "not on
+        # the card" only risks planning a redundant copy, never a wrong write.
         return False
 
 
@@ -1137,7 +1196,7 @@ state = {
 
 def load_kit(path_str: str):
     p = Path(path_str)
-    data = p.read_bytes()
+    data = read_card_bytes(p)
     kit_raw, pads, instruments, tail = parse_skt(data)
     rebuilt  = build_skt(kit_raw, pads, instruments, tail)
     lossless = (rebuilt == data)
@@ -3297,7 +3356,7 @@ def _deploy_plan() -> dict:
         if not sin_src or not Path(sin_src).is_file():
             continue
         try:
-            wav_rels = parse_sin_all_wavs(Path(sin_src).read_bytes())
+            wav_rels = parse_sin_all_wavs(read_card_bytes(Path(sin_src)))
         except OSError:
             wav_rels = []
         for wav_rel in wav_rels:
@@ -3384,7 +3443,7 @@ def deploy_kit() -> dict:
     for asset in plan['assets']:
         if asset['status'] != 'copy':
             continue
-        _atomic_write(asset['dst'], asset['src'].read_bytes())
+        _atomic_write(asset['dst'], read_card_bytes(asset['src']))
         if not _files_equal(asset['src'], asset['dst']):
             raise OSError(f"Could not verify copied asset: {asset['rel']}")
         copied_files += 1
@@ -3403,7 +3462,7 @@ def deploy_kit() -> dict:
         shutil.copy2(card_target, backup_path)
 
     _atomic_write(card_target, plan['kit_bytes'])
-    if card_target.read_bytes() != plan['kit_bytes']:
+    if read_card_bytes(card_target) != plan['kit_bytes']:
         raise OSError('The module copy could not be verified after writing.')
 
     state['dirty'] = False
@@ -10305,6 +10364,14 @@ def _friendly_error(e: BaseException) -> str:
         # backslash paths when running under POSIX
         base = str(name).replace('\\', '/').rsplit('/', 1)[-1] if name else ''
         where = f' ({base})' if base else ''
+        if _is_transient_volume_error(e):
+            # Retries are already exhausted by here, so name it and say what to
+            # do. The card drops off the bus and comes back on its own (#35),
+            # so "unplugged" would be misleading — it needs a moment, not a hand.
+            return (f'The SD card dropped off the USB connection{where} and is reconnecting. '
+                    'Wait a few seconds and try again — nothing was damaged. If it keeps '
+                    'happening, leave the official Strike Editor open while you work; the '
+                    'module appears to take the card back when the editor is closed.')
         return f'File system error{where} — see the server console for details.'
     return 'Internal error — see the server console for details.'
 
