@@ -3075,6 +3075,235 @@ def save_kit(out_path_str: str):
                 pass
 
 
+def _deploy_rel_path(rel: str) -> Path:
+    """Return a safe card-relative path for a .sin/.wav reference."""
+    clean = str(rel or '').replace('\\', '/').strip('/')
+    parts = clean.split('/') if clean else []
+    if not parts or any(p in ('', '.', '..') for p in parts) or ':' in parts[0]:
+        raise ValueError(f'Unsafe asset path: {rel!r}')
+    return Path(*parts)
+
+
+def _files_equal(a: Path, b: Path) -> bool:
+    """Compare files without loading large samples into memory."""
+    try:
+        if a.stat().st_size != b.stat().st_size:
+            return False
+        with a.open('rb') as fa, b.open('rb') as fb:
+            while True:
+                ca, cb = fa.read(1024 * 1024), fb.read(1024 * 1024)
+                if ca != cb:
+                    return False
+                if not ca:
+                    return True
+    except OSError:
+        return False
+
+
+def _atomic_write(path: Path, data: bytes):
+    """Write beside the destination, then replace it as one filesystem step."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.deploying')
+    try:
+        with tmp.open('wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _deploy_plan() -> dict:
+    """Build a read-only deployment plan for the currently loaded kit."""
+    user, preset = get_volumes()
+    issues = []
+    if state.get('kit_raw') is None:
+        issues.append({'severity': 'blocker', 'code': 'no_kit',
+                       'title': 'No kit loaded',
+                       'detail': 'Open or create a kit before deploying.'})
+    if user is None:
+        issues.append({'severity': 'blocker', 'code': 'no_user_card',
+                       'title': 'User card not detected',
+                       'detail': 'Insert the writable Strike user SD card, then run preflight again.'})
+
+    kit_name = Path(state.get('kit_display') or state.get('kit_path') or 'kit.skt').name
+    if not kit_name.lower().endswith('.skt'):
+        kit_name += '.skt'
+    local_target = LIBRARY_DIR / 'kits' / kit_name
+    card_target = Path(_sd_save_path(user, state.get('kit_path') or kit_name)) if user else None
+    if card_target and card_target.suffix.lower() != '.skt':
+        card_target = card_target.with_suffix('.skt')
+
+    used_rels = []
+    instruments = state.get('instruments', [])
+    for pad in state.get('pads', []):
+        for key in ('layer_a', 'layer_b'):
+            idx = pad.get(key)
+            if idx is None or idx == NO_INSTRUMENT or idx >= len(instruments):
+                continue
+            rel = instruments[idx]
+            if rel not in used_rels:
+                used_rels.append(rel)
+
+    assets = []
+    seen_targets = set()
+    roots = _sin_search_roots()
+
+    def add_asset(kind: str, rel: str, src):
+        if not src:
+            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
+                           'title': f'Missing {kind}', 'detail': rel})
+            return
+        src = Path(src)
+        if not src.is_file():
+            issues.append({'severity': 'blocker', 'code': f'missing_{kind}',
+                           'title': f'Missing {kind}', 'detail': rel})
+            return
+        if (user and _is_under(src, user)) or (preset and _is_under(src, preset)):
+            assets.append({'kind': kind, 'rel': rel, 'src': src, 'dst': None,
+                           'status': 'available', 'bytes': 0})
+            return
+        try:
+            dst = user / ('Instruments' if kind == 'instrument' else 'Samples') / _deploy_rel_path(rel) if user else None
+        except ValueError as e:
+            issues.append({'severity': 'blocker', 'code': 'unsafe_asset_path',
+                           'title': 'Unsafe asset path', 'detail': str(e)})
+            return
+        target_key = str(dst).casefold() if dst else f'{kind}:{rel}'.casefold()
+        if target_key in seen_targets:
+            return
+        seen_targets.add(target_key)
+        status = 'copy'
+        size = src.stat().st_size
+        if dst and dst.exists():
+            if _files_equal(src, dst):
+                status, size = 'present', 0
+            else:
+                status, size = 'conflict', 0
+                issues.append({'severity': 'blocker', 'code': 'asset_conflict',
+                               'title': f'{kind.title()} conflict',
+                               'detail': f'{rel} already exists on the user card with different contents.'})
+        assets.append({'kind': kind, 'rel': rel, 'src': src, 'dst': dst,
+                       'status': status, 'bytes': size})
+
+    for rel in used_rels:
+        sin_src = state.get('avail', {}).get(rel)
+        add_asset('instrument', rel, sin_src)
+        if not sin_src or not Path(sin_src).is_file():
+            continue
+        try:
+            wav_rels = parse_sin_all_wavs(Path(sin_src).read_bytes())
+        except OSError:
+            wav_rels = []
+        for wav_rel in wav_rels:
+            add_asset('sample', wav_rel, _resolve_wav(wav_rel, roots))
+
+    kit_bytes = (build_skt(state['kit_raw'], state['pads'], instruments, state['tail'])
+                 if state.get('kit_raw') is not None else b'')
+    bytes_to_copy = len(kit_bytes) + sum(a['bytes'] for a in assets if a['status'] == 'copy')
+    free_bytes = None
+    if user:
+        try:
+            free_bytes = shutil.disk_usage(user).free
+            if free_bytes < bytes_to_copy:
+                issues.append({'severity': 'blocker', 'code': 'insufficient_space',
+                               'title': 'Not enough free space',
+                               'detail': f'The card needs {bytes_to_copy:,} bytes; {free_bytes:,} are free.'})
+        except OSError:
+            pass
+    if card_target and card_target.exists():
+        issues.append({'severity': 'warning', 'code': 'replace_kit',
+                       'title': 'Module copy will be replaced',
+                       'detail': 'The existing card kit will be backed up to the local library first.'})
+    if state.get('skt_lossless') is False:
+        issues.append({'severity': 'warning', 'code': 'parser_warning',
+                       'title': 'Parser warning',
+                       'detail': 'This kit contains bytes the editor does not fully understand.'})
+
+    return {
+        'ready': not any(i['severity'] == 'blocker' for i in issues),
+        'user': user, 'preset': preset, 'kit_name': kit_name,
+        'card_target': card_target, 'local_target': local_target,
+        'kit_bytes': kit_bytes, 'assets': assets, 'issues': issues,
+        'used_instruments': len(used_rels), 'bytes_to_copy': bytes_to_copy,
+        'free_bytes': free_bytes,
+    }
+
+
+def deploy_preflight() -> dict:
+    plan = _deploy_plan()
+    counts = {s: sum(1 for a in plan['assets'] if a['status'] == s)
+              for s in ('copy', 'present', 'available', 'conflict')}
+    counts['instruments'] = sum(1 for a in plan['assets'] if a['kind'] == 'instrument')
+    counts['samples'] = sum(1 for a in plan['assets'] if a['kind'] == 'sample')
+    return {
+        'ready': plan['ready'], 'kit_name': plan['kit_name'],
+        'user_mounted': plan['user'] is not None,
+        'user_path': str(plan['user']) if plan['user'] else '',
+        'target_path': str(plan['card_target']) if plan['card_target'] else '',
+        'local_path': str(plan['local_target']),
+        'target_exists': bool(plan['card_target'] and plan['card_target'].exists()),
+        'dirty': bool(state.get('dirty')), 'skt_lossless': state.get('skt_lossless') is not False,
+        'used_instruments': plan['used_instruments'], 'asset_counts': counts,
+        'bytes_to_copy': plan['bytes_to_copy'], 'free_bytes': plan['free_bytes'],
+        'issues': plan['issues'],
+    }
+
+
+def deploy_kit() -> dict:
+    """Save the working copy, copy local custom assets, then publish the kit last."""
+    plan = _deploy_plan()
+    blockers = [i for i in plan['issues'] if i['severity'] == 'blocker']
+    if blockers:
+        raise ValueError('; '.join(i['detail'] for i in blockers))
+    card_target, local_target = plan['card_target'], plan['local_target']
+    if card_target is None:
+        raise ValueError('User card not detected')
+
+    _atomic_write(local_target, plan['kit_bytes'])
+    copied_files = 0
+    copied_bytes = 0
+    for asset in plan['assets']:
+        if asset['status'] != 'copy':
+            continue
+        _atomic_write(asset['dst'], asset['src'].read_bytes())
+        if not _files_equal(asset['src'], asset['dst']):
+            raise OSError(f"Could not verify copied asset: {asset['rel']}")
+        copied_files += 1
+        copied_bytes += asset['src'].stat().st_size
+
+    backup_path = None
+    if card_target.exists():
+        stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        backup_dir = LIBRARY_DIR / 'deploy-backups'
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / f'{card_target.stem}-{stamp}.skt'
+        suffix = 2
+        while backup_path.exists():
+            backup_path = backup_dir / f'{card_target.stem}-{stamp}-{suffix}.skt'
+            suffix += 1
+        shutil.copy2(card_target, backup_path)
+
+    _atomic_write(card_target, plan['kit_bytes'])
+    if card_target.read_bytes() != plan['kit_bytes']:
+        raise OSError('The module copy could not be verified after writing.')
+
+    state['dirty'] = False
+    state['kit_path'] = str(local_target)
+    state['kit_display'] = plan['kit_name']
+    state['message'] = f'Deployed {plan["kit_name"]} to {card_target}'
+    _auto_snapshot(f'Deployed {plan["kit_name"]}', 'save')
+    for autosave in {local_target.parent / (local_target.stem + '.autosave.skt')}:
+        autosave.unlink(missing_ok=True)
+    return {
+        'message': state['message'], 'target_path': str(card_target),
+        'local_path': str(local_target), 'backup_path': str(backup_path) if backup_path else '',
+        'copied_files': copied_files, 'copied_bytes': copied_bytes,
+        'verified': True,
+    }
+
+
 def autosave_kit() -> 'str | None':
     """Write a .autosave.skt for the current kit while dirty. Returns path or None.
 
@@ -3465,6 +3694,70 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .confirm-box { background:#171c26; border:1px solid #2e3749; border-radius:12px; padding:18px; width:min(440px,92vw); display:flex; flex-direction:column; gap:14px; box-shadow:0 12px 40px #000000b0; }
 .confirm-box p { margin:0; font-size:.82rem; color:#bcd; white-space:pre-wrap; line-height:1.45; }
 .confirm-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+/* Deploy is a hardware handoff, not another save dialog. Its signal rail
+   mirrors the real sequence: inspect the card, transfer, then verify. */
+#deploy-modal { display:none; position:fixed; inset:0; z-index:420; padding:18px; align-items:center; justify-content:center; background:#050706d9; backdrop-filter:blur(5px); }
+#deploy-modal.open { display:flex; }
+.deploy-console { width:min(760px,96vw); max-height:min(820px,94vh); display:flex; flex-direction:column; overflow:hidden; border:1px solid #665738; border-radius:4px; background:#111411; box-shadow:0 24px 70px #000d,inset 0 1px #ffffff0a; }
+.deploy-head { display:flex; align-items:center; gap:12px; min-height:62px; padding:10px 13px; border-bottom:1px solid #3b403a; background:linear-gradient(180deg,#252a25,#181c19); }
+.deploy-mark { display:grid; place-items:center; width:36px; height:36px; flex:0 0 36px; border:1px solid #8d7649; border-radius:50%; color:#e0bd74; background:radial-gradient(circle,#28251c 0 43%,#101310 46%); font:700 .61rem/1 Consolas,monospace; box-shadow:0 0 13px #d0aa5b20,inset 0 1px #ffffff12; }
+.deploy-head-copy { min-width:0; }
+.deploy-head-copy small { display:block; margin-bottom:4px; color:#7a827b; font:.5rem/1 Consolas,monospace; letter-spacing:.16em; text-transform:uppercase; }
+.deploy-head-copy strong { color:#edf0eb; font:620 .95rem/1 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:.025em; }
+.deploy-close { margin-left:auto; width:29px; height:29px; padding:0; border:1px solid #485049; background:#151916; color:#899189; }
+.deploy-rail { display:grid; grid-template-columns:repeat(3,1fr); padding:9px 14px 10px; border-bottom:1px solid #303630; background:#0c0f0d; }
+.deploy-stage { position:relative; display:grid; grid-template-columns:20px minmax(0,1fr); align-items:center; gap:7px; color:#69716a; font:.51rem/1 Consolas,monospace; letter-spacing:.11em; text-transform:uppercase; }
+.deploy-stage:not(:last-child)::after { content:""; position:absolute; left:calc(50% + 20px); right:8px; top:9px; height:1px; background:#363c36; }
+.deploy-stage i { display:grid; place-items:center; width:18px; height:18px; border:1px solid #495149; border-radius:50%; color:#747c75; background:#111411; font-style:normal; font-size:.47rem; }
+.deploy-stage.active { color:#dfc178; }
+.deploy-stage.active i { border-color:#b99a5c; color:#17130d; background:#d0aa5b; box-shadow:0 0 10px #d0aa5b55; }
+.deploy-stage.done { color:#89b49a; }
+.deploy-stage.done i { border-color:#6d9f80; color:#d8eddf; background:#284433; }
+.deploy-stage.failed { color:#d58b7e; }
+.deploy-stage.failed i { border-color:#9b554a; color:#f2c2ba; background:#4a2823; }
+.deploy-body { min-height:0; padding:13px 14px 15px; overflow:auto; }
+.deploy-destination { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(190px,.6fr); gap:9px; margin-bottom:10px; }
+.deploy-card { min-width:0; padding:10px 11px; border:1px solid #373e38; border-radius:3px; background:linear-gradient(145deg,#1c211d,#121512); box-shadow:inset 0 1px #ffffff05; }
+.deploy-card-label { display:flex; align-items:center; gap:6px; margin-bottom:7px; color:#747c75; font:.49rem/1 Consolas,monospace; letter-spacing:.13em; text-transform:uppercase; }
+.deploy-card-label i { width:6px; height:6px; border-radius:50%; background:#6b746c; }
+.deploy-card-label i.ready { background:#75ad89; box-shadow:0 0 7px #75ad8988; }
+.deploy-card-label i.warn { background:#d0aa5b; box-shadow:0 0 7px #d0aa5b70; }
+.deploy-card strong { display:block; overflow:hidden; color:#e1e5df; font:600 .76rem/1.25 Bahnschrift,"Arial Narrow",sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-path { display:block; margin-top:4px; overflow:hidden; color:#7c857d; font:.53rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+.deploy-stat { padding:7px 8px; border:1px solid #323832; background:#101310; }
+.deploy-stat b { display:block; color:#d7bc7e; font:650 .82rem/1 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-stat span { display:block; margin-top:3px; color:#687069; font:.45rem/1 Consolas,monospace; letter-spacing:.08em; text-transform:uppercase; }
+.deploy-route { display:grid; grid-template-columns:minmax(0,1fr) 30px minmax(0,1fr); align-items:center; gap:7px; margin:10px 0; }
+.deploy-route-box { min-width:0; padding:8px 9px; border:1px solid #343b35; background:#101310; }
+.deploy-route-box small { display:block; margin-bottom:4px; color:#6f7771; font:.47rem/1 Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
+.deploy-route-box span { display:block; overflow:hidden; color:#aeb5ae; font:.56rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
+.deploy-route-arrow { color:#b6995d; font:700 .9rem/1 Consolas,monospace; text-align:center; }
+.deploy-issues { display:grid; gap:5px; }
+.deploy-issue { display:grid; grid-template-columns:8px minmax(0,1fr); gap:8px; padding:7px 9px; border:1px solid #3b423c; background:#151916; }
+.deploy-issue i { width:7px; height:7px; margin-top:3px; border-radius:50%; background:#788078; }
+.deploy-issue.warning { border-color:#5b4e35; background:#211e16; }
+.deploy-issue.warning i { background:#d0aa5b; box-shadow:0 0 6px #d0aa5b66; }
+.deploy-issue.blocker { border-color:#66433e; background:#241816; }
+.deploy-issue.blocker i { background:#c46f62; box-shadow:0 0 6px #c46f6266; }
+.deploy-issue strong { display:block; color:#c7ccc7; font:600 .62rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-issue span { display:block; margin-top:2px; color:#747c75; font:.54rem/1.35 Consolas,monospace; }
+.deploy-progress { display:none; padding:22px 8px 18px; text-align:center; }
+.deploy-progress.visible { display:block; }
+.deploy-progress-line { height:3px; margin:14px auto 11px; overflow:hidden; max-width:430px; background:#262c27; }
+.deploy-progress-line i { display:block; width:38%; height:100%; background:linear-gradient(90deg,transparent,#d0aa5b,transparent); animation:deploy-scan 1.1s linear infinite; }
+@keyframes deploy-scan { from { transform:translateX(-110%); } to { transform:translateX(270%); } }
+.deploy-progress strong,.deploy-result strong { color:#e0e4df; font:600 .78rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; }
+.deploy-progress span { display:block; margin-top:5px; color:#747c75; font:.56rem/1.4 Consolas,monospace; }
+.deploy-result { padding:14px; border:1px solid #45624f; background:#15231a; text-align:left; }
+.deploy-result strong { color:#a7d2b4; }
+.deploy-result p { margin:7px 0 0; color:#82958a; font:.57rem/1.5 Consolas,monospace; }
+.deploy-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; padding:10px 13px; border-top:1px solid #343b35; background:#101310; }
+.deploy-actions button { min-height:29px; padding:5px 10px; }
+.deploy-actions .deploy-spacer { flex:1; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
+@media (max-width:620px) { #deploy-modal{padding:7px;align-items:flex-start}.deploy-console{width:100%;max-height:calc(100vh - 14px)}.deploy-destination,.deploy-route{grid-template-columns:1fr}.deploy-route-arrow{transform:rotate(90deg)}.deploy-actions{flex-wrap:wrap}.deploy-actions .deploy-spacer{flex-basis:100%;order:-1} }
+@media (prefers-reduced-motion:reduce) { .deploy-progress-line i{animation:none;width:100%} }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
 .sim-row { display:flex; align-items:center; gap:8px; padding:5px 6px; border-bottom:1px solid #222b3a; font-size:.76rem; }
@@ -4167,7 +4460,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
       <p id="save-hint" style="font-size:.7rem;color:#666;margin-top:6px;"></p>
     </div>
   </div>
-  <button id="save-sd-btn" class="btn-primary tb-btn deploy-btn" onclick="saveToSD()" disabled>Deploy to Module</button>
+  <button id="save-sd-btn" class="btn-primary tb-btn deploy-btn" onclick="openDeploy()" disabled>Deploy to Module</button>
   </div><!-- /primary-actions -->
 
   <div class="utility-strip">
@@ -6299,7 +6592,7 @@ function applyKitData(data, path, opts) {
   kitNameEl.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = data.skt_lossless === false ? '' : 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -8455,6 +8748,7 @@ async function runTemplate(name) {
   kne.textContent    = '— ' + kitName;
   kne.contentEditable = 'true';
   document.getElementById('save-lib-btn').disabled   = !libSavePath;
+  document.getElementById('save-sd-btn').disabled    = !pads.length;
   document.getElementById('dup-btn').disabled        = false;
   document.getElementById('clear-pads-btn').disabled = false;
   document.getElementById('save-path').value = libSavePath;
@@ -8968,11 +9262,135 @@ async function _doSave(path) {
   setMsg(data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
-async function saveToSD()      { await _doSave(sdSavePath);  }
 async function saveCustom() {
   const path = document.getElementById('save-path').value.trim();
   if (!path) { setMsg('Enter a save path', true); return; }
   await _doSave(path);
+}
+
+// ── Deploy to Module ────────────────────────────────────────────────────────
+let deployPlan = null;
+let deployBusy = false;
+
+function formatDeployBytes(bytes) {
+  if (bytes == null) return 'Unknown';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function setDeployStage(name, state) {
+  const el = document.getElementById('deploy-stage-' + name);
+  if (!el) return;
+  el.className = 'deploy-stage' + (state ? ' ' + state : '');
+  const icon = el.querySelector('i');
+  if (icon) icon.textContent = state === 'done' ? '✓' : state === 'failed' ? '!' : ({preflight:'1',transfer:'2',verify:'3'}[name]);
+}
+
+function openDeploy() {
+  if (!pads.length) { setMsg('Open or create a kit before deploying', true); return; }
+  document.getElementById('deploy-modal').classList.add('open');
+  loadDeployPreflight();
+}
+
+function closeDeploy() {
+  if (deployBusy) return;
+  document.getElementById('deploy-modal').classList.remove('open');
+}
+
+async function loadDeployPreflight() {
+  if (deployBusy) return;
+  deployPlan = null;
+  setDeployStage('preflight', 'active'); setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  action.disabled = true; action.style.display = ''; refresh.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Inspecting the deployment path</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Checking the user card, kit references, conflicts, and free space.</span></div>';
+  try {
+    const plan = await api('/deploy_preflight');
+    if (plan.error) throw new Error(plan.error);
+    deployPlan = plan;
+    renderDeployPreflight(plan);
+  } catch (err) {
+    setDeployStage('preflight', 'failed');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Preflight could not run</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+  } finally {
+    refresh.disabled = false;
+  }
+}
+
+function renderDeployPreflight(plan) {
+  const counts = plan.asset_counts || {};
+  const issues = (plan.issues || []).map(issue =>
+    `<div class="deploy-issue ${escHtml(issue.severity)}"><i></i><div><strong>${escHtml(issue.title)}</strong><span>${escHtml(issue.detail)}</span></div></div>`
+  ).join('') || '<div class="deploy-issue"><i></i><div><strong>Preflight passed</strong><span>The destination and every referenced asset are ready.</span></div></div>';
+  const available = (counts.available || 0) + (counts.present || 0);
+  const cardState = plan.user_mounted ? 'ready' : 'warn';
+  document.getElementById('deploy-body').innerHTML = `
+    <div class="deploy-destination">
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${cardState}"></i>User card destination</div>
+        <strong>${escHtml(plan.user_mounted ? plan.kit_name : 'Waiting for a writable user card')}</strong>
+        <span class="deploy-path">${escHtml(plan.target_path || 'Insert the card and run preflight again')}</span></div>
+      <div class="deploy-card"><div class="deploy-card-label"><i class="${plan.ready ? 'ready' : 'warn'}"></i>Transfer summary</div>
+        <div class="deploy-stats"><div class="deploy-stat"><b>${plan.used_instruments || 0}</b><span>Instruments</span></div>
+        <div class="deploy-stat"><b>${counts.copy || 0}</b><span>Assets to copy</span></div>
+        <div class="deploy-stat"><b>${formatDeployBytes(plan.bytes_to_copy || 0)}</b><span>Total write</span></div></div></div>
+    </div>
+    <div class="deploy-route">
+      <div class="deploy-route-box"><small>Working copy</small><span>${escHtml(plan.local_path || 'Local kit library')}</span></div>
+      <div class="deploy-route-arrow">→</div>
+      <div class="deploy-route-box"><small>Module copy · ${available} assets already available</small><span>${escHtml(plan.target_path || 'User card not mounted')}</span></div>
+    </div>
+    <div class="deploy-issues">${issues}</div>`;
+  setDeployStage('preflight', plan.ready ? 'done' : 'failed');
+  setDeployStage('transfer', ''); setDeployStage('verify', '');
+  const action = document.getElementById('deploy-action');
+  action.disabled = !plan.ready;
+  action.textContent = plan.target_exists ? 'Back up & replace module copy' : 'Deploy now';
+  document.getElementById('deploy-action-note').textContent = plan.ready
+    ? 'Custom local instruments and samples are copied; factory-card content is reused in place.'
+    : 'Resolve the blocking checks, then run preflight again.';
+}
+
+async function runDeploy() {
+  if (!deployPlan?.ready || deployBusy) return;
+  deployBusy = true;
+  setDeployStage('preflight', 'done'); setDeployStage('transfer', 'active'); setDeployStage('verify', '');
+  const body = document.getElementById('deploy-body');
+  const action = document.getElementById('deploy-action');
+  const refresh = document.getElementById('deploy-refresh');
+  const cancel = document.getElementById('deploy-cancel');
+  action.disabled = true; refresh.disabled = true; cancel.disabled = true;
+  body.innerHTML = '<div class="deploy-progress visible"><strong>Writing the module package</strong>'
+    + '<div class="deploy-progress-line"><i></i></div><span>Custom assets transfer first. The kit file is published last, then read back for verification.</span></div>';
+  try {
+    const data = await api('/deploy', {});
+    if (data.error) throw new Error(data.error);
+    setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
+    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+      + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
+      + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
+    kits = data.kits || kits;
+    libSavePath = data.lib_save_path || libSavePath;
+    sdSavePath = data.sd_save_path || sdSavePath;
+    state_kitPath = libSavePath;
+    document.getElementById('save-path').value = libSavePath;
+    setDirtyState(false, null);
+    renderKitList();
+    setMsg(data.message);
+    document.getElementById('deploy-action-note').textContent = 'The card copy was read back successfully. It is safe to eject after pending OS writes finish.';
+    action.style.display = 'none';
+    await checkStatus();
+  } catch (err) {
+    setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
+    body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
+    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+  } finally {
+    deployBusy = false;
+    refresh.disabled = false; cancel.disabled = false;
+  }
 }
 
 // ── New kit ───────────────────────────────────────────────────────────────────
@@ -9004,7 +9422,7 @@ async function confirmNewKit() {
   kitNameEl2.contentEditable = 'true';
   document.getElementById('parse-warn').style.display = 'none';
   document.getElementById('save-lib-btn').disabled    = !libSavePath;
-  document.getElementById('save-sd-btn').disabled     = !sdSavePath;
+  document.getElementById('save-sd-btn').disabled     = !pads.length;
   document.getElementById('dup-btn').disabled         = false;
   document.getElementById('clear-pads-btn').disabled  = false;
   document.getElementById('save-path').value = libSavePath;
@@ -9142,8 +9560,11 @@ async function checkStatus() {
       // Close any open modal first (Esc previously worked on some modals but
       // not others, e.g. Kit FX — finding A0-1); only then clear selection.
       const openModal = document.querySelector(
-        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
-      if (openModal) { openModal.classList.remove('open'); return; }
+        '#deploy-modal.open, #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
+      if (openModal) {
+        if (openModal.id !== 'deploy-modal' || !deployBusy) openModal.classList.remove('open');
+        return;
+      }
       if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
         setWorkspaceMode('pad');
         return;
@@ -9324,6 +9745,30 @@ async function dismissAllAutosaves() {
 }
 </script>
 <div id="drop-overlay">&#x1F4C1; Drop .skt kit to load</div>
+
+<!-- Deploy to Module workflow -->
+<div id="deploy-modal" role="dialog" aria-modal="true" aria-labelledby="deploy-title"
+     onclick="if(event.target===this)closeDeploy()">
+  <div class="deploy-console">
+    <div class="deploy-head">
+      <div class="deploy-mark" aria-hidden="true">SD</div>
+      <div class="deploy-head-copy"><small>Hardware transfer channel</small><strong id="deploy-title">Deploy to Module</strong></div>
+      <button class="deploy-close" type="button" onclick="closeDeploy()" aria-label="Close deployment">&#x2715;</button>
+    </div>
+    <div class="deploy-rail" aria-label="Deployment progress">
+      <div id="deploy-stage-preflight" class="deploy-stage active"><i>1</i><span>Preflight</span></div>
+      <div id="deploy-stage-transfer" class="deploy-stage"><i>2</i><span>Transfer</span></div>
+      <div id="deploy-stage-verify" class="deploy-stage"><i>3</i><span>Verify</span></div>
+    </div>
+    <div id="deploy-body" class="deploy-body"></div>
+    <div class="deploy-actions">
+      <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
+      <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
+      <button id="deploy-action" class="btn-primary" type="button" onclick="runDeploy()" disabled>Deploy now</button>
+    </div>
+  </div>
+</div>
 
 <!-- Kit diff modal -->
 <div id="diff-modal" onclick="if(event.target===this)closeDiffModal()">
@@ -9539,6 +9984,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/status':
             self.send_json(volume_status())
+            return
+
+        if path == '/api/deploy_preflight':
+            try:
+                self.send_json(deploy_preflight())
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/session':
@@ -9983,6 +10435,20 @@ class Handler(BaseHTTPRequestHandler):
                     'lib_save_path': str(LIBRARY_DIR / 'kits' / kit_name),
                     'sd_save_path':  _sd_save_path(user, state['kit_path']),
                 })
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
+            return
+
+        if path == '/api/deploy':
+            try:
+                result = deploy_kit()
+                user, _ = get_volumes()
+                result.update({
+                    'kits': find_kit_files(),
+                    'lib_save_path': str(LIBRARY_DIR / 'kits' / Path(state['kit_path']).name),
+                    'sd_save_path': _sd_save_path(user, state['kit_path']),
+                })
+                self.send_json(result)
             except Exception as e:
                 self.send_json({'error': _friendly_error(e)})
             return
