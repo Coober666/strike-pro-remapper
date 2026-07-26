@@ -560,6 +560,7 @@ input[type=range] { accent-color: var(--accent) !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
   .map-pad.midi-hit { animation-duration: .01ms !important; }
+  .input-bay-dock.attention { animation: none !important; }
 }
 
 
@@ -660,62 +661,58 @@ header.app-topbar {
 .workspace-tab.active .workspace-glyph { color: #17130d; border-color: #d0ad68; background: var(--accent); }
 .workspace-spacer { flex: 1; min-height: 10px; }
 
-/* Inputs is a quick selection gesture, not a destination. The picker overlays
-   one edge of the performance surface so the physical-to-logical relationship
-   remains visible while choosing a jack. */
-.input-quick-picker {
-  position: absolute; z-index: 45; top: 8px; left: 74px; display: none; width: min(760px, calc(100vw - 88px));
-  max-height: calc(100% - 16px); overflow: hidden; border: 1px solid #5a5140; border-radius: 3px;
-  background: linear-gradient(155deg, #20251f, #101310 76%); box-shadow: 0 18px 44px #000a, inset 0 1px #ffffff0b;
+/* The module bay and kit map are one visual instrument: selecting a physical
+   socket leaves both surfaces visible and illuminates every zone it drives. */
+.input-bay-dock {
+  position: relative; flex: 0 0 auto; min-width: 0; padding: 7px 8px 8px;
+  border-top: 1px solid #4a4335; border-bottom: 1px solid #252b26;
+  background: linear-gradient(180deg, #20241f, #111411 74%);
+  box-shadow: inset 0 1px #ffffff08, 0 -8px 20px #0004;
 }
-.input-quick-picker.open { display: flex; flex-direction: column; animation: input-picker-in 130ms ease-out; }
-@keyframes input-picker-in { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
-.workspace-tab.picker-open { color: #e8d3a4; border-color: #766342; background: #2b271d; }
-.workspace-tab.picker-open .workspace-glyph { color: #d3af67; border-color: #a8884e; background: #1b1914; }
-.input-quick-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 auto;
-  min-height: 54px; padding: 9px 10px 8px 12px; border-bottom: 1px solid #3c433c;
-  background: linear-gradient(180deg, #292f29, #1a1f1b);
+.input-bay-dock.attention { animation: input-bay-signal 520ms ease-out; }
+@keyframes input-bay-signal { 35% { box-shadow: inset 0 1px #ffffff08, 0 0 0 1px #c7a35d, 0 0 25px #c7a35d40; } }
+.input-bay-head {
+  display: flex; align-items: center; gap: 9px; min-height: 25px; padding: 0 2px 6px;
 }
-.input-quick-head > div { display: flex; flex-direction: column; gap: 3px; }
-.input-quick-head strong { color: #edf0eb; font: 600 .84rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
-.input-quick-close { width: 27px; height: 27px; padding: 0; border: 1px solid #485049; background: #151916; color: #899189; }
-.input-quick-close:hover { border-color: var(--accent); color: #ecd18e; }
-.input-quick-signal {
-  display: grid; grid-template-columns: 7px auto 1fr auto; align-items: center; gap: 7px; min-height: 27px;
-  padding: 0 12px; border-bottom: 1px solid #333a34; color: #777f78;
-  font: .52rem/1 Consolas, monospace; letter-spacing: .11em;
+.input-bay-head > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.input-bay-head strong { color: #e0e4df; font: 600 .7rem/1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.input-bay-head small { color: #777f78; font: .49rem/1 Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.input-bay-route {
+  min-width: 0; margin-left: auto; overflow: hidden; color: #9b8354;
+  font: .51rem/1 Consolas, monospace; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap;
 }
-.input-quick-signal i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 7px #84b89baa; }
-.input-quick-signal b { height: 1px; overflow: visible; color: #9d8658; background: linear-gradient(90deg, #4a4538, #b5985e); font-size: .66rem; line-height: 0; text-align: right; }
-.input-quick-body { min-height: 0; padding: 9px; overflow: auto; }
-.input-backplane { min-width: 690px; }
-.input-back-bank + .input-back-bank { margin-top: 10px; }
-.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 5px; color: #6e766f; font: .52rem/1 Consolas, monospace; letter-spacing: .14em; }
+.input-bay-route strong { color: #d8b86f; font: inherit; }
+.input-bay-scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #554b36 #101310; }
+.input-backplane { min-width: 680px; }
+.input-back-bank + .input-back-bank { margin-top: 6px; }
+.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 3px; color: #6e766f; font: .47rem/1 Consolas, monospace; letter-spacing: .14em; }
 .input-bank-label::after { content: ""; flex: 1; height: 1px; background: #323833; }
-.input-back-row { display: grid; grid-template-columns: repeat(var(--jack-count), minmax(82px, 1fr)); gap: 5px; }
+.input-back-row { display: grid; grid-template-columns: repeat(var(--jack-count), minmax(78px, 1fr)); gap: 4px; }
 .input-back-jack {
-  display: grid; grid-template-columns: 29px minmax(0, 1fr); grid-template-rows: 22px auto auto; gap: 1px 6px;
-  min-width: 0; min-height: 64px; padding: 5px 6px; border: 1px solid #353c36; border-radius: 2px;
+  position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr); grid-template-rows: 17px auto auto; gap: 0 5px;
+  min-width: 0; min-height: 48px; padding: 4px 5px; overflow: hidden; border: 1px solid #353c36; border-radius: 2px;
   background: linear-gradient(145deg, #1b201c, #111411); color: #b7bdb7; text-align: left;
 }
 .input-back-jack:hover, .input-back-jack:focus-visible { border-color: #8f7749; background: #29251b; outline: none; }
-.input-back-jack.current { border-color: #806c47; box-shadow: inset 0 -3px var(--accent); }
+.input-back-jack.current {
+  border-color: #a58a54; background: linear-gradient(145deg, #302a1e, #171712);
+  box-shadow: inset 0 -3px var(--accent), 0 0 12px #d0aa5b25;
+}
+.input-back-jack.current::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%;
+  background: #d7ba78; box-shadow: 0 0 7px #e3c37ddd;
+}
 .input-back-plug {
-  grid-row: 1 / 4; align-self: start; width: 22px; height: 22px; border: 2px solid #697169; border-radius: 50%;
+  grid-row: 1 / 4; align-self: center; width: 19px; height: 19px; border: 2px solid #697169; border-radius: 50%;
   background: radial-gradient(circle, #050605 0 29%, #272c28 31% 47%, #090b09 49% 100%);
   box-shadow: inset 0 1px #ffffff10, 0 1px 2px #000;
 }
 .input-back-jack.current .input-back-plug { border-color: #b49354; box-shadow: 0 0 8px #d0aa5b55, inset 0 1px #ffffff10; }
-.input-back-num { color: #c4a768; font: 700 .57rem/1 Consolas, monospace; }
-.input-back-name { overflow: hidden; color: #e0e4df; font: 600 .61rem/1.15 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
-.input-back-dest { overflow: hidden; color: #6d756e; font: .48rem/1.15 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.input-quick-foot { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 8px; border-top: 1px solid #3a413b; background: #111411; }
-.input-quick-foot button { padding: 5px 7px; border: 1px solid #414941; background: #171b18; color: #9da49d; font-size: .6rem; }
-.input-quick-foot button:hover { border-color: #8d7548; color: #e4c77f; }
-.input-quick-foot #input-pin-btn[aria-pressed="true"] { color: #17130d; border-color: #d0ad68; background: var(--accent); }
-.input-quick-control { display: flex; align-items: center; gap: 7px; color: #69716a; font: .54rem/1.25 Consolas, monospace; }
-.input-quick-control b { color: #a88d57; font-weight: 700; letter-spacing: .06em; }
+.input-back-num { color: #c4a768; font: 700 .52rem/1 Consolas, monospace; }
+.input-back-name { overflow: hidden; color: #e0e4df; font: 600 .56rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
+.input-back-dest { overflow: hidden; color: #6d756e; font: .44rem/1.1 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.input-bay-note { color: #69716a; font: .48rem/1 Consolas, monospace; white-space: nowrap; }
+.input-bay-note b { color: #a88d57; font-weight: 700; letter-spacing: .06em; }
 
 #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
 #left-panel, #inst-panel, #advanced-panel {
@@ -902,7 +899,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     height: auto; min-height: calc(100vh - 124px); overflow: visible;
   }
   .workspace-rail { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: calc(100vh - 8px); z-index: 20; }
-  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 610px; border-bottom: 1px solid var(--border); }
+  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 760px; border-bottom: 1px solid var(--border); }
   #left-panel, #inst-panel, #advanced-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
   #drum-svg-wrap { min-height: 360px; }
   .layer-rack { grid-template-columns: minmax(0, 1fr) 138px minmax(0, 1fr); }
@@ -927,11 +924,13 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .workspace-tab { flex: 0 0 50px; min-height: 41px; padding: 3px 1px; }
   .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
   .workspace-spacer { display: none; }
-  .input-quick-picker { position: absolute; top: 57px; left: 7px; width: calc(100vw - 14px); max-height: calc(100vh - 70px); }
-  #center-panel { min-height: 590px; }
+  #center-panel { min-height: 760px; }
   #left-panel, #inst-panel, #advanced-panel { min-height: 420px; }
   .center-hdr { flex-wrap: wrap; }
   .center-hdr .map-title { flex-basis: 100%; }
+  .input-bay-head { align-items: flex-start; flex-wrap: wrap; }
+  .input-bay-route { order: 3; width: 100%; margin-left: 0; }
+  .input-bay-note { margin-left: auto; }
   .layer-rack { grid-template-columns: 1fr 1fr; }
   .rack-blend { grid-column: 1 / -1; grid-row: 2; min-height: 112px; }
 }

@@ -3704,6 +3704,7 @@ input[type=range] { accent-color: var(--accent) !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
   .map-pad.midi-hit { animation-duration: .01ms !important; }
+  .input-bay-dock.attention { animation: none !important; }
 }
 
 
@@ -3804,62 +3805,58 @@ header.app-topbar {
 .workspace-tab.active .workspace-glyph { color: #17130d; border-color: #d0ad68; background: var(--accent); }
 .workspace-spacer { flex: 1; min-height: 10px; }
 
-/* Inputs is a quick selection gesture, not a destination. The picker overlays
-   one edge of the performance surface so the physical-to-logical relationship
-   remains visible while choosing a jack. */
-.input-quick-picker {
-  position: absolute; z-index: 45; top: 8px; left: 74px; display: none; width: min(760px, calc(100vw - 88px));
-  max-height: calc(100% - 16px); overflow: hidden; border: 1px solid #5a5140; border-radius: 3px;
-  background: linear-gradient(155deg, #20251f, #101310 76%); box-shadow: 0 18px 44px #000a, inset 0 1px #ffffff0b;
+/* The module bay and kit map are one visual instrument: selecting a physical
+   socket leaves both surfaces visible and illuminates every zone it drives. */
+.input-bay-dock {
+  position: relative; flex: 0 0 auto; min-width: 0; padding: 7px 8px 8px;
+  border-top: 1px solid #4a4335; border-bottom: 1px solid #252b26;
+  background: linear-gradient(180deg, #20241f, #111411 74%);
+  box-shadow: inset 0 1px #ffffff08, 0 -8px 20px #0004;
 }
-.input-quick-picker.open { display: flex; flex-direction: column; animation: input-picker-in 130ms ease-out; }
-@keyframes input-picker-in { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
-.workspace-tab.picker-open { color: #e8d3a4; border-color: #766342; background: #2b271d; }
-.workspace-tab.picker-open .workspace-glyph { color: #d3af67; border-color: #a8884e; background: #1b1914; }
-.input-quick-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 auto;
-  min-height: 54px; padding: 9px 10px 8px 12px; border-bottom: 1px solid #3c433c;
-  background: linear-gradient(180deg, #292f29, #1a1f1b);
+.input-bay-dock.attention { animation: input-bay-signal 520ms ease-out; }
+@keyframes input-bay-signal { 35% { box-shadow: inset 0 1px #ffffff08, 0 0 0 1px #c7a35d, 0 0 25px #c7a35d40; } }
+.input-bay-head {
+  display: flex; align-items: center; gap: 9px; min-height: 25px; padding: 0 2px 6px;
 }
-.input-quick-head > div { display: flex; flex-direction: column; gap: 3px; }
-.input-quick-head strong { color: #edf0eb; font: 600 .84rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
-.input-quick-close { width: 27px; height: 27px; padding: 0; border: 1px solid #485049; background: #151916; color: #899189; }
-.input-quick-close:hover { border-color: var(--accent); color: #ecd18e; }
-.input-quick-signal {
-  display: grid; grid-template-columns: 7px auto 1fr auto; align-items: center; gap: 7px; min-height: 27px;
-  padding: 0 12px; border-bottom: 1px solid #333a34; color: #777f78;
-  font: .52rem/1 Consolas, monospace; letter-spacing: .11em;
+.input-bay-head > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.input-bay-head strong { color: #e0e4df; font: 600 .7rem/1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.input-bay-head small { color: #777f78; font: .49rem/1 Consolas, monospace; letter-spacing: .14em; text-transform: uppercase; }
+.input-bay-route {
+  min-width: 0; margin-left: auto; overflow: hidden; color: #9b8354;
+  font: .51rem/1 Consolas, monospace; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap;
 }
-.input-quick-signal i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 7px #84b89baa; }
-.input-quick-signal b { height: 1px; overflow: visible; color: #9d8658; background: linear-gradient(90deg, #4a4538, #b5985e); font-size: .66rem; line-height: 0; text-align: right; }
-.input-quick-body { min-height: 0; padding: 9px; overflow: auto; }
-.input-backplane { min-width: 690px; }
-.input-back-bank + .input-back-bank { margin-top: 10px; }
-.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 5px; color: #6e766f; font: .52rem/1 Consolas, monospace; letter-spacing: .14em; }
+.input-bay-route strong { color: #d8b86f; font: inherit; }
+.input-bay-scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #554b36 #101310; }
+.input-backplane { min-width: 680px; }
+.input-back-bank + .input-back-bank { margin-top: 6px; }
+.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 3px; color: #6e766f; font: .47rem/1 Consolas, monospace; letter-spacing: .14em; }
 .input-bank-label::after { content: ""; flex: 1; height: 1px; background: #323833; }
-.input-back-row { display: grid; grid-template-columns: repeat(var(--jack-count), minmax(82px, 1fr)); gap: 5px; }
+.input-back-row { display: grid; grid-template-columns: repeat(var(--jack-count), minmax(78px, 1fr)); gap: 4px; }
 .input-back-jack {
-  display: grid; grid-template-columns: 29px minmax(0, 1fr); grid-template-rows: 22px auto auto; gap: 1px 6px;
-  min-width: 0; min-height: 64px; padding: 5px 6px; border: 1px solid #353c36; border-radius: 2px;
+  position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr); grid-template-rows: 17px auto auto; gap: 0 5px;
+  min-width: 0; min-height: 48px; padding: 4px 5px; overflow: hidden; border: 1px solid #353c36; border-radius: 2px;
   background: linear-gradient(145deg, #1b201c, #111411); color: #b7bdb7; text-align: left;
 }
 .input-back-jack:hover, .input-back-jack:focus-visible { border-color: #8f7749; background: #29251b; outline: none; }
-.input-back-jack.current { border-color: #806c47; box-shadow: inset 0 -3px var(--accent); }
+.input-back-jack.current {
+  border-color: #a58a54; background: linear-gradient(145deg, #302a1e, #171712);
+  box-shadow: inset 0 -3px var(--accent), 0 0 12px #d0aa5b25;
+}
+.input-back-jack.current::after {
+  content: ""; position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%;
+  background: #d7ba78; box-shadow: 0 0 7px #e3c37ddd;
+}
 .input-back-plug {
-  grid-row: 1 / 4; align-self: start; width: 22px; height: 22px; border: 2px solid #697169; border-radius: 50%;
+  grid-row: 1 / 4; align-self: center; width: 19px; height: 19px; border: 2px solid #697169; border-radius: 50%;
   background: radial-gradient(circle, #050605 0 29%, #272c28 31% 47%, #090b09 49% 100%);
   box-shadow: inset 0 1px #ffffff10, 0 1px 2px #000;
 }
 .input-back-jack.current .input-back-plug { border-color: #b49354; box-shadow: 0 0 8px #d0aa5b55, inset 0 1px #ffffff10; }
-.input-back-num { color: #c4a768; font: 700 .57rem/1 Consolas, monospace; }
-.input-back-name { overflow: hidden; color: #e0e4df; font: 600 .61rem/1.15 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
-.input-back-dest { overflow: hidden; color: #6d756e; font: .48rem/1.15 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.input-quick-foot { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 8px; border-top: 1px solid #3a413b; background: #111411; }
-.input-quick-foot button { padding: 5px 7px; border: 1px solid #414941; background: #171b18; color: #9da49d; font-size: .6rem; }
-.input-quick-foot button:hover { border-color: #8d7548; color: #e4c77f; }
-.input-quick-foot #input-pin-btn[aria-pressed="true"] { color: #17130d; border-color: #d0ad68; background: var(--accent); }
-.input-quick-control { display: flex; align-items: center; gap: 7px; color: #69716a; font: .54rem/1.25 Consolas, monospace; }
-.input-quick-control b { color: #a88d57; font-weight: 700; letter-spacing: .06em; }
+.input-back-num { color: #c4a768; font: 700 .52rem/1 Consolas, monospace; }
+.input-back-name { overflow: hidden; color: #e0e4df; font: 600 .56rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
+.input-back-dest { overflow: hidden; color: #6d756e; font: .44rem/1.1 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.input-bay-note { color: #69716a; font: .48rem/1 Consolas, monospace; white-space: nowrap; }
+.input-bay-note b { color: #a88d57; font-weight: 700; letter-spacing: .06em; }
 
 #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
 #left-panel, #inst-panel, #advanced-panel {
@@ -4046,7 +4043,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     height: auto; min-height: calc(100vh - 124px); overflow: visible;
   }
   .workspace-rail { grid-column: 1; grid-row: 1 / span 2; position: sticky; top: 0; height: calc(100vh - 8px); z-index: 20; }
-  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 610px; border-bottom: 1px solid var(--border); }
+  #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-height: 760px; border-bottom: 1px solid var(--border); }
   #left-panel, #inst-panel, #advanced-panel { grid-column: 2 !important; grid-row: 2 !important; min-height: 430px; max-height: none; }
   #drum-svg-wrap { min-height: 360px; }
   .layer-rack { grid-template-columns: minmax(0, 1fr) 138px minmax(0, 1fr); }
@@ -4071,11 +4068,13 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .workspace-tab { flex: 0 0 50px; min-height: 41px; padding: 3px 1px; }
   .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
   .workspace-spacer { display: none; }
-  .input-quick-picker { position: absolute; top: 57px; left: 7px; width: calc(100vw - 14px); max-height: calc(100vh - 70px); }
-  #center-panel { min-height: 590px; }
+  #center-panel { min-height: 760px; }
   #left-panel, #inst-panel, #advanced-panel { min-height: 420px; }
   .center-hdr { flex-wrap: wrap; }
   .center-hdr .map-title { flex-basis: 100%; }
+  .input-bay-head { align-items: flex-start; flex-wrap: wrap; }
+  .input-bay-route { order: 3; width: 100%; margin-left: 0; }
+  .input-bay-note { margin-left: auto; }
   .layer-rack { grid-template-columns: 1fr 1fr; }
   .rack-blend { grid-column: 1 / -1; grid-row: 2; min-height: 112px; }
 }
@@ -4230,8 +4229,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
       <span class="workspace-glyph" aria-hidden="true">S</span><span>Sounds</span>
     </button>
     <button id="inputs-quick-btn" class="workspace-tab" type="button"
-      aria-haspopup="dialog" aria-expanded="false"
-      onclick="event.stopPropagation();toggleInputQuickPicker()" title="Quick-pick a physical module input">
+      onclick="focusInputBay()" title="Jump to the always-visible physical input bay">
       <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
     </button>
     <span class="workspace-spacer"></span>
@@ -4245,20 +4243,6 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
       <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
     </button>
   </nav>
-
-  <aside id="input-quick-picker" class="input-quick-picker" role="dialog" aria-modal="false"
-    aria-labelledby="input-quick-title" aria-hidden="true">
-    <div class="input-quick-head">
-      <div><span class="context-eyebrow">Physical trigger bay</span><strong id="input-quick-title">Choose an input</strong></div>
-      <button class="input-quick-close" type="button" onclick="toggleInputQuickPicker(false)" aria-label="Close input picker">&#x2715;</button>
-    </div>
-    <div class="input-quick-signal"><i></i><span>MODULE INPUT</span><b>&#x2192;</b><span>SELECTED TRIGGER</span></div>
-    <div id="input-quick-body" class="input-quick-body"></div>
-    <div class="input-quick-foot">
-      <button id="input-pin-btn" type="button" onclick="toggleInputPickerPin()" aria-pressed="false">Pin open</button>
-      <div class="input-quick-control"><b>HH CTRL</b><span>Pedal control follows Hi-Hat; it has no separate voice.</span></div>
-    </div>
-  </aside>
 
   <!-- Left: back panel jacks + pad editor -->
   <div id="left-panel">
@@ -4342,6 +4326,14 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
       <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>
+    <section id="input-bay-dock" class="input-bay-dock" aria-labelledby="input-bay-title">
+      <div class="input-bay-head">
+        <div><small>Module rear panel</small><strong id="input-bay-title">Trigger input bay</strong></div>
+        <span id="input-bay-route" class="input-bay-route">SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP</span>
+        <span class="input-bay-note"><b>HH CTRL</b> follows Hi-Hat</span>
+      </div>
+      <div id="input-bay-body" class="input-bay-scroll"></div>
+    </section>
     <div id="layer-rack" class="layer-rack" aria-label="Selected pad layer controls" aria-live="polite">
       <div class="layer-rack-empty">Select a pad to open its Layer A / B signal path</div>
     </div>
@@ -5413,9 +5405,6 @@ function stopPreview() {
 // Patch panel collapse state (persisted in localStorage)
 let patchCollapsed = false;
 try { patchCollapsed = localStorage.getItem('patchCollapsed') === '1'; } catch(e) {}
-let inputPickerOpen = false;
-let inputPickerPinned = false;
-try { inputPickerPinned = localStorage.getItem('strike_input_picker_pinned') === '1'; } catch(e) {}
 function applyPatchPanelState() {
   const panel = document.getElementById('patch-panel');
   const arrow = document.getElementById('patch-toggle-arrow');
@@ -5591,15 +5580,29 @@ const PAD_GROUPS = {
 const PAD_TO_GROUP = {};
 for (const [k, g] of Object.entries(PAD_GROUPS)) for (const pid of g.pads) PAD_TO_GROUP[pid] = k;
 
-// Patch panel rows: each entry is [groupKey, displayNumber, label]
+// Physical bay rows: [groupKey, displayNumber, label, optionalJackKey, optionalPadIds].
+// The optional fields distinguish the hi-hat trigger jack from its controller
+// while both continue to share the same HI-HAT editing group.
 // Top row = cymbal inputs (07-12); bottom row = drum inputs (01-06) + HH control
 const JACK_ROWS = [
-  [['HI-HAT', '07','HH'],      ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
+  [['HI-HAT', '07','HH','HI-HAT',['H1B','H1E']], ['CRASH 1','08','CRASH 1'], ['RIDE 1','09','RIDE 1'],
    ['RIDE 2',  '10','RIDE 2'],  ['CRASH 2','11','CRASH 2'], ['CRASH 3','12','CRASH 3']],
   [['KICK',   '01','KICK'],    ['SNARE',  '02','SNARE'],    ['TOM 1', '03','TOM 1'],
    ['TOM 2',  '04','TOM 2'],   ['TOM 3',  '05','TOM 3'],    ['TOM 4', '06','TOM 4'],
-   ['HI-HAT', '',  'HH CTRL']],
+   ['HI-HAT', '',  'HH CTRL','HH CTRL',['H1F']]],
 ];
+
+function jackPadIds(entry) {
+  return entry[4] || PAD_GROUPS[entry[0]]?.pads || [];
+}
+
+function inputJackForPad(padId) {
+  if (!padId) return null;
+  for (const row of JACK_ROWS) for (const entry of row) {
+    if (jackPadIds(entry).includes(padId)) return entry;
+  }
+  return null;
+}
 
 // Return [id, type, cx, cy, rx, ry, lbl] with any user overrides applied
 function effectivePadDef(id) {
@@ -5776,7 +5779,7 @@ function renderPatchPanel() {
         + `<div class="jack-lbl">${escHtml(lbl)}</div></div>`;
     }).join('')}</div>`
   ).join('');
-  if (inputPickerOpen) renderInputQuickPicker();
+  renderInputBay();
 }
 
 function inputGroupSummary(group) {
@@ -5797,71 +5800,69 @@ function inputGroupSummary(group) {
   return visible + (assigned.length > 2 ? ` +${assigned.length - 2}` : '') + (missing ? ' · missing file' : '');
 }
 
-function renderInputQuickPicker() {
-  const body = document.getElementById('input-quick-body');
+function renderInputBay() {
+  const body = document.getElementById('input-bay-body');
   if (!body) return;
   const bankLabels = ['CYMBALS · INPUTS 07–12', 'DRUMS · INPUTS 01–06 + HH CONTROL'];
   body.innerHTML = '<div class="input-backplane">' + JACK_ROWS.map((row, rowIndex) =>
     `<section class="input-back-bank"><div class="input-bank-label">${bankLabels[rowIndex]}</div>`
     + `<div class="input-back-row" style="--jack-count:${row.length}">`
-    + row.map(([key, num, label]) => {
+    + row.map(entry => {
+      const [key, num, label] = entry;
+      const jackKey = entry[3] || key;
       const group = PAD_GROUPS[key];
-      const current = selectedGroup === key ? ' current' : '';
-      const summary = inputGroupSummary(group);
-      return `<button type="button" class="input-back-jack${current}" onclick="chooseInputFromPicker('${key}')"`
-        + ` aria-pressed="${selectedGroup === key ? 'true' : 'false'}" title="${escHtml(summary)}">`
+      const activeJack = inputJackForPad(selectedMapPad);
+      const isCurrent = activeJack ? (activeJack[3] || activeJack[0]) === jackKey : selectedGroup === key;
+      const current = isCurrent ? ' current' : '';
+      const summary = inputGroupSummary({...group, pads:jackPadIds(entry)});
+      return `<button type="button" class="input-back-jack${current}" onclick="chooseInputFromBay('${key}','${jackKey}')"`
+        + ` aria-pressed="${isCurrent ? 'true' : 'false'}" title="${escHtml(summary)}">`
         + `<span class="input-back-plug" aria-hidden="true"></span>`
         + `<span class="input-back-num">${escHtml(num || 'CTRL')}</span>`
         + `<span class="input-back-name">${escHtml(label)}</span>`
-        + `<span class="input-back-dest">${escHtml(group.pads.join(' · '))}</span></button>`;
+        + `<span class="input-back-dest">${escHtml(jackPadIds(entry).join(' · '))}</span></button>`;
     }).join('') + '</div></section>'
   ).join('') + '</div>';
-}
-
-function toggleInputQuickPicker(force) {
-  inputPickerOpen = typeof force === 'boolean' ? force : !inputPickerOpen;
-  const picker = document.getElementById('input-quick-picker');
-  const btn = document.getElementById('inputs-quick-btn');
-  if (!picker || !btn) return;
-  if (inputPickerOpen) renderInputQuickPicker();
-  picker.classList.toggle('open', inputPickerOpen);
-  picker.setAttribute('aria-hidden', inputPickerOpen ? 'false' : 'true');
-  btn.classList.toggle('picker-open', inputPickerOpen);
-  btn.setAttribute('aria-expanded', inputPickerOpen ? 'true' : 'false');
-  const pin = document.getElementById('input-pin-btn');
-  if (pin) {
-    pin.setAttribute('aria-pressed', inputPickerPinned ? 'true' : 'false');
-    pin.textContent = inputPickerPinned ? 'Pinned' : 'Pin open';
+  const route = document.getElementById('input-bay-route');
+  if (route) {
+    const activeJack = inputJackForPad(selectedMapPad);
+    const group = activeJack && PAD_GROUPS[activeJack[0]];
+    const jackLabel = activeJack ? `${activeJack[1] || 'CTRL'} ${activeJack[2]}` : '';
+    route.innerHTML = group
+      ? `<strong>${escHtml(jackLabel)}</strong> &rarr; ${escHtml(jackPadIds(activeJack).join(' · '))}`
+      : 'SELECT AN INPUT &rarr; MATCHED KIT PIECES LIGHT UP';
   }
-  if (inputPickerOpen) requestAnimationFrame(() => picker.querySelector('.input-quick-item')?.focus());
 }
 
-function toggleInputPickerPin() {
-  inputPickerPinned = !inputPickerPinned;
-  try { localStorage.setItem('strike_input_picker_pinned', inputPickerPinned ? '1' : '0'); } catch(e) {}
-  toggleInputQuickPicker(true);
-}
-
-function chooseInputFromPicker(grpKey) {
-  selectGroupFromPanel(grpKey);
+function chooseInputFromBay(grpKey, jackKey) {
+  let entry = null;
+  for (const row of JACK_ROWS) for (const candidate of row) {
+    if (candidate[0] === grpKey && (candidate[3] || candidate[0]) === jackKey) entry = candidate;
+  }
+  selectGroupFromPanel(grpKey, entry ? jackPadIds(entry)[0] : null);
   setWorkspaceMode('pad');
-  if (!inputPickerPinned) toggleInputQuickPicker(false);
 }
 
-document.addEventListener('click', e => {
-  if (!inputPickerOpen || inputPickerPinned) return;
-  const picker = document.getElementById('input-quick-picker');
-  const btn = document.getElementById('inputs-quick-btn');
-  if (picker && !picker.contains(e.target) && btn && !btn.contains(e.target)) toggleInputQuickPicker(false);
-});
+function focusInputBay() {
+  setWorkspaceMode('pad');
+  const dock = document.getElementById('input-bay-dock');
+  if (!dock) return;
+  dock.classList.remove('attention');
+  void dock.offsetWidth;
+  dock.classList.add('attention');
+  if (window.innerWidth <= 900) dock.scrollIntoView({behavior:'smooth', block:'center'});
+  const current = dock.querySelector('.input-back-jack.current') || dock.querySelector('.input-back-jack');
+  if (current) current.focus({preventScroll:true});
+  setTimeout(() => dock.classList.remove('attention'), 560);
+}
 
-function selectGroupFromPanel(grpKey) {
+function selectGroupFromPanel(grpKey, preferredPad) {
   selectedGroup = grpKey;
   const g = PAD_GROUPS[grpKey];
   if (g && g.pads.length) {
     // Keep selectedPad if it's already in this group, otherwise default to first pad / layer A
-    const keepPad = selectedPad && g.pads.includes(selectedPad.id);
-    const pid = keepPad ? selectedPad.id : g.pads[0];
+    const keepPad = !preferredPad && selectedPad && g.pads.includes(selectedPad.id);
+    const pid = preferredPad && g.pads.includes(preferredPad) ? preferredPad : (keepPad ? selectedPad.id : g.pads[0]);
     selectedMapPad = pid;
     if (!keepPad) selectedPad = {id: pid, layer: 'a'};
   }
@@ -6111,7 +6112,6 @@ function menuToggle(id) {
 function setWorkspaceMode(mode) {
   const modes = ['pad', 'sounds', 'fx', 'history', 'tools', 'repair', 'layout'];
   if (!modes.includes(mode)) return;
-  if (inputPickerOpen && !inputPickerPinned) toggleInputQuickPicker(false);
   document.body.dataset.workspace = mode;
   const navMode = ['repair', 'layout'].includes(mode) ? 'tools' : mode;
   document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
@@ -6503,7 +6503,10 @@ function renderDrumMap() {
   // Which pad IDs are in the currently selected group?
   const groupMembers = new Set();
   if (selectedGroup && PAD_GROUPS[selectedGroup]) {
-    for (const pid of PAD_GROUPS[selectedGroup].pads) groupMembers.add(pid);
+    const activeJack = inputJackForPad(selectedMapPad);
+    const routedPads = activeJack && activeJack[0] === selectedGroup
+      ? jackPadIds(activeJack) : PAD_GROUPS[selectedGroup].pads;
+    for (const pid of routedPads) groupMembers.add(pid);
   }
 
   const parts = [];
@@ -6552,19 +6555,20 @@ function renderDrumMap() {
     if (isBatchSel) {
       ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#e0a030" stroke-width="2.4" stroke-dasharray="4,2" pointer-events="none"${ringRot}/>`;
     } else if (inGroup && !isSel && !isAssT) {
-      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#4a7fd0" stroke-width="1.6" opacity="0.75" pointer-events="none"${ringRot}/>`;
+      ring = `<ellipse cx="${scx}" cy="${scy}" rx="${rrx}" ry="${rry}" fill="none" stroke="#d0aa5b" stroke-width="2.2" opacity="0.92" pointer-events="none"${ringRot}/>`;
     }
 
     let glow = '';
     if (isSel)           glow = 'filter:drop-shadow(0 0 6px #f0b32e) drop-shadow(0 0 13px #f0b32e70);';
     else if (isAssT)     glow = 'filter:drop-shadow(0 0 6px #44aaff) drop-shadow(0 0 12px #44aaff70);';
     else if (isBatchSel) glow = 'filter:drop-shadow(0 0 6px #e0a030a0);';
+    else if (inGroup)    glow = 'filter:drop-shadow(0 0 5px #d0aa5baa) drop-shadow(0 0 10px #d0aa5b45);';
 
     // Label (base pads only — rim/bell labels are empty in PAD_DEFS)
     let textEl = '';
     if (lbl) {
       const fs = Math.max(7, Math.min(13, ry * 1.2));
-      const lblFill = isSel ? '#ffd86a' : (isBatchSel ? '#e0c060' : (inGroup ? '#dde8ff' : '#eef1f6'));
+      const lblFill = isSel ? '#ffe29a' : (isBatchSel ? '#e0c060' : (inGroup ? '#f0cf87' : '#eef1f6'));
       textEl = `<text x="${cx}" y="${cy + fs * 0.35}" text-anchor="middle" `
         + `font-size="${fs}" fill="${lblFill}" font-family="system-ui,sans-serif" font-weight="700" `
         + `paint-order="stroke" stroke="#000000cc" stroke-width="2.4" stroke-linejoin="round" `
@@ -6598,7 +6602,7 @@ function renderDrumMap() {
 
     const inner = titleEl + sprite + ring + textEl + warnEl;
     (isOverlay ? overlays : parts).push(
-      `<g class="map-pad" data-pid="${id}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
+      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
       + inner + `</g>`);
 
     // Mirror pad: same zone drawn a second time (e.g. dual hi-hats on a Y-splitter)
@@ -6607,7 +6611,7 @@ function renderDrumMap() {
       const link = `<text x="${(scx + srx - 6).toFixed(1)}" y="${(scy - sry + 8).toFixed(1)}" font-size="9" `
         + `fill="#7f8a9c" pointer-events="none" font-family="system-ui,sans-serif">&#x29C9;</text>`;
       (isOverlay ? overlays : parts).push(
-        `<g class="map-pad" data-pid="${id}" transform="translate(${mir.dx},${mir.dy})" `
+        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
         + `style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}',true)">`
         + `<title>${escHtml((padMap[id]?.label || id) + ' (mirror — same zone, shared settings)')}</title>`
         + sprite + ring + textEl + warnEl + link + `</g>`);
@@ -9140,7 +9144,6 @@ async function checkStatus() {
       const openModal = document.querySelector(
         '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
       if (openModal) { openModal.classList.remove('open'); return; }
-      if (inputPickerOpen) { toggleInputQuickPicker(false); return; }
       if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
         setWorkspaceMode('pad');
         return;
