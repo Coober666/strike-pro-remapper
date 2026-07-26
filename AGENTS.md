@@ -53,32 +53,25 @@ pkill -f strike_remap.py && python3 strike_remap.py &
 2. Handler returns `{pads: _pad_view(...), dirty, undo_count, history_labels, message}`
 3. JS updates `pads` array then calls `renderDrumMap()` + `renderPadDetail()`
 
-## Layout (3-column grid, responsive)
+## Layout (workspace rail + persistent visual editor + contextual panel)
 
-```
-┌──────────────────── header (56px) ────────────────────────────┐
-│ Strike Pro Remapper | [Kits▾] [Save▾] [Dup] [Clear] ... [⚠SD]│
-├───────────────────────────────────────────────────────────────┤
-│ Left (280px)       │ Center (1fr)      │ Right (360px)         │
-│ Back panel jacks   │ Drum map SVG      │ Tag chips + search    │
-│   (collapsible)    ├───────────────────│ Instrument browser    │
-│ Pad detail panel   │ Live loop         │                       │
-│   (fills rest)     │   (below drums)   │                       │
-└────────────────────┴───────────────────┴───────────────────────┘
-```
+The editor shell is a three-column grid: a 66px workspace rail, the persistent drum-map
+workspace, and one contextual panel. Pad, Sounds, FX, History, and Tools switch the right
+panel without replacing the map. The module input bay is docked below the map so a selected
+jack and every zone it drives remain visible together. The selected pad's Layer A/B rack is
+also part of the central workspace.
 
-CSS: `.main { display: grid; grid-template-columns: 280px 1fr 360px; height: calc(100vh - 56px); }`
-**Critical:** all three direct children need both `grid-column: N` AND `grid-row: 1` — without
-`grid-row: 1`, explicit `grid-column` triggers auto-placement into separate rows.
-
-At ≤768px the columns stack vertically: center (drum map) → left (pad editor) → right (browser).
+CSS: `.main { grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px); }`.
+At ≤900px the rail remains beside the map and the contextual panel moves below it; at
+≤620px the rail becomes a sticky horizontal strip and the shell stacks vertically.
 
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
 
 **Visual system (June 2026 overhaul):** graphite surfaces + brass-gold accent; tokens in
 `:root` at the top of `<style>`. Selection = CSS drop-shadow glow on the pad `<g>`. Pad
-layout overrides live in `padOverrides` (localStorage), including `mirror: {dx, dy}` which
+layout overrides live in the active physical setup profile, including
+`mirror: {dx, dy}` which
 draws a zone twice (Y-splitter support) — both copies share the zone; mirror drags
 independently (`startDrag(e, id, isMirror)`).
 
@@ -106,9 +99,11 @@ overlay's edits to its parent. On-map gold handles (`.pad-handle`, rendered last
 `svgMouseMove`/`svgMouseUp` (Shift snaps rotation to 15°). Panel mirrors them:
 `setPadSize(id, scale)` (scale × the type's `PAD_TYPE_SIZES` default) and
 `setPadShape(id, key, val, redrawPanel)` (redrawPanel=false so a slider isn't torn out
-mid-drag). `exportLayout()` / `importLayout(file)` save/load `padOverrides` as JSON
-(`format: 'strike-remap-layout'`; import filters to `VALID_PAD_IDS`, tolerates a bare
-overrides object) — buttons live next to Reset layout.
+mid-drag). Physical setup profiles are independent of kits and auto-save changes to the
+active profile. `exportLayout()` / `importLayout(file)` export/import the active setup as
+JSON (`format: 'strike-remap-layout'`; import filters to `VALID_PAD_IDS` and tolerates a
+bare overrides object). The factory profile is an immutable reset point; users can create,
+apply, duplicate, and delete their own profiles in the Setup profiles modal.
 
 **Script block placement:** `<script>` is at ~line 42k in the HTML string; DOM elements defined
 AFTER the script cannot be referenced during script evaluation — use inline `onclick=` not
@@ -450,10 +445,15 @@ pivots the search, A/B buttons `directAssign` to the selected pad, ▶ reuses
 `dirty` (server dedupe makes redundant fires no-ops). Snapshots persist server-side, so
 there is **no** `strike_`-prefixed localStorage key for them.
 
-## localStorage keys (prefix: `strike_`)
+## localStorage keys
 
-`theme`, `padOverrides`, `loopState`, `favorites`, `recent`, `instSort`,
-`hoverPreview`, `autoPreview`, `patchPanelOpen`, `loopPanelOpen`
+Prefixed: `strike_pad_overrides` (legacy/current-profile compatibility),
+`strike_setup_profiles_v1`, `strike_workspace`, `strike_favorites`, `strike_recent`,
+`strike_instSort`, `strike_hoverPreview`, `strike_autoPreview`,
+`strike_previewVol`, `strike_previewVel`.
+
+Legacy unprefixed UI state still in use: `loop_state`, `loopPanelOpen`,
+`patchCollapsed`.
 
 ## File format constraints (from official editor research)
 

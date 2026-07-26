@@ -7,6 +7,9 @@ No module connection required. No install. No dependencies. One Python file.
 
 ![Strike Pro Remapper — drum map, pad editor, and instrument browser](docs/screenshot.png)
 
+> **Screenshot note:** `docs/screenshot.png` shows the previous interface. The current
+> graphite-and-brass workspace redesign is not yet reflected in this image.
+
 The official Strike Editor hasn't been updated since January 2018, requires the module
 plugged in via USB for every edit, and never worked reliably on modern macOS. This tool
 replaces it: load `.skt` kit files straight from your SD card (or a synced local library),
@@ -54,7 +57,9 @@ no SD card present — e.g. on a laptop away from your kit.
 **Without an SD card:** the app runs entirely against a local `library/` folder
 (`kits/`, `instruments/`, `samples/`).
 
-Saving writes to the library and/or directly to the SD card; put the card back in the
+Saving keeps a working copy in the local library. When you are ready, **Deploy to Module**
+runs a preflight, shows the exact kit/assets and destination, backs up a replaced kit,
+copies to the writable Strike SD card, and verifies the result. Put the card back in the
 module and load the kit. (Live USB sync to the module is not supported — that protocol
 is still unmapped. See `RESEARCH.md`.)
 
@@ -91,8 +96,10 @@ double-click.
   handles to resize and rotate (Shift = snap to 15°), size/rotation sliders + a shell-finish
   / cymbal-tone picker in the pad panel (red sparkle, black, white, silver, blue, emerald,
   purple, amber, natural wood; brass / bronze / brilliant / black cymbals). Rims and bells
-  inherit their parent's size, rotation, and finish. **Save layout** / **Load layout** export
-  the whole arrangement to a JSON file to carry between browsers or share
+  inherit their parent's size, rotation, and finish. **Setup profiles** keep multiple
+  physical arrangements separate from kit sounds, automatically save edits to the active
+  profile, and include **Export active JSON** / **Import setup JSON** for moving a setup
+  between Windows and macOS
 - Per-layer level, pan, pitch (±12 st), fine pitch (±50 cents), decay, filter
   cutoff/enable; mute groups; MIDI notes; gate time (Free in ms, tempo-synced, or off)
 - Copy, swap, and batch-edit pads; batch-assign from CSV; kit diff/compare; rename,
@@ -146,6 +153,10 @@ double-click.
 
 **Library & workflow**
 - One-click full library sync from SD card (background, with progress)
+- **Deploy to Module** — a guided SD-card transfer with a readable preflight, explicit
+  destination and asset plan, conflict blocking, backup of a replaced kit, progress, and
+  post-copy byte verification. Automated coverage uses temporary directories only; a real
+  Strike-module SD-card round trip is still pending owner verification.
 - Instrument browser: search, tag filtering, favorites, recents, waveform thumbnails,
   audio preview at any velocity, A+B layer blend preview
 - **"More like this" similarity search** — instead of scrolling 168 snares, click the
@@ -193,7 +204,7 @@ double-click.
   safe; **restore-to-module is experimental** — it replays a captured dump verbatim, so
   keep a known-good backup and only restore dumps taken from your own module. Includes a
   hex inspector (xTalk RCV decoded; the rest awaits mapping). Chromium only.
-- Dark/light theme, keyboard shortcuts, drag-and-drop kit loading
+- Purpose-built dark hardware theme, keyboard shortcuts, drag-and-drop kit loading
 
 **Web Viewer (read-only, zero-install)**
 - A single self-contained HTML file — `python tools/build_viewer.py` → `dist/strike_viewer.html`

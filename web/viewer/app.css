@@ -1055,6 +1055,14 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
 
 /* The web viewer has not adopted the editor's mode rail yet. Restore its existing
    simultaneous three-panel contract after the shared editor-shell rules. */
+body.viewer-mode .workspace-rail,
+body.viewer-mode .primary-actions .deploy-btn,
+body.viewer-mode #deploy-modal,
+body.viewer-mode #setup-profile-btn,
+body.viewer-mode #setup-modal,
+body.viewer-mode .layer-rack {
+  display: none !important;
+}
 body.viewer-mode .main {
   display: grid !important; grid-template-columns: 280px minmax(440px, 1fr) 360px !important;
   grid-template-rows: minmax(0, 1fr) !important; height: calc(100vh - 58px); overflow: hidden;
