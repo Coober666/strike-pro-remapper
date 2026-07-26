@@ -3884,7 +3884,7 @@ header.app-topbar {
 }
 
 .main {
-  display: grid; grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px);
+  position: relative; display: grid; grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px);
   grid-template-rows: minmax(0, 1fr); height: calc(100vh - 86px); overflow: hidden;
   background: #090b0a;
 }
@@ -3918,6 +3918,59 @@ header.app-topbar {
 }
 .workspace-tab.active .workspace-glyph { color: #17130d; border-color: #d0ad68; background: var(--accent); }
 .workspace-spacer { flex: 1; min-height: 10px; }
+
+/* Inputs is a quick selection gesture, not a destination. The picker overlays
+   one edge of the performance surface so the physical-to-logical relationship
+   remains visible while choosing a jack. */
+.input-quick-picker {
+  position: absolute; z-index: 45; top: 8px; left: 74px; display: none; width: min(360px, calc(100vw - 88px));
+  max-height: calc(100% - 16px); overflow: hidden; border: 1px solid #5a5140; border-radius: 3px;
+  background: linear-gradient(155deg, #20251f, #101310 76%); box-shadow: 0 18px 44px #000a, inset 0 1px #ffffff0b;
+}
+.input-quick-picker.open { display: flex; flex-direction: column; animation: input-picker-in 130ms ease-out; }
+@keyframes input-picker-in { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
+.workspace-tab.picker-open { color: #e8d3a4; border-color: #766342; background: #2b271d; }
+.workspace-tab.picker-open .workspace-glyph { color: #d3af67; border-color: #a8884e; background: #1b1914; }
+.input-quick-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 auto;
+  min-height: 54px; padding: 9px 10px 8px 12px; border-bottom: 1px solid #3c433c;
+  background: linear-gradient(180deg, #292f29, #1a1f1b);
+}
+.input-quick-head > div { display: flex; flex-direction: column; gap: 3px; }
+.input-quick-head strong { color: #edf0eb; font: 600 .84rem/1.1 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .025em; }
+.input-quick-close { width: 27px; height: 27px; padding: 0; border: 1px solid #485049; background: #151916; color: #899189; }
+.input-quick-close:hover { border-color: var(--accent); color: #ecd18e; }
+.input-quick-signal {
+  display: grid; grid-template-columns: 7px auto 1fr auto; align-items: center; gap: 7px; min-height: 27px;
+  padding: 0 12px; border-bottom: 1px solid #333a34; color: #777f78;
+  font: .52rem/1 Consolas, monospace; letter-spacing: .11em;
+}
+.input-quick-signal i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 7px #84b89baa; }
+.input-quick-signal b { height: 1px; overflow: visible; color: #9d8658; background: linear-gradient(90deg, #4a4538, #b5985e); font-size: .66rem; line-height: 0; text-align: right; }
+.input-quick-body { min-height: 0; padding: 8px; overflow-y: auto; }
+.input-bank + .input-bank { margin-top: 8px; }
+.input-bank-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 5px; color: #6e766f; font: .52rem/1 Consolas, monospace; letter-spacing: .14em; }
+.input-bank-label::after { content: ""; flex: 1; height: 1px; background: #323833; }
+.input-quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.input-quick-item {
+  display: grid; grid-template-columns: 27px 58px minmax(0, 1fr); grid-template-rows: auto auto; gap: 1px 7px;
+  min-width: 0; min-height: 48px; padding: 6px 7px; border: 1px solid #353c36; border-radius: 2px;
+  background: linear-gradient(145deg, #1b201c, #121512); color: #b7bdb7; text-align: left;
+}
+.input-quick-item:hover, .input-quick-item:focus-visible { border-color: #8f7749; background: #29251b; outline: none; }
+.input-quick-item.current { border-color: #806c47; box-shadow: inset 3px 0 var(--accent); }
+.input-quick-num {
+  grid-row: 1 / 3; display: grid; place-items: center; align-self: stretch; border-right: 1px solid #343b35;
+  color: #c4a768; font: 700 .66rem/1 Consolas, monospace;
+}
+.input-quick-name { overflow: hidden; color: #e0e4df; font: 600 .66rem/1.15 Bahnschrift, "Arial Narrow", sans-serif; letter-spacing: .035em; text-overflow: ellipsis; white-space: nowrap; }
+.input-quick-dest { overflow: hidden; color: #7e877f; font: .53rem/1 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.input-quick-sound { grid-column: 2 / 4; overflow: hidden; color: #6d756e; font: .54rem/1.2 "Segoe UI", sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.input-quick-item.current .input-quick-sound { color: #a79b7d; }
+.input-quick-foot { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding: 8px; border-top: 1px solid #3a413b; background: #111411; }
+.input-quick-foot button { padding: 5px 7px; border: 1px solid #414941; background: #171b18; color: #9da49d; font-size: .6rem; }
+.input-quick-foot button:hover { border-color: #8d7548; color: #e4c77f; }
+.input-quick-foot #input-pin-btn[aria-pressed="true"] { color: #17130d; border-color: #d0ad68; background: var(--accent); }
 
 #center-panel { grid-column: 2 !important; grid-row: 1 !important; min-width: 0; min-height: 0; border-right: 1px solid #303731; }
 #left-panel, #inst-panel, #advanced-panel {
@@ -4135,6 +4188,8 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .workspace-tab { flex: 0 0 50px; min-height: 41px; padding: 3px 1px; }
   .workspace-tab.active { box-shadow: inset 0 -3px var(--accent), inset 0 1px #ffffff08; }
   .workspace-spacer { display: none; }
+  .input-quick-picker { position: absolute; top: 57px; left: 7px; width: calc(100vw - 14px); max-height: calc(100vh - 70px); }
+  .input-quick-grid { grid-template-columns: 1fr; }
   #center-panel { min-height: 590px; }
   #left-panel, #inst-panel, #advanced-panel { min-height: 420px; }
   .center-hdr { flex-wrap: wrap; }
@@ -4171,6 +4226,68 @@ body[data-theme=light] .aw-module h3 { color: #262c27; }
 body[data-theme=light] .aw-actions button, body[data-theme=light] .aw-actions label { background: #e2e1d9; border-color: #afb2a9; color: #505851; }
 body[data-theme=light] .aw-ledger, body[data-theme=light] .aw-ledger-row { border-color: #c2c3ba; }
 body[data-theme=light] .aw-ledger-row strong { color: #343a35; }
+
+/* Daylight mode: cool anodized aluminum around the same charcoal/brass
+   hardware skeleton. This intentionally keeps the rail and top deck dark so
+   theme switching changes illumination, not product identity. */
+body[data-theme=light] {
+  --bg: #cbd1d4; --bg-deep: #bac1c5; --panel: #e6eaec; --raised: #f4f6f7;
+  --field: #d7dde0; --border: #9da7ac; --border-lt: #b8c0c4;
+  --text: #20272a; --text-2: #4f5a5f; --text-3: #727d82;
+  --accent: #b77b26; --accent-dim: #94621d; --accent-soft: #b77b2626;
+  background: #c7cdd0; color: #20272a;
+}
+body[data-theme=light] header.app-topbar { background: linear-gradient(180deg, #303637 0 58px, #252b2c 58px 100%); border-color: #111516; }
+body[data-theme=light] .brand-lockup, body[data-theme=light] .primary-actions { border-color: #495153; }
+body[data-theme=light] .brand-lockup strong, body[data-theme=light] .kit-identity #kit-name { color: #f2f4f3; }
+body[data-theme=light] .brand-lockup small, body[data-theme=light] .kit-eyebrow { color: #9ca5a6; }
+body[data-theme=light] .kit-identity { border-color: #495153; }
+body[data-theme=light] .utility-strip { background: #242a2b; border-color: #41494b; }
+body[data-theme=light] .utility-strip .btn-secondary, body[data-theme=light] .primary-actions .btn-secondary {
+  background: #303738; border-color: #596265; color: #d5d9d9;
+}
+body[data-theme=light] .utility-strip .btn-secondary:hover, body[data-theme=light] .primary-actions .btn-secondary:hover { background: #3b4345; border-color: #88734c; color: #f0d395; }
+body[data-theme=light] .main { background: #bfc6c9; }
+body[data-theme=light] .workspace-rail { background: linear-gradient(90deg, #171b1c, #2e3435 48%, #171b1c); border-color: #3f4749; }
+body[data-theme=light] .workspace-tab { color: #919a9b; }
+body[data-theme=light] .workspace-tab:hover { background: #363d3e; border-color: #566063; color: #e0e4e4; }
+body[data-theme=light] .workspace-tab.active { color: #f0d69f; background: linear-gradient(145deg, #403724, #292820); border-color: #806c43; }
+body[data-theme=light] .workspace-glyph { color: #a9b0b1; background: #171b1c; border-color: #4b5456; }
+body[data-theme=light] .workspace-tab.active .workspace-glyph { color: #20170c; background: #c28a35; border-color: #d6a85f; }
+body[data-theme=light] #left-panel, body[data-theme=light] #inst-panel, body[data-theme=light] #advanced-panel { background: #e2e6e8; border-color: #9ba5aa; }
+body[data-theme=light] #center-panel, body[data-theme=light] #pad-detail { background: #d4dadd; border-color: #98a3a8; }
+body[data-theme=light] .center-hdr, body[data-theme=light] .context-head { background: linear-gradient(180deg, #f1f3f4, #d5dade); border-color: #a4adb1; color: #596469; }
+body[data-theme=light] .context-head strong, body[data-theme=light] .map-title { color: #252c2f; }
+body[data-theme=light] .context-head button { background: #d4dadd; border-color: #9ba5aa; color: #3f494d; }
+body[data-theme=light] #drum-svg-wrap {
+  background: linear-gradient(#3e484d10 1px, transparent 1px), linear-gradient(90deg, #3e484d10 1px, transparent 1px), radial-gradient(ellipse at 52% 58%, #edf0f1, #c9d0d3 72%);
+  background-size: 34px 34px, 34px 34px, auto;
+}
+body[data-theme=light] .layer-rack { background: linear-gradient(180deg, #c5cccf, #b7c0c3); border-color: #939fa4; }
+body[data-theme=light] .rack-layer, body[data-theme=light] .rack-blend { background: linear-gradient(145deg, #f5f7f7, #d4dade); border-color: #9da7ac; }
+body[data-theme=light] .layer-rack-empty { background: #dfe4e6; border-color: #a7b0b4; color: #667277; }
+body[data-theme=light] .rack-layer-key, body[data-theme=light] .rack-action, body[data-theme=light] .aw-actions button, body[data-theme=light] .aw-actions label { background: #d7dde0; border-color: #9ca6ab; color: #414b4f; }
+body[data-theme=light] .rack-layer-title strong, body[data-theme=light] .rack-pad-id, body[data-theme=light] .aw-module h3 { color: #252c2f; }
+body[data-theme=light] #patch-panel-wrap, body[data-theme=light] #loop-panel { background: #c9d0d3; border-color: #9da7ac; }
+body[data-theme=light] .aw-module { background: linear-gradient(145deg, #f5f7f7, #d5dbde); border-color: #9da7ac; }
+body[data-theme=light] .aw-module::before { background: #c2c9cc; border-color: #9da7ac; color: #66583f; }
+body[data-theme=light] .aw-intro, body[data-theme=light] .aw-ledger, body[data-theme=light] .aw-ledger-row { border-color: #adb6ba; }
+body[data-theme=light] .aw-ledger-row strong { color: #30383b; }
+body[data-theme=light] .btn-secondary { background: #d4dade; border-color: #9ca6ab; color: #354044; }
+body[data-theme=light] .btn-secondary:hover { background: #c4ccd0; border-color: #7f8b90; }
+body[data-theme=light] input[type=text], body[data-theme=light] input[type=number], body[data-theme=light] input[type=search], body[data-theme=light] select, body[data-theme=light] textarea {
+  background: #eef1f2 !important; border-color: #98a3a8 !important; color: #20272a !important;
+}
+body[data-theme=light] .tb-popover, body[data-theme=light] .dup-form, body[data-theme=light] .undo-hist-panel { background: #edf0f1; border-color: #929da2; }
+body[data-theme=light] .input-quick-picker { border-color: #625943; background: linear-gradient(155deg, #293031, #15191a 76%); box-shadow: 0 18px 44px #25303470, inset 0 1px #ffffff12; }
+body[data-theme=light] .input-quick-head { background: linear-gradient(180deg, #3a4243, #252b2c); border-color: #4c5557; }
+body[data-theme=light] .input-quick-head strong { color: #f2f4f3; }
+body[data-theme=light] .input-quick-item { background: linear-gradient(145deg, #303738, #202526); border-color: #465052; }
+body[data-theme=light] .input-quick-item:hover, body[data-theme=light] .input-quick-item:focus-visible { background: #403823; border-color: #a1844e; }
+body[data-theme=light] .input-quick-name { color: #e6e9e8; }
+body[data-theme=light] .input-quick-dest { color: #8f999a; }
+body[data-theme=light] .input-quick-sound { color: #788283; }
+body[data-theme=light] .input-quick-foot { background: #1a1f20; border-color: #424b4d; }
 </style>
 </head>
 <body data-workspace="pad">
@@ -4320,7 +4437,9 @@ body[data-theme=light] .aw-ledger-row strong { color: #343a35; }
     <button class="workspace-tab" type="button" data-workspace="sounds" onclick="setWorkspaceMode('sounds')" title="Browse and assign instruments">
       <span class="workspace-glyph" aria-hidden="true">S</span><span>Sounds</span>
     </button>
-    <button class="workspace-tab" type="button" data-workspace="inputs" onclick="setWorkspaceMode('inputs')" title="Physical module input jacks">
+    <button id="inputs-quick-btn" class="workspace-tab" type="button" data-workspace="inputs"
+      aria-haspopup="dialog" aria-expanded="false"
+      onclick="event.stopPropagation();toggleInputQuickPicker()" title="Quick-pick a physical module input">
       <span class="workspace-glyph" aria-hidden="true">I</span><span>Inputs</span>
     </button>
     <span class="workspace-spacer"></span>
@@ -4334,6 +4453,20 @@ body[data-theme=light] .aw-ledger-row strong { color: #343a35; }
       <span class="workspace-glyph" aria-hidden="true">T</span><span>Tools</span>
     </button>
   </nav>
+
+  <aside id="input-quick-picker" class="input-quick-picker" role="dialog" aria-modal="false"
+    aria-labelledby="input-quick-title" aria-hidden="true">
+    <div class="input-quick-head">
+      <div><span class="context-eyebrow">Physical trigger bay</span><strong id="input-quick-title">Choose an input</strong></div>
+      <button class="input-quick-close" type="button" onclick="toggleInputQuickPicker(false)" aria-label="Close input picker">&#x2715;</button>
+    </div>
+    <div class="input-quick-signal"><i></i><span>MODULE INPUT</span><b>&#x2192;</b><span>SELECTED TRIGGER</span></div>
+    <div id="input-quick-body" class="input-quick-body"></div>
+    <div class="input-quick-foot">
+      <button id="input-pin-btn" type="button" onclick="toggleInputPickerPin()" aria-pressed="false">Pin open</button>
+      <button type="button" onclick="openFullInputPanel()">Open back-panel map&#x2026;</button>
+    </div>
+  </aside>
 
   <!-- Left: back panel jacks + pad editor -->
   <div id="left-panel">
@@ -5502,6 +5635,9 @@ function stopPreview() {
 // Patch panel collapse state (persisted in localStorage)
 let patchCollapsed = false;
 try { patchCollapsed = localStorage.getItem('patchCollapsed') === '1'; } catch(e) {}
+let inputPickerOpen = false;
+let inputPickerPinned = false;
+try { inputPickerPinned = localStorage.getItem('strike_input_picker_pinned') === '1'; } catch(e) {}
 function applyPatchPanelState() {
   const panel = document.getElementById('patch-panel');
   const arrow = document.getElementById('patch-toggle-arrow');
@@ -5862,7 +5998,92 @@ function renderPatchPanel() {
         + `<div class="jack-lbl">${escHtml(lbl)}</div></div>`;
     }).join('')}</div>`
   ).join('');
+  if (inputPickerOpen) renderInputQuickPicker();
 }
+
+const INPUT_QUICK_BANKS = [
+  ['DRUM INPUTS', ['KICK', 'SNARE', 'TOM 1', 'TOM 2', 'TOM 3', 'TOM 4']],
+  ['CYMBAL INPUTS', ['HI-HAT', 'CRASH 1', 'RIDE 1', 'RIDE 2', 'CRASH 2', 'CRASH 3']],
+];
+
+function inputGroupSummary(group) {
+  const assigned = [];
+  let missing = 0;
+  for (const pid of group.pads) {
+    const pad = pads.find(p => p.id === pid);
+    if (!pad) continue;
+    for (const layer of ['a', 'b']) {
+      const path = pad[`layer_${layer}_path`];
+      const name = pad[`layer_${layer}_name`];
+      if (path && brokenPaths.has(path)) missing++;
+      if (name && name !== '—' && !assigned.includes(name)) assigned.push(name);
+    }
+  }
+  if (!assigned.length) return pads.length ? 'No sound assigned' : 'Load a kit to inspect assignments';
+  const visible = assigned.slice(0, 2).join(' + ');
+  return visible + (assigned.length > 2 ? ` +${assigned.length - 2}` : '') + (missing ? ' · missing file' : '');
+}
+
+function renderInputQuickPicker() {
+  const body = document.getElementById('input-quick-body');
+  if (!body) return;
+  body.innerHTML = INPUT_QUICK_BANKS.map(([label, keys]) =>
+    `<section class="input-bank"><div class="input-bank-label">${label}</div><div class="input-quick-grid">`
+    + keys.map(key => {
+      const group = PAD_GROUPS[key];
+      const num = group.jackLabel.split(' ')[0];
+      const current = selectedGroup === key ? ' current' : '';
+      return `<button type="button" class="input-quick-item${current}" onclick="chooseInputFromPicker('${key}')"`
+        + ` aria-pressed="${selectedGroup === key ? 'true' : 'false'}">`
+        + `<span class="input-quick-num">${escHtml(num)}</span>`
+        + `<span class="input-quick-name">${escHtml(group.label)}</span>`
+        + `<span class="input-quick-dest">${escHtml(group.pads.join(' · '))}</span>`
+        + `<span class="input-quick-sound">${escHtml(inputGroupSummary(group))}</span></button>`;
+    }).join('') + '</div></section>'
+  ).join('');
+}
+
+function toggleInputQuickPicker(force) {
+  inputPickerOpen = typeof force === 'boolean' ? force : !inputPickerOpen;
+  const picker = document.getElementById('input-quick-picker');
+  const btn = document.getElementById('inputs-quick-btn');
+  if (!picker || !btn) return;
+  if (inputPickerOpen) renderInputQuickPicker();
+  picker.classList.toggle('open', inputPickerOpen);
+  picker.setAttribute('aria-hidden', inputPickerOpen ? 'false' : 'true');
+  btn.classList.toggle('picker-open', inputPickerOpen);
+  btn.setAttribute('aria-expanded', inputPickerOpen ? 'true' : 'false');
+  const pin = document.getElementById('input-pin-btn');
+  if (pin) {
+    pin.setAttribute('aria-pressed', inputPickerPinned ? 'true' : 'false');
+    pin.textContent = inputPickerPinned ? 'Pinned' : 'Pin open';
+  }
+  if (inputPickerOpen) requestAnimationFrame(() => picker.querySelector('.input-quick-item')?.focus());
+}
+
+function toggleInputPickerPin() {
+  inputPickerPinned = !inputPickerPinned;
+  try { localStorage.setItem('strike_input_picker_pinned', inputPickerPinned ? '1' : '0'); } catch(e) {}
+  toggleInputQuickPicker(true);
+}
+
+function chooseInputFromPicker(grpKey) {
+  selectGroupFromPanel(grpKey);
+  setWorkspaceMode('pad');
+  if (!inputPickerPinned) toggleInputQuickPicker(false);
+}
+
+function openFullInputPanel() {
+  toggleInputQuickPicker(false);
+  setWorkspaceMode('inputs');
+}
+
+document.addEventListener('click', e => {
+  if (!inputPickerOpen || inputPickerPinned) return;
+  const picker = document.getElementById('input-quick-picker');
+  const btn = document.getElementById('inputs-quick-btn');
+  if (picker && !picker.contains(e.target) && btn && !btn.contains(e.target)) toggleInputQuickPicker(false);
+});
 
 function selectGroupFromPanel(grpKey) {
   selectedGroup = grpKey;
@@ -6120,6 +6341,7 @@ function menuToggle(id) {
 function setWorkspaceMode(mode) {
   const modes = ['pad', 'sounds', 'inputs', 'fx', 'history', 'tools', 'repair', 'layout'];
   if (!modes.includes(mode)) return;
+  if (inputPickerOpen && mode !== 'inputs' && !inputPickerPinned) toggleInputQuickPicker(false);
   document.body.dataset.workspace = mode;
   const navMode = ['repair', 'layout'].includes(mode) ? 'tools' : mode;
   document.querySelectorAll('.workspace-tab[data-workspace]').forEach(btn => {
@@ -6140,9 +6362,9 @@ function setWorkspaceMode(mode) {
   const contextAction = document.getElementById('context-action');
   if (contextEyebrow && contextTitle && contextAction) {
     const inputsMode = mode === 'inputs';
-    contextEyebrow.textContent = inputsMode ? 'Inputs workspace' : 'Pad workspace';
-    contextTitle.textContent = inputsMode ? 'Module back panel' : 'Selected trigger';
-    contextAction.textContent = inputsMode ? 'Pad settings' : 'Browse sounds';
+    contextEyebrow.textContent = inputsMode ? 'Input routing' : 'Pad workspace';
+    contextTitle.textContent = inputsMode ? 'Full back-panel map' : 'Selected trigger';
+    contextAction.textContent = inputsMode ? 'Return to pad' : 'Browse sounds';
     contextAction.onclick = () => setWorkspaceMode(inputsMode ? 'pad' : 'sounds');
   }
   try { localStorage.setItem('strike_workspace', mode); } catch(e) {}
@@ -9153,6 +9375,7 @@ async function checkStatus() {
       const openModal = document.querySelector(
         '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open, #diff-modal.open, #tm-modal.open');
       if (openModal) { openModal.classList.remove('open'); return; }
+      if (inputPickerOpen) { toggleInputQuickPicker(false); return; }
       if (['fx','history','tools','repair','layout'].includes(document.body.dataset.workspace)) {
         setWorkspaceMode('pad');
         return;
