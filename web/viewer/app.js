@@ -502,6 +502,7 @@ const VM_KEYS = '1234567890';                // keyboard fallback → first 10 m
 let vmActive     = false;
 let vmManifest   = null;
 let vmCtx        = null;          // one persistent AudioContext
+let vmMaster     = null;          // master limiter (DynamicsCompressor) before destination
 let vmBuffers    = new Map();     // wav_url → AudioBuffer | Promise<AudioBuffer>
 let vmVoices     = [];            // live voices: {padId, layer, muteGrp, gain, src}
 let vmRR         = new Map();     // "padId:layer:band" → next round-robin index
@@ -522,6 +523,17 @@ async function toggleVirtualModule() {
   try {
     if (!vmCtx) vmCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (vmCtx.state === 'suspended') await vmCtx.resume();
+    if (!vmMaster) {
+      // Master limiter: layers A+B and every voice used to sum unclamped
+      // straight into destination — hot kits clipped ("blown out").
+      vmMaster = vmCtx.createDynamicsCompressor();
+      vmMaster.threshold.value = -3;
+      vmMaster.knee.value = 0;
+      vmMaster.ratio.value = 20;
+      vmMaster.attack.value = 0.002;
+      vmMaster.release.value = 0.1;
+      vmMaster.connect(vmCtx.destination);
+    }
   } catch(e) { vmActive = false; setMsg('Virtual module: no Web Audio', true); return; }
   updateVmBtn();
   vmWireMidi();
@@ -552,7 +564,9 @@ function updateVmBtn() {
     if (wrap) wrap.style.display = 'inline-flex';
   }
   btn.title =
-    'Virtual module — play the kit being edited from the pads or number keys (1–0).\n' +
+    'Virtual module — AUDITION the kit being edited from the pads or number keys (1–0).\n' +
+    'An auditioning aid for sample choice and balance: single hits and slow grooves work well; ' +
+    'it is not a low-latency playable instrument — moderate/fast playing can drop notes.\n' +
     'Simulated: velocity zones, round-robin/random, A/B xfade, level, pan, pitch, mute-group choke, Mono/Poly.\n' +
     'Approximated: decay (gain envelope), velocity loudness curve, hi-hat pedal position.\n' +
     'NOT simulated: module FX (reverb/FX1/FX2/EQ), velocity→filter/pitch/decay curves, filter, loop, gate time.';
@@ -583,7 +597,7 @@ async function vmPreload() {
     vmDecodeDone++;
     if (vmDecodeDone % 4 === 0) updateVmBtn();
   }
-  setMsg('Virtual module ready — hit a pad or press 1–0');
+  setMsg('Virtual module ready (auditioning aid) — hit a pad or press 1–0');
 }
 
 function vmGetBuffer(url) {
@@ -603,8 +617,17 @@ function vmCandidates(lyr, vel) {
   let cands = lyr.mappings.filter(m =>
     m.wav_url && vel >= m.vmin && vel <= m.vmax && m.rr !== 254);  // 254 = 0xFE pedal-function
   if (cands.length > 1) {
-    const hh = cands.filter(m => vmHH >= m.hh_min && vmHH <= m.hh_max);
-    if (hh.length) cands = hh;   // fall back to ignoring hh ranges when nothing matches
+    let hh = cands.filter(m => vmHH >= m.hh_min && vmHH <= m.hh_max);
+    if (hh.length) {
+      // Overlapping hh bands (e.g. a wide 62-127 set plus specific
+      // 109-127/91-108 sets) all match the pedal position; keep only the
+      // TIGHTEST band so round-robin cycles within one pedal position
+      // instead of alternating open/closed samples.
+      const width = m => m.hh_max - m.hh_min;
+      const tightest = Math.min(...hh.map(width));
+      cands = hh.filter(m => width(m) === tightest);
+    }
+    // else: fall back to ignoring hh ranges when nothing matches
   }
   return cands;
 }
@@ -673,12 +696,13 @@ function vmPlay(url, opt) {
     const gain = vmCtx.createGain();
     gain.gain.value = opt.gain;
     src.connect(gain);
+    const out = vmMaster || vmCtx.destination;
     if (vmCtx.createStereoPanner) {
       const pan = vmCtx.createStereoPanner();
       pan.pan.value = opt.pan;
-      gain.connect(pan); pan.connect(vmCtx.destination);
+      gain.connect(pan); pan.connect(out);
     } else {
-      gain.connect(vmCtx.destination);
+      gain.connect(out);
     }
     if (opt.decay < 99) {   // approximate decay: exponential-ish tail via time constant
       const tau = 0.04 + (opt.decay / 99) * 2.5;   // 0 → ~40 ms, ~99 → ~2.5 s
@@ -1566,6 +1590,13 @@ const SOURCE_BADGE = {'library':'&#x1F4C1;', 'user SD':'&#x1F4BE;', 'preset SD':
 
 function renderKitList() {
   const el = document.getElementById('kit-list');
+  if (!kits.length) {
+    el.innerHTML = '<div style="padding:8px;font-size:.78rem;opacity:.75;line-height:1.5;">'
+      + 'No kits yet. Insert your Strike SD card (kits appear here automatically), '
+      + 'or use <b>Tools &rarr; Sync full library from SD</b> once to edit without the card. '
+      + 'Your factory preset card is read-only to this app &mdash; it is never written.</div>';
+    return;
+  }
   el.innerHTML = kits.map((k,i) => {
     const badge  = SOURCE_BADGE[k.source] || '';
     const active = state_kitPath && k.path === state_kitPath ? ' active' : '';
@@ -2240,7 +2271,11 @@ function renderPadDetail() {
       <span class="param-lbl" title="Play Layer A and B simultaneously at their current levels">Blend preview</span>
       <button class="btn-secondary" style="font-size:.68rem;padding:3px 9px;"
         onclick="previewBlend('${primary.id}')">&#9654; A+B</button>
-    </div>` : ''}
+    </div>` : `
+    <div class="param-row" style="opacity:.55;">
+      <span class="param-lbl">Blend preview</span>
+      <span style="font-size:.68rem;">assign a Layer B instrument to enable &#9654; A+B</span>
+    </div>`}
     <div class="param-row" style="margin-top:6px;padding-top:6px;border-top:1px solid #2a2a3e;">
       <span class="param-lbl" style="font-weight:600;color:#7ab3ef;font-size:.7rem;">FX / Zone</span>
     </div>
@@ -2961,7 +2996,9 @@ function showDiffModal() {
   closeAllPopovers();
   const sel = document.getElementById('diff-kit-select');
   sel.innerHTML = '<option value="">— select a kit —</option>'
-    + kits.map(k => `<option value="${escHtml(k.path)}">${escHtml(k.name)}</option>`).join('');
+    // Same-named kits can come from library / user SD / preset SD — show the
+    // source so identical labels are distinguishable (finding B4-2).
+    + kits.map(k => `<option value="${escHtml(k.path)}">${escHtml(k.name)} — ${escHtml(k.source)}</option>`).join('');
   document.getElementById('diff-result').innerHTML = '';
   document.getElementById('diff-modal').classList.add('open');
 }
@@ -3769,6 +3806,11 @@ async function _pollSyncStatus() {
   if (data.mb_copied > 0) counts += `  ${data.mb_copied.toFixed(0)} MB`;
   if (countsEl) countsEl.textContent = counts;
   if (detailEl) detailEl.textContent = data.detail || '';
+  if (data.phase !== 'done' && data.phase !== 'error') {
+    // Mirror progress into the always-visible status line — the in-menu bar
+    // sits below the dropdown fold and was easy to miss (finding B3-1).
+    setMsg(`Syncing library — ${phaseLabels[data.phase] || data.phase} ${counts}`.trim());
+  }
 
   if (data.phase === 'done') {
     if (phaseEl) phaseEl.textContent = '✓ Done';
@@ -4218,13 +4260,16 @@ async function checkStatus() {
   const parts = [];
   if (s.user_mounted)   parts.push('&#x1F4BE; User: ' + s.user_path);
   else                  parts.push('&#x26A0; User card NOT mounted');
-  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path);
-  document.getElementById('vol-status').innerHTML = parts.join(' \xB7 ');
+  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path + ' (read-only)');
+  const volEl = document.getElementById('vol-status');
+  volEl.innerHTML = parts.join(' \xB7 ');
+  volEl.title = 'Cards are identified by their content, not their name. '
+    + 'Saves only ever go to the user card; the factory preset card is never written.';
   const hint = document.getElementById('save-hint');
   if (hint) {
     const sep = (s.user_path || '').includes('\\') ? '\\' : '/';
     hint.textContent = s.user_mounted
-      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card.`
+      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card. Factory presets are never touched.`
       : 'Mount the user card to save back to SD.';
   }
 }
@@ -4332,6 +4377,11 @@ async function checkStatus() {
       return;
     }
     if (!mod && e.key === 'Escape') {
+      // Close any open modal first (Esc previously worked on some modals but
+      // not others, e.g. Kit FX — finding A0-1); only then clear selection.
+      const openModal = document.querySelector(
+        '#sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open');
+      if (openModal) { openModal.classList.remove('open'); return; }
       clearSelection();
       return;
     }
@@ -4340,7 +4390,10 @@ async function checkStatus() {
       if (selectedPad) {
         const p = pads.find(p => p.id === selectedPad.id);
         const sinRel = p && (selectedPad.layer === 'a' ? p.layer_a_path : p.layer_b_path);
-        if (sinRel) previewInstrument(sinRel);
+        if (sinRel) {
+          previewInstrument(sinRel);
+          setMsg('Preview: ' + (sinRel.split('/').pop() || sinRel));  // audible feedback had no visual cue (B2-5)
+        }
       }
       return;
     }

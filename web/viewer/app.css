@@ -16,6 +16,13 @@
 :focus-visible { outline: 2px solid #f0b32e66; outline-offset: 1px; }
 body { font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; background: #0d0f15; color: #e8ebf2; min-height: 100vh; -webkit-font-smoothing: antialiased; }
 header { background: linear-gradient(180deg, #1a1f2a, #14181f); padding: 8px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #242c3d; flex-wrap: nowrap; }
+/* ≤880px: let the toolbar wrap so the SD status chip and popovers stay
+   visible instead of overflowing off-screen (findings A2-1 / A2-5) */
+@media (max-width: 880px) {
+  header { flex-wrap: wrap; }
+  header #msg { flex-basis: 100%; margin-left: 0; order: 99; }
+  .tb-popover { max-width: calc(100vw - 24px); }
+}
 header h1 { font-size: .92rem; color: #f0b32e; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; white-space: nowrap; }
 #msg { color: #a0e0a0; font-size: .85rem; margin-left: auto; }
 #dirty-badge { font-size: .75rem; color: #e0a030; background: #2a1800; border: 1px solid #604010; padding: 2px 8px; border-radius: 4px; }
