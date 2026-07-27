@@ -3369,13 +3369,26 @@ def _deploy_plan() -> dict:
     if unverified:
         shown = ', '.join(unverified[:3])
         more = f' +{len(unverified) - 3} more' if len(unverified) > 3 else ''
-        issues.append({'severity': 'warning', 'code': 'unverified_assets',
-                       'title': f'{len(unverified)} reference(s) could not be verified',
-                       'detail': f'{shown}{more}. These usually live on the factory card, which is '
-                                 'only visible while the official Strike Editor is open — the module '
-                                 'resolves them itself, so deployment is still safe. Capture the '
-                                 'factory card to confirm, or use Fix broken paths if a sound is '
-                                 'genuinely missing.'})
+        # Once the factory card has been captured, an unresolved reference is no
+        # longer ambiguous: it is on neither card, so those layers really will be
+        # silent. Say so rather than blaming the editor. Still only a warning —
+        # the kit file is safe to write either way (issue #33).
+        if load_preset_manifest().get('instruments'):
+            issues.append({'severity': 'warning', 'code': 'unverified_assets',
+                           'title': f'{len(unverified)} sound(s) are missing from both cards',
+                           'detail': f'{shown}{more}. These are not on the user card and not in '
+                                     'your captured factory-card inventory, so those layers will '
+                                     'be silent on the module. Deploying is still safe — the kit '
+                                     'writes fine and every other layer plays. Use Fix broken '
+                                     'paths to repoint them, or reinstall the pack they came from.'})
+        else:
+            issues.append({'severity': 'warning', 'code': 'unverified_assets',
+                           'title': f'{len(unverified)} reference(s) could not be verified',
+                           'detail': f'{shown}{more}. These may live on the factory card, which is '
+                                     'only visible while the official Strike Editor is open, or they '
+                                     'may be missing entirely — from here the two look identical. '
+                                     'Deploying is safe regardless. Capture the factory card to find '
+                                     'out which, then use Fix broken paths for anything genuinely gone.'})
 
     kit_bytes = (build_skt(state['kit_raw'], state['pads'], instruments, state['tail'])
                  if state.get('kit_raw') is not None else b'')
