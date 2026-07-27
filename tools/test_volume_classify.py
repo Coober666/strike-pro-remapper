@@ -97,6 +97,51 @@ def main():
         leftovers = list(user_root.glob('.strike-remap-write-probe*'))
         check('write probe returns True on writable dir', writable)
         check('write probe leaves no residue', leftovers == [])
+
+        # 8. Two factory-shaped volumes — a personal copy of the factory library
+        #    on some other drive looks identical by content, so the module's own
+        #    card must win or a captured manifest describes the wrong one (#39).
+        mirror_root = make_preset_card(tmp / 'mirror')
+        keys = {str(user_root): ('ALESIS', 'STRIKE'),
+                str(preset_root): ('ALESIS', 'STRIKE'),
+                str(mirror_root): ('USB', 'SanDisk 3.2Gen1')}
+        orig_key = sr._volume_device_key
+        sr._volume_device_key = lambda root: keys.get(str(root))
+        try:
+            # the mirror is scanned first, so first-wins would pick it
+            u, p = sr._classify_volumes(
+                {'F:': mirror_root, 'K:': preset_root, 'L:': user_root})
+            check('module card beats a same-shaped mirror', p == preset_root)
+            check('user card still identified alongside two candidates', u == user_root)
+
+            u, p = sr._classify_volumes(
+                {'K:': preset_root, 'F:': mirror_root, 'L:': user_root})
+            check('module card wins regardless of scan order', p == preset_root)
+
+            # a lone mirror with no module card present is still the best guess
+            u, p = sr._classify_volumes({'F:': mirror_root, 'L:': user_root})
+            check('a lone factory-shaped volume is still used', p == mirror_root)
+
+            # no device identity available (non-Windows, or query fails) must
+            # degrade to the previous first-wins behaviour, never to a crash
+            sr._volume_device_key = lambda root: None
+            u, p = sr._classify_volumes(
+                {'F:': mirror_root, 'K:': preset_root, 'L:': user_root})
+            check('without device identity it falls back to first-wins',
+                  p == mirror_root and u == user_root)
+        finally:
+            sr._volume_device_key = orig_key
+
+        # 9. Device probing must never raise, whatever it is handed.
+        for junk in (Path(''), Path('//nope/share'), Path('1:/'), user_root):
+            try:
+                sr._volume_device_key(junk)
+                ok = True
+            except Exception:
+                ok = False
+            if not ok:
+                break
+        check('device probe never raises on odd paths', ok)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

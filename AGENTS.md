@@ -352,6 +352,16 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   two `ALESIS STRIKE` USB disks: the user card online, and a second one reporting **`No
   Media`**. That second entry is the factory/preset LUN — present but empty until the official
   editor handshakes. Useful for diagnosing preset-card questions (see #33).
+- **Content shape alone cannot identify the factory card** (issue #39). A personal copy of the
+  factory library on any drive has the same `Kits/<CATEGORY>/*.skt` shape, and picking it
+  silently would bake the wrong inventory into a captured preset manifest. When several
+  factory-shaped volumes are mounted, `_pick_module_volume()` prefers the one whose
+  `_volume_device_key()` matches the user card's — both of the module's cards are LUNs of one
+  USB device, so they share a vendor/product (`ALESIS`/`STRIKE`) while an unrelated drive does
+  not. That key comes from `IOCTL_STORAGE_QUERY_PROPERTY` opened with `dwDesiredAccess=0`, so
+  it needs no admin rights and touches no media. **Windows only** — elsewhere it returns None
+  and classification degrades to the old first-wins behaviour, never to an error. Do not let
+  device probing raise: it sits in the path that decides which card gets written.
 - `check_paths()` — return sin_rel paths in current kit not found in avail
 - **`state['avail']` is populated lazily — never reason about what is "missing" without
   `_ensure_avail()` first.** It is empty until something scans, so a caller that treats an
