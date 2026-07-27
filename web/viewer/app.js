@@ -3315,40 +3315,111 @@ async function checkPaths() {
 }
 
 // ── Sample relink wizard ──────────────────────────────────────────────────────
+// A filename match is a fact; a sound or family match is a guess. The basis is
+// shown on every row and only filename matches are pre-selected, so a stack of
+// guesses can never be applied with one click (issue #40).
+const RELINK_BASIS_LABEL = {
+  name:     {text: 'filename match', color: '#5a9a6a'},
+  sound:    {text: 'sound match',    color: '#c89040'},
+  category: {text: 'same family',    color: '#7288aa'},
+};
+let _relinkNeedsFp = [];
+
+function relinkCandidateRow(sugg, cand, idx) {
+  const label = RELINK_BASIS_LABEL[cand.basis] || {text: cand.basis || '', color: '#667'};
+  const short = cand.rel.split('/').slice(1).join('/').replace(/\.sin$/i, '') || cand.rel;
+  const metric = cand.basis === 'name'  ? Math.round(cand.score * 100) + '%'
+               : cand.basis === 'sound' ? cand.dist.toFixed(2)
+               : '';
+  return `<label class="sim-row" style="cursor:pointer;">
+    <input type="radio" name="rl-${idx}" value="${escHtml(cand.rel)}">
+    <button class="play-btn" title="Preview this sound"
+            onclick="event.preventDefault();event.stopPropagation();previewInstrument('${escHtml(cand.rel)}')">&#9654;</button>
+    <span class="sim-name" title="${escHtml(cand.rel)}">${escHtml(short)}</span>
+    <span class="sim-grp">${escHtml(cand.rel.split('/')[0])}</span>
+    <span class="sim-grp" style="color:${label.color};">${escHtml(label.text)}</span>
+    <span class="sim-dist" title="${cand.basis === 'sound' ? 'distance (lower = closer)' : 'match strength'}">${metric}</span>
+  </label>`;
+}
+
 async function showRelinkModal() {
   closeAllPopovers();
-  const data = await fetch('/api/relink_suggest').then(r => r.json());
-  if (data.error) { setMsg(data.error, true); return; }
+  document.getElementById('relink-modal').classList.add('open');
   const box = document.getElementById('relink-body');
+  box.innerHTML = '<p style="color:#667;font-size:.78rem;padding:8px;">Looking for replacements…</p>';
+  const data = await fetch('/api/relink_suggest').then(r => r.json()).catch(() => ({error: 'Request failed.'}));
+  if (data.error) { setMsg(data.error, true); box.innerHTML = `<p style="color:#e07080;font-size:.78rem;padding:8px;">${escHtml(data.error)}</p>`; return; }
+  renderRelink(data);
+}
+
+function renderRelink(data) {
+  const box = document.getElementById('relink-body');
+  _relinkNeedsFp = data.needs_fingerprints || [];
   if (!data.suggestions.length) {
     box.innerHTML = '<p style="color:#5a9a6a;font-size:.8rem;">✓ No broken instrument paths in this kit.</p>';
-  } else {
-    const rows = data.suggestions.map((s, i) => {
-      const opts = s.candidates.map(c =>
-        `<option value="${escHtml(c.rel)}">${escHtml(c.rel)}${c.score < 1 ? ` (${Math.round(c.score*100)}%)` : ''}</option>`
-      ).join('');
-      return `<tr>
-        <td style="color:#e08020;" title="${escHtml(s.broken)}">⚠ ${escHtml(s.broken)}</td>
-        <td>${s.candidates.length
-          ? `<select id="rl-${i}" data-broken="${escHtml(s.broken)}" style="max-width:280px;">
-               <option value="">— leave broken —</option>${opts}</select>`
-          : '<span style="color:#667;">no match found in library/SD</span>'}</td>
-      </tr>`;
-    }).join('');
-    box.innerHTML = `<div style="font-size:.7rem;color:#667;margin-bottom:6px;">
-        ${data.suggestions.length} broken path(s). Best matches are pre-selected; relinking
-        updates every pad that references the old path (one undo step).</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.72rem;">
-        <thead><tr><th style="text-align:left;">Missing instrument</th><th style="text-align:left;">Replace with</th></tr></thead>
-        <tbody>${rows}</tbody></table>`;
-    // Pre-select the top candidate for each row
-    data.suggestions.forEach((s, i) => {
-      const sel = document.getElementById(`rl-${i}`);
-      if (sel && s.candidates.length) sel.selectedIndex = 1;
-    });
+    document.getElementById('relink-apply-btn').style.display = 'none';
+    document.getElementById('relink-fp-btn').style.display = 'none';
+    return;
   }
-  document.getElementById('relink-apply-btn').style.display = data.suggestions.length ? '' : 'none';
-  document.getElementById('relink-modal').classList.add('open');
+  const blocks = data.suggestions.map((s, i) => {
+    const rows = s.candidates.map(c => relinkCandidateRow(s, c, i)).join('');
+    const body = s.candidates.length
+      ? `<label class="sim-row" style="cursor:pointer;">
+           <input type="radio" name="rl-${i}" value="" checked>
+           <span class="sim-name" style="color:#667;">— leave broken —</span></label>${rows}`
+      : '<p style="color:#667;font-size:.7rem;padding:4px 6px;">Nothing on this card resembles it.</p>';
+    return `<div data-broken="${escHtml(s.broken)}" data-basis="${escHtml(s.basis)}"
+                 style="margin-bottom:10px;border:1px solid #2e3749;border-radius:6px;overflow:hidden;">
+      <div style="padding:6px 8px;background:#131822;">
+        <div style="color:#e08020;font-size:.74rem;">⚠ ${escHtml(s.broken)}</div>
+        <div style="color:#667;font-size:.64rem;margin-top:2px;">
+          ${escHtml(s.pad ? s.pad + ' · ' : '')}${escHtml(s.reason || '')}</div>
+        <div style="color:#8a94a6;font-size:.64rem;margin-top:3px;">${escHtml(s.why || '')}</div>
+      </div>${body}</div>`;
+  }).join('');
+  const weak = data.suggestions.filter(s => s.basis !== 'name' && s.candidates.length).length;
+  box.innerHTML = `<div style="font-size:.7rem;color:#667;margin-bottom:8px;">
+      ${data.suggestions.length} broken path(s). Filename matches are pre-selected; sound and
+      family suggestions are not — preview them first. Relinking updates every pad that
+      references the old path, in one undo step.${
+        weak ? ` <span style="color:#c89040;">${weak} row(s) are suggestions, not matches.</span>` : ''}</div>${blocks}`;
+  // Pre-select ONLY high-confidence filename matches.
+  data.suggestions.forEach((s, i) => {
+    if (s.basis !== 'name' || !s.candidates.length) return;
+    const first = document.querySelector(`#relink-body input[name="rl-${i}"][value="${CSS.escape(s.candidates[0].rel)}"]`);
+    if (first) first.checked = true;
+  });
+  document.getElementById('relink-apply-btn').style.display = '';
+  const fpBtn = document.getElementById('relink-fp-btn');
+  fpBtn.style.display = _relinkNeedsFp.length ? '' : 'none';
+  fpBtn.textContent = `≈ Analyse ${_relinkNeedsFp.length} sound(s) for better matches`;
+}
+
+async function relinkPrepare() {
+  if (!_relinkNeedsFp.length) return;
+  const btn = document.getElementById('relink-fp-btn');
+  btn.disabled = true;
+  const prog = document.getElementById('relink-progress');
+  prog.style.display = '';
+  const data = await api('/relink_prepare', {rels: _relinkNeedsFp});
+  if (data.error) { setMsg(data.error, true); btn.disabled = false; prog.style.display = 'none'; return; }
+  _pollRelinkStatus();
+}
+
+async function _pollRelinkStatus() {
+  const st = await fetch('/api/fingerprint_status').then(r => r.json()).catch(() => null);
+  if (!st) return;
+  const pct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+  document.getElementById('relink-phase').textContent = st.phase === 'error' ? 'Failed' : 'Analysing sounds';
+  document.getElementById('relink-counts').textContent = `${st.done}/${st.total}`;
+  document.getElementById('relink-bar').style.width = pct + '%';
+  document.getElementById('relink-fp-detail').textContent = st.detail || '';
+  if (st.running) { setTimeout(_pollRelinkStatus, 400); return; }
+  document.getElementById('relink-progress').style.display = 'none';
+  document.getElementById('relink-fp-btn').disabled = false;
+  if (st.phase === 'error') { setMsg(st.error || 'Analysis failed', true); return; }
+  const data = await fetch('/api/relink_suggest').then(r => r.json()).catch(() => null);
+  if (data && !data.error) renderRelink(data);
 }
 
 function closeRelinkModal() {
@@ -3357,8 +3428,9 @@ function closeRelinkModal() {
 
 async function applyRelink() {
   const mapping = {};
-  document.querySelectorAll('#relink-body select[data-broken]').forEach(sel => {
-    if (sel.value) mapping[sel.dataset.broken] = sel.value;
+  document.querySelectorAll('#relink-body div[data-broken]').forEach(block => {
+    const picked = block.querySelector('input[type=radio]:checked');
+    if (picked && picked.value) mapping[block.dataset.broken] = picked.value;
   });
   if (!Object.keys(mapping).length) { setMsg('Pick at least one replacement', true); return; }
   const data = await api('/relink_apply', {mapping});

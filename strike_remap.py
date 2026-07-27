@@ -1559,6 +1559,16 @@ def copy_pad(from_id: str, to_id: str):
     state['message'] = f'Copied {from_id} → {to_id}'
 
 
+def _ensure_avail() -> dict:
+    """`state['avail']` is populated lazily, so it is empty until something
+    scans. Any caller that reasons about what is *missing* must not mistake an
+    unscanned library for an empty one — that reports a healthy kit as entirely
+    broken. Costs nothing once the scan has happened."""
+    if not state.get('avail') and state.get('instruments'):
+        refresh_available()
+    return state.get('avail', {})
+
+
 def _sin_missing_wavs(sin_abs) -> list:
     """Return the WAV rel paths referenced by a .sin that do not resolve in
     any search root. Unreadable .sin counts as nothing-missing (the .sin
@@ -1576,7 +1586,7 @@ def check_paths() -> dict:
     itself is missing from avail, OR one of the WAV samples it references
     does not resolve (moved/renamed sample folders — the common breakage).
     'detail' maps each broken rel to a reason string for the relink wizard."""
-    avail       = state.get('avail', {})
+    avail       = _ensure_avail()
     instruments = state.get('instruments', [])
     broken = []
     detail = {}
@@ -1602,31 +1612,187 @@ def check_paths() -> dict:
     return {'broken': broken, 'detail': detail}
 
 
+# Folder taxonomy is consistent across every Strike library seen, so the top
+# folder is a reliable fallback when the catalog has no entry (custom imports).
+# Order matters: the first needle found wins, so specific before general.
+_FOLDER_GROUP_HINTS = (
+    ('kick', {0, 7}), ('snare', {1, 8}), ('tom', {2, 9}),
+    ('hihat', {3}), ('hi-hat', {3}), ('hat', {3}),
+    ('ride', {5}), ('crash', {4}), ('china', {4}), ('splash', {4}),
+    ('cymbal', {4, 5}), ('clap', {18}), ('perc', {10}), ('melodic', {19}),
+)
+
+# Pad ids are K1H/S1R/T2H/H1F/C3E/R1D — the first character is the family.
+_PAD_PREFIX_GROUPS = {
+    'K': {0, 7}, 'S': {1, 8}, 'T': {2, 9}, 'H': {3}, 'C': {4}, 'R': {5},
+}
+
+_RELINK_MAX_CANDIDATES = 8
+
+
+def _instrument_groups(rel: str) -> set:
+    """Plausible SIN_GROUPS ids for an instrument, without parsing its .sin.
+
+    Parsing would be a filesystem read per candidate, and this runs across the
+    whole library — so use the committed catalog, then the folder name.
+    """
+    ent = _factory_catalog().get(rel)
+    if isinstance(ent, dict) and isinstance(ent.get('group'), int):
+        return {ent['group']}
+    folder = rel.rsplit('/', 1)[0].lower() if '/' in rel else ''
+    for needle, groups in _FOLDER_GROUP_HINTS:
+        if needle in folder:
+            return set(groups)
+    return set()
+
+
+def _pad_family_groups(pad_id: str) -> set:
+    return set(_PAD_PREFIX_GROUPS.get((pad_id or '')[:1].upper(), ()))
+
+
+def _pads_referencing(rel: str) -> list:
+    """Pads whose A or B layer points at this instrument path."""
+    instruments = state.get('instruments', [])
+    idxs = {i for i, r in enumerate(instruments) if r == rel}
+    if not idxs:
+        return []
+    return [p for p in state.get('pads', [])
+            if p.get('layer_a') in idxs or p.get('layer_b') in idxs]
+
+
+def _relink_evidence(rel: str):
+    """(pad_id, sibling_rel) — the working layer that best describes what a
+    broken reference was supposed to sound like.
+
+    Broken layers usually pair with a surviving one, and a layer blended with
+    another is a strong statement about the missing one. Prefers the other
+    layer on the same pad, then any layer on the same physical piece (S1H/S1R
+    and R1B/R1E/R1D share one trigger).
+    """
+    avail = state.get('avail', {})
+    instruments = state.get('instruments', [])
+    pads = _pads_referencing(rel)
+    if not pads:
+        return None, None
+
+    def path_of(pad, key):
+        idx = pad.get(key)
+        if idx is None or idx == NO_INSTRUMENT or idx >= len(instruments):
+            return None
+        return instruments[idx]
+
+    for pad in pads:
+        for key in ('layer_a', 'layer_b'):
+            other = path_of(pad, key)
+            if other and other != rel and other in avail:
+                return pad.get('id'), other
+    stems = {(p.get('id') or '')[:2] for p in pads}
+    for pad in state.get('pads', []):
+        if (pad.get('id') or '')[:2] not in stems:
+            continue
+        for key in ('layer_a', 'layer_b'):
+            other = path_of(pad, key)
+            if other and other != rel and other in avail:
+                return pads[0].get('id'), other
+    return pads[0].get('id'), None
+
+
 def relink_suggestions() -> dict:
-    """For each broken sin_rel in the current kit, suggest replacements from avail.
-    Exact (case-insensitive) filename matches first; otherwise fuzzy stem matches."""
+    """Suggest a replacement for every broken instrument path in the kit.
+
+    Filename matching alone fails outright when a kit was authored against a
+    different sound library: the right sound is present under an unrelated name,
+    sharing no stem (issue #40). So fall back to evidence that does still exist —
+    what the surviving layer on the same pad sounds like, then the pad's own
+    family. Every suggestion carries the basis it was reached by, because a
+    guess must never be presented to the user as a match.
+    """
     import difflib
-    avail  = state.get('avail', {})
-    broken = check_paths()['broken']
+    avail   = _ensure_avail()
+    checked = check_paths()
+    broken  = checked['broken']
+    detail  = checked['detail']
+
     by_base = {}
     for rel in avail:
         by_base.setdefault(rel.rsplit('/', 1)[-1].lower(), []).append(rel)
-    out = []
+
+    # Built once and reused: _fp_all_items merges two dicts and _knn_rank
+    # z-scores the corpus, so neither belongs inside the per-broken loop.
+    corpus    = [(rel, e['feats']) for rel, e in _fp_all_items().items()
+                 if e.get('feats') and rel in avail]
+    groups_of = {rel: _instrument_groups(rel) for rel in avail}
+
+    out, needs_fp = [], []
     for b in broken:
+        pad_id, sibling = _relink_evidence(b)
+        family = _pad_family_groups(pad_id) if pad_id else set()
+        entry = {'broken': b, 'reason': detail.get(b, ''), 'pad': pad_id,
+                 'basis': 'none', 'why': '', 'candidates': []}
+
+        # 1 — filename, exact then fuzzy stem. Still the strongest signal.
         base  = b.rsplit('/', 1)[-1].lower()
-        cands = [{'rel': r, 'score': 1.0} for r in sorted(by_base.get(base, []))]
+        cands = [{'rel': r, 'score': 1.0, 'basis': 'name'}
+                 for r in sorted(by_base.get(base, []))]
         if not cands:
-            stem   = base.removesuffix('.sin')
-            scored = []
+            stem, scored = base.removesuffix('.sin'), []
             for rel in avail:
                 rstem = rel.rsplit('/', 1)[-1].lower().removesuffix('.sin')
                 s = difflib.SequenceMatcher(None, stem, rstem).ratio()
                 if s >= 0.6:
                     scored.append((s, rel))
             scored.sort(key=lambda t: (-t[0], t[1]))
-            cands = [{'rel': r, 'score': round(s, 2)} for s, r in scored[:8]]
-        out.append({'broken': b, 'candidates': cands})
-    return {'suggestions': out}
+            cands = [{'rel': r, 'score': round(s, 2), 'basis': 'name'}
+                     for s, r in scored[:_RELINK_MAX_CANDIDATES]]
+        if cands:
+            entry.update(basis='name', candidates=cands, why='Matched by filename.')
+            out.append(entry)
+            continue
+
+        # 2 — rank by sound against the surviving layer.
+        sib_entry = _fp_lookup(sibling) if sibling else None
+        sib_feats = sib_entry.get('feats') if sib_entry else None
+        if sibling and sib_feats:
+            pool = [(r, f) for r, f in corpus if r != b]
+            if family:
+                narrowed = [(r, f) for r, f in pool if groups_of.get(r, set()) & family]
+                if len(narrowed) >= 3:      # a filter that leaves nothing is worse than none
+                    pool = narrowed
+            if sibling not in {r for r, _ in pool}:
+                pool.append((sibling, sib_feats))
+            ranked = _knn_rank(sibling, pool, _RELINK_MAX_CANDIDATES)
+            if ranked:
+                entry.update(
+                    basis='sound',
+                    candidates=[{'rel': r, 'score': round(1.0 / (1.0 + d), 2),
+                                 'basis': 'sound', 'dist': d} for r, d, _ in ranked],
+                    why=f'Ranked by sound against {sibling} — the working layer on '
+                        f'{pad_id or "the same pad"}.')
+                out.append(entry)
+                continue
+        elif sibling:
+            needs_fp.append(sibling)
+
+        # 3 — same family as the pad. A guess, and labelled as one.
+        if family:
+            bfolder = b.rsplit('/', 1)[0] if '/' in b else ''
+            fam = sorted((r for r in avail if groups_of.get(r, set()) & family),
+                         key=lambda r: (0 if r.rsplit('/', 1)[0] == bfolder else 1, r))
+            if fam:
+                names = ', '.join(sorted(SIN_GROUPS[g] for g in family if g in SIN_GROUPS))
+                entry.update(
+                    basis='category',
+                    candidates=[{'rel': r, 'score': 0.0, 'basis': 'category'}
+                                for r in fam[:_RELINK_MAX_CANDIDATES]],
+                    why=f'No sound match available — these are just {names} instruments '
+                        f'on this card. Audition before picking one.')
+                out.append(entry)
+                continue
+
+        entry['why'] = 'Nothing on this card resembles it by name, sound, or family.'
+        out.append(entry)
+
+    return {'suggestions': out, 'needs_fingerprints': sorted(set(needs_fp))}
 
 
 def relink_apply(mapping: dict) -> int:
@@ -2890,12 +3056,19 @@ def _fp_build_update(**kw):
         _fp_build_state.update(kw)
 
 
-def _run_fingerprint_build():
+def _run_fingerprint_build(rels=None):
     """Analyse every library instrument once; reuse valid sidecar entries. Reads real
-    audio, so this is the slow part — hence the background thread + progress mirror."""
+    audio, so this is the slow part — hence the background thread + progress mirror.
+
+    Pass `rels` to analyse only those instruments — the relink wizard needs a
+    handful of specific fingerprints and should not rebuild the whole library.
+    """
     try:
-        refresh_available()
-        rels  = sorted(state['avail'].keys())
+        if rels is None:
+            refresh_available()
+            rels = sorted(state['avail'].keys())
+        else:
+            rels = sorted(set(rels))
         cache = load_fingerprints()
         _fp_build_update(phase='fingerprint', total=len(rels), done=0,
                          computed=0, cached=0, skipped=0)
@@ -2924,13 +3097,15 @@ def _run_fingerprint_build():
         _fp_build_update(running=False, phase='error', error=str(e))
 
 
-def start_fingerprint_build():
+def start_fingerprint_build(rels=None):
+    """Start the background analyser. `rels` limits it to specific instruments;
+    one job, one state dict and one status endpoint serve both callers."""
     with _fp_build_lock:
         if _fp_build_state['running']:
             return False
         _fp_build_state.update(running=True, phase='', detail='', done=0, total=0,
                                computed=0, cached=0, skipped=0, error='')
-    threading.Thread(target=_run_fingerprint_build, daemon=True).start()
+    threading.Thread(target=_run_fingerprint_build, args=(rels,), daemon=True).start()
     return True
 
 
@@ -3182,6 +3357,7 @@ PRESET_MANIFEST_SCHEMA = 1
 _preset_manifest_cache = None
 _preset_manifest_lock = threading.Lock()
 _factory_catalog_keys = None
+_factory_catalog_data = None
 
 
 def load_preset_manifest() -> dict:
@@ -3203,6 +3379,27 @@ def load_preset_manifest() -> dict:
     return _preset_manifest_cache
 
 
+def _factory_catalog() -> dict:
+    """The committed factory catalog: {sin_rel: {name, group, group_name, ...}}.
+
+    Already carries the INST group byte for all stock instruments, so it answers
+    "what kind of sound is this" without reading and parsing each .sin.
+    """
+    global _factory_catalog_data
+    if _factory_catalog_data is None:
+        data = {}
+        path = Path(__file__).resolve().parent / 'factory_catalog.json'
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text('utf-8')).get('instruments')
+                if isinstance(loaded, dict):
+                    data = loaded
+            except Exception:
+                data = {}
+        _factory_catalog_data = data
+    return _factory_catalog_data
+
+
 def _factory_catalog_instruments() -> set:
     """Fallback base layer: the committed catalog of stock factory instruments.
 
@@ -3212,14 +3409,7 @@ def _factory_catalog_instruments() -> set:
     """
     global _factory_catalog_keys
     if _factory_catalog_keys is None:
-        keys = set()
-        path = Path(__file__).resolve().parent / 'factory_catalog.json'
-        if path.exists():
-            try:
-                keys = set(json.loads(path.read_text('utf-8')).get('instruments', {}))
-            except Exception:
-                keys = set()
-        _factory_catalog_keys = keys
+        _factory_catalog_keys = set(_factory_catalog())
     return _factory_catalog_keys
 
 
@@ -3275,6 +3465,7 @@ def capture_preset_manifest() -> dict:
 def _deploy_plan() -> dict:
     """Build a read-only deployment plan for the currently loaded kit."""
     user, preset = get_volumes()
+    _ensure_avail()   # an unscanned library would report every asset unverified
     issues = []
     if state.get('kit_raw') is None:
         issues.append({'severity': 'blocker', 'code': 'no_kit',
@@ -8296,40 +8487,111 @@ async function checkPaths() {
 }
 
 // ── Sample relink wizard ──────────────────────────────────────────────────────
+// A filename match is a fact; a sound or family match is a guess. The basis is
+// shown on every row and only filename matches are pre-selected, so a stack of
+// guesses can never be applied with one click (issue #40).
+const RELINK_BASIS_LABEL = {
+  name:     {text: 'filename match', color: '#5a9a6a'},
+  sound:    {text: 'sound match',    color: '#c89040'},
+  category: {text: 'same family',    color: '#7288aa'},
+};
+let _relinkNeedsFp = [];
+
+function relinkCandidateRow(sugg, cand, idx) {
+  const label = RELINK_BASIS_LABEL[cand.basis] || {text: cand.basis || '', color: '#667'};
+  const short = cand.rel.split('/').slice(1).join('/').replace(/\.sin$/i, '') || cand.rel;
+  const metric = cand.basis === 'name'  ? Math.round(cand.score * 100) + '%'
+               : cand.basis === 'sound' ? cand.dist.toFixed(2)
+               : '';
+  return `<label class="sim-row" style="cursor:pointer;">
+    <input type="radio" name="rl-${idx}" value="${escHtml(cand.rel)}">
+    <button class="play-btn" title="Preview this sound"
+            onclick="event.preventDefault();event.stopPropagation();previewInstrument('${escHtml(cand.rel)}')">&#9654;</button>
+    <span class="sim-name" title="${escHtml(cand.rel)}">${escHtml(short)}</span>
+    <span class="sim-grp">${escHtml(cand.rel.split('/')[0])}</span>
+    <span class="sim-grp" style="color:${label.color};">${escHtml(label.text)}</span>
+    <span class="sim-dist" title="${cand.basis === 'sound' ? 'distance (lower = closer)' : 'match strength'}">${metric}</span>
+  </label>`;
+}
+
 async function showRelinkModal() {
   closeAllPopovers();
-  const data = await fetch('/api/relink_suggest').then(r => r.json());
-  if (data.error) { setMsg(data.error, true); return; }
+  document.getElementById('relink-modal').classList.add('open');
   const box = document.getElementById('relink-body');
+  box.innerHTML = '<p style="color:#667;font-size:.78rem;padding:8px;">Looking for replacements…</p>';
+  const data = await fetch('/api/relink_suggest').then(r => r.json()).catch(() => ({error: 'Request failed.'}));
+  if (data.error) { setMsg(data.error, true); box.innerHTML = `<p style="color:#e07080;font-size:.78rem;padding:8px;">${escHtml(data.error)}</p>`; return; }
+  renderRelink(data);
+}
+
+function renderRelink(data) {
+  const box = document.getElementById('relink-body');
+  _relinkNeedsFp = data.needs_fingerprints || [];
   if (!data.suggestions.length) {
     box.innerHTML = '<p style="color:#5a9a6a;font-size:.8rem;">✓ No broken instrument paths in this kit.</p>';
-  } else {
-    const rows = data.suggestions.map((s, i) => {
-      const opts = s.candidates.map(c =>
-        `<option value="${escHtml(c.rel)}">${escHtml(c.rel)}${c.score < 1 ? ` (${Math.round(c.score*100)}%)` : ''}</option>`
-      ).join('');
-      return `<tr>
-        <td style="color:#e08020;" title="${escHtml(s.broken)}">⚠ ${escHtml(s.broken)}</td>
-        <td>${s.candidates.length
-          ? `<select id="rl-${i}" data-broken="${escHtml(s.broken)}" style="max-width:280px;">
-               <option value="">— leave broken —</option>${opts}</select>`
-          : '<span style="color:#667;">no match found in library/SD</span>'}</td>
-      </tr>`;
-    }).join('');
-    box.innerHTML = `<div style="font-size:.7rem;color:#667;margin-bottom:6px;">
-        ${data.suggestions.length} broken path(s). Best matches are pre-selected; relinking
-        updates every pad that references the old path (one undo step).</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.72rem;">
-        <thead><tr><th style="text-align:left;">Missing instrument</th><th style="text-align:left;">Replace with</th></tr></thead>
-        <tbody>${rows}</tbody></table>`;
-    // Pre-select the top candidate for each row
-    data.suggestions.forEach((s, i) => {
-      const sel = document.getElementById(`rl-${i}`);
-      if (sel && s.candidates.length) sel.selectedIndex = 1;
-    });
+    document.getElementById('relink-apply-btn').style.display = 'none';
+    document.getElementById('relink-fp-btn').style.display = 'none';
+    return;
   }
-  document.getElementById('relink-apply-btn').style.display = data.suggestions.length ? '' : 'none';
-  document.getElementById('relink-modal').classList.add('open');
+  const blocks = data.suggestions.map((s, i) => {
+    const rows = s.candidates.map(c => relinkCandidateRow(s, c, i)).join('');
+    const body = s.candidates.length
+      ? `<label class="sim-row" style="cursor:pointer;">
+           <input type="radio" name="rl-${i}" value="" checked>
+           <span class="sim-name" style="color:#667;">— leave broken —</span></label>${rows}`
+      : '<p style="color:#667;font-size:.7rem;padding:4px 6px;">Nothing on this card resembles it.</p>';
+    return `<div data-broken="${escHtml(s.broken)}" data-basis="${escHtml(s.basis)}"
+                 style="margin-bottom:10px;border:1px solid #2e3749;border-radius:6px;overflow:hidden;">
+      <div style="padding:6px 8px;background:#131822;">
+        <div style="color:#e08020;font-size:.74rem;">⚠ ${escHtml(s.broken)}</div>
+        <div style="color:#667;font-size:.64rem;margin-top:2px;">
+          ${escHtml(s.pad ? s.pad + ' · ' : '')}${escHtml(s.reason || '')}</div>
+        <div style="color:#8a94a6;font-size:.64rem;margin-top:3px;">${escHtml(s.why || '')}</div>
+      </div>${body}</div>`;
+  }).join('');
+  const weak = data.suggestions.filter(s => s.basis !== 'name' && s.candidates.length).length;
+  box.innerHTML = `<div style="font-size:.7rem;color:#667;margin-bottom:8px;">
+      ${data.suggestions.length} broken path(s). Filename matches are pre-selected; sound and
+      family suggestions are not — preview them first. Relinking updates every pad that
+      references the old path, in one undo step.${
+        weak ? ` <span style="color:#c89040;">${weak} row(s) are suggestions, not matches.</span>` : ''}</div>${blocks}`;
+  // Pre-select ONLY high-confidence filename matches.
+  data.suggestions.forEach((s, i) => {
+    if (s.basis !== 'name' || !s.candidates.length) return;
+    const first = document.querySelector(`#relink-body input[name="rl-${i}"][value="${CSS.escape(s.candidates[0].rel)}"]`);
+    if (first) first.checked = true;
+  });
+  document.getElementById('relink-apply-btn').style.display = '';
+  const fpBtn = document.getElementById('relink-fp-btn');
+  fpBtn.style.display = _relinkNeedsFp.length ? '' : 'none';
+  fpBtn.textContent = `≈ Analyse ${_relinkNeedsFp.length} sound(s) for better matches`;
+}
+
+async function relinkPrepare() {
+  if (!_relinkNeedsFp.length) return;
+  const btn = document.getElementById('relink-fp-btn');
+  btn.disabled = true;
+  const prog = document.getElementById('relink-progress');
+  prog.style.display = '';
+  const data = await api('/relink_prepare', {rels: _relinkNeedsFp});
+  if (data.error) { setMsg(data.error, true); btn.disabled = false; prog.style.display = 'none'; return; }
+  _pollRelinkStatus();
+}
+
+async function _pollRelinkStatus() {
+  const st = await fetch('/api/fingerprint_status').then(r => r.json()).catch(() => null);
+  if (!st) return;
+  const pct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+  document.getElementById('relink-phase').textContent = st.phase === 'error' ? 'Failed' : 'Analysing sounds';
+  document.getElementById('relink-counts').textContent = `${st.done}/${st.total}`;
+  document.getElementById('relink-bar').style.width = pct + '%';
+  document.getElementById('relink-fp-detail').textContent = st.detail || '';
+  if (st.running) { setTimeout(_pollRelinkStatus, 400); return; }
+  document.getElementById('relink-progress').style.display = 'none';
+  document.getElementById('relink-fp-btn').disabled = false;
+  if (st.phase === 'error') { setMsg(st.error || 'Analysis failed', true); return; }
+  const data = await fetch('/api/relink_suggest').then(r => r.json()).catch(() => null);
+  if (data && !data.error) renderRelink(data);
 }
 
 function closeRelinkModal() {
@@ -8338,8 +8600,9 @@ function closeRelinkModal() {
 
 async function applyRelink() {
   const mapping = {};
-  document.querySelectorAll('#relink-body select[data-broken]').forEach(sel => {
-    if (sel.value) mapping[sel.dataset.broken] = sel.value;
+  document.querySelectorAll('#relink-body div[data-broken]').forEach(block => {
+    const picked = block.querySelector('input[type=radio]:checked');
+    if (picked && picked.value) mapping[block.dataset.broken] = picked.value;
   });
   if (!Object.keys(mapping).length) { setMsg('Pick at least one replacement', true); return; }
   const data = await api('/relink_apply', {mapping});
@@ -10304,7 +10567,16 @@ async function dismissAllAutosaves() {
   <div class="sin-box">
     <h3>&#x1F527; Fix broken instrument paths</h3>
     <div id="relink-body"></div>
+    <div id="relink-progress" class="sync-progress" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span id="relink-phase" style="color:#88aacc;font-weight:600;"></span>
+        <span id="relink-counts" style="color:#556;"></span>
+      </div>
+      <div class="sync-bar-wrap"><div id="relink-bar" class="sync-bar" style="width:0%"></div></div>
+      <div id="relink-fp-detail" class="sync-detail"></div>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="relink-fp-btn" class="btn-secondary" style="display:none;font-size:.72rem;" onclick="relinkPrepare()">&#8776; Analyse sounds</button>
       <button id="relink-apply-btn" class="btn-primary" onclick="applyRelink()">Relink selected</button>
       <button class="btn-secondary" onclick="closeRelinkModal()">Close</button>
     </div>
@@ -11088,6 +11360,18 @@ class Handler(BaseHTTPRequestHandler):
                     'instruments': {k: str(v) for k, v in state['avail'].items()},
                     'result':      result,
                 })
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
+            return
+
+        if path == '/api/relink_prepare':
+            # Fingerprint just the surviving layers relink needs, so category
+            # rows can be upgraded to sound-ranked ones. Progress is reported
+            # through the existing /api/fingerprint_status.
+            try:
+                rels = body.get('rels') or relink_suggestions().get('needs_fingerprints', [])
+                self.send_json({'started': bool(rels) and start_fingerprint_build(rels),
+                                'count': len(rels)})
             except Exception as e:
                 self.send_json({'error': _friendly_error(e)})
             return

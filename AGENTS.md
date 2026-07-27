@@ -353,6 +353,22 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   Media`**. That second entry is the factory/preset LUN — present but empty until the official
   editor handshakes. Useful for diagnosing preset-card questions (see #33).
 - `check_paths()` — return sin_rel paths in current kit not found in avail
+- **`state['avail']` is populated lazily — never reason about what is "missing" without
+  `_ensure_avail()` first.** It is empty until something scans, so a caller that treats an
+  unscanned library as an empty one reports a perfectly healthy kit as entirely broken. This
+  really happened: relink reported 18 broken references on a kit that actually has 9.
+  `check_paths()`, `relink_suggestions()` and `_deploy_plan()` all go through the guard.
+- **Relink suggests in tiers and always states its basis** (issue #40). Filename matching
+  alone returns nothing when a kit was authored against a different sound library — the right
+  sound is on the card under an unrelated name. `relink_suggestions()` falls back through:
+  `name` (exact then `difflib` stem ≥ 0.6) → `sound` (`_knn_rank` against the *surviving layer
+  on the same pad*, found by `_relink_evidence()`, filtered to the pad's family) → `category`
+  (same family, a labelled guess). Every suggestion carries `basis` + `why`, and the UI
+  pre-selects **only** `name` rows — auto-selecting a stack of guesses that one click applies
+  is the hazard here. Family comes from `_instrument_groups()`, which reads the committed
+  `factory_catalog.json` group byte and falls back to the folder name; never parse every
+  candidate `.sin` (a filesystem read each, across the whole library).
+  Test: `tools/test_relink.py`.
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
 - **Deploy asset resolution has three states, not two** (issue #33). The module only exposes
   its factory card while the official Strike Editor runs, so an unresolvable path does NOT
