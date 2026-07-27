@@ -123,8 +123,20 @@ try:
         warnings = [i for i in p['issues'] if i['code'] == 'unverified_assets']
         check(len(warnings) == 1 and warnings[0]['severity'] == 'warning',
               'unverified references roll up into one warning, not one row each')
+        check('could not be verified' in warnings[0]['title'],
+              'with no manifest the warning admits it cannot tell missing from unseen')
         check(app.deploy_kit()['verified'],
               'deploy still completes and verifies with an unverified reference')
+
+        # A manifest that does NOT list the path is informative too: the sound is
+        # on neither card, so say that instead of blaming the editor.
+        app._preset_manifest_cache = {'instruments': ['Something/Else.sin'], 'samples': []}
+        p = app.deploy_preflight()
+        gone = [i for i in p['issues'] if i['code'] == 'unverified_assets']
+        check(p['ready'] and len(gone) == 1 and 'missing from both cards' in gone[0]['title'],
+              'once captured, an unresolved reference is reported as genuinely missing')
+        check(gone[0]['severity'] == 'warning',
+              'a genuinely missing sound still warns rather than blocking')
 
         app._preset_manifest_cache = {'instruments': [missing_rel], 'samples': []}
         p = app.deploy_preflight()
