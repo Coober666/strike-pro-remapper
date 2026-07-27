@@ -130,6 +130,87 @@ def _volume_writable(root: Path) -> bool:
         return False
 
 
+def _volume_device_key(root: Path):
+    """(vendor, product) of the physical device behind a volume, or None.
+
+    Both of the module's cards are LUNs of one USB device, so they share a
+    vendor/product while a personal copy of the factory library on some other
+    drive does not. Queried via IOCTL_STORAGE_QUERY_PROPERTY with
+    dwDesiredAccess=0 — a descriptor query needs no read access, so this wants
+    no admin rights and touches no media (which matters given issue #35).
+
+    Windows only for now; elsewhere returns None and the caller falls back to
+    its previous behaviour.
+    """
+    if platform.system() != 'Windows':
+        return None
+    drive = str(root)[:1]
+    if not drive.isalpha():
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _QUERY(ctypes.Structure):
+            _fields_ = [('PropertyId', wintypes.DWORD), ('QueryType', wintypes.DWORD),
+                        ('AdditionalParameters', ctypes.c_byte * 1)]
+
+        class _DESC(ctypes.Structure):
+            _fields_ = [('Version', wintypes.DWORD), ('Size', wintypes.DWORD),
+                        ('DeviceType', ctypes.c_byte), ('DeviceTypeModifier', ctypes.c_byte),
+                        ('RemovableMedia', ctypes.c_byte), ('CommandQueueing', ctypes.c_byte),
+                        ('VendorIdOffset', wintypes.DWORD), ('ProductIdOffset', wintypes.DWORD),
+                        ('ProductRevisionOffset', wintypes.DWORD),
+                        ('SerialNumberOffset', wintypes.DWORD),
+                        ('BusType', wintypes.DWORD), ('RawPropertiesLength', wintypes.DWORD)]
+
+        k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        handle = k32.CreateFileW(f'\\\\.\\{drive}:', 0, 3, None, 3, 0, None)
+        if handle == ctypes.c_void_p(-1).value:
+            return None
+        try:
+            query = _QUERY(0, 0, (ctypes.c_byte * 1)())
+            buf = ctypes.create_string_buffer(1024)
+            written = wintypes.DWORD()
+            ok = k32.DeviceIoControl(handle, 0x2D1400, ctypes.byref(query),
+                                     ctypes.sizeof(query), buf, ctypes.sizeof(buf),
+                                     ctypes.byref(written), None)
+            if not ok:
+                return None
+            desc = ctypes.cast(buf, ctypes.POINTER(_DESC)).contents
+
+            def text(offset):
+                if not offset or offset >= written.value:
+                    return ''
+                return ctypes.string_at(ctypes.addressof(buf) + offset).decode('latin-1').strip()
+
+            key = (text(desc.VendorIdOffset), text(desc.ProductIdOffset))
+            return key if any(key) else None
+        finally:
+            k32.CloseHandle(handle)
+    except Exception:
+        return None   # never let device probing break volume classification
+
+
+def _pick_module_volume(candidates: list, user):
+    """Of several factory-shaped volumes, the one belonging to the module.
+
+    A personal copy of the factory library on a general-purpose drive has the
+    same content shape, and silently preferring it would bake the wrong
+    inventory into a captured preset manifest (issue #39). The module exposes
+    both cards as LUNs of one device, so the real factory card is the candidate
+    whose device identity matches the user card's.
+    """
+    if len(candidates) == 1 or user is None:
+        return candidates[0]
+    want = _volume_device_key(user)
+    if want:
+        for path in candidates:
+            if _volume_device_key(path) == want:
+                return path
+    return candidates[0]
+
+
 def _classify_volumes(vols: dict):
     """
     Identify the user card and the preset card by CONTENT + WRITABILITY —
@@ -139,24 +220,25 @@ def _classify_volumes(vols: dict):
     all churn across remounts. Classifying by name inverted the save guard —
     see issue #3.)
 
-    Pass 1: any volume with the factory content shape (Kits/<CATEGORY>/*.skt)
-    is the preset card. Pass 2: of the rest, the first that accepts a write
-    probe is the user card; anything unwritable/unprobeable falls into the
-    preset slot so it is protected rather than used as a save target.
+    Anything with the factory content shape (Kits/<CATEGORY>/*.skt) is a preset
+    candidate; where several qualify, the module's own card wins (issue #39).
+    Of the rest, the first that accepts a write probe is the user card, and
+    anything unwritable/unprobeable falls into the preset slot so it is
+    protected rather than used as a save target.
     Returns (user_root, preset_root); either may be None.
     """
-    user = preset = None
-    leftovers = []
+    preset_shaped, others = [], []
     for path in vols.values():
-        if preset is None and _looks_like_preset_root(path):
-            preset = path
-        else:
-            leftovers.append(path)
-    for path in leftovers:
-        if user is None and not _looks_like_preset_root(path) and _volume_writable(path):
+        (preset_shaped if _looks_like_preset_root(path) else others).append(path)
+
+    user = fallback_preset = None
+    for path in others:
+        if user is None and _volume_writable(path):
             user = path
-        elif preset is None:
-            preset = path
+        elif fallback_preset is None:
+            fallback_preset = path
+
+    preset = _pick_module_volume(preset_shaped, user) if preset_shaped else fallback_preset
     return user, preset
 
 
@@ -3457,8 +3539,10 @@ def capture_preset_manifest() -> dict:
     return {
         'captured': data['captured'], 'source': data['source'],
         'instruments': len(data['instruments']), 'samples': len(data['samples']),
-        'message': f"Captured {len(data['instruments'])} factory instruments "
-                   f"and {len(data['samples'])} samples.",
+        # Name the volume: if classification ever picks the wrong one, a silent
+        # capture would bake in the wrong inventory (issue #39).
+        'message': f"Captured {len(data['instruments'])} factory instruments and "
+                   f"{len(data['samples'])} samples from {preset}.",
     }
 
 
