@@ -488,7 +488,16 @@
   <div class="sin-box">
     <h3>&#x1F527; Fix broken instrument paths</h3>
     <div id="relink-body"></div>
+    <div id="relink-progress" class="sync-progress" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span id="relink-phase" style="color:#88aacc;font-weight:600;"></span>
+        <span id="relink-counts" style="color:#556;"></span>
+      </div>
+      <div class="sync-bar-wrap"><div id="relink-bar" class="sync-bar" style="width:0%"></div></div>
+      <div id="relink-fp-detail" class="sync-detail"></div>
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button id="relink-fp-btn" class="btn-secondary" style="display:none;font-size:.72rem;" onclick="relinkPrepare()">&#8776; Analyse sounds</button>
       <button id="relink-apply-btn" class="btn-primary" onclick="applyRelink()">Relink selected</button>
       <button class="btn-secondary" onclick="closeRelinkModal()">Close</button>
     </div>

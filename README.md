@@ -79,6 +79,15 @@ the official editor once so the factory card appears, then press **Capture facto
 in the Deploy dialog; the inventory is saved to `library/preset_manifest.json` and reused
 from then on. If a sound really is gone, **Fix broken paths** is the tool for that.
 
+**Kits that came from another Strike library.** Commercial and hand-me-down kits often
+reference sounds by names your card does not use, so matching on filename finds nothing.
+**Fix broken paths** now falls back to what the pad itself tells it: it ranks replacements by
+how closely they match the *working* layer on the same pad, and failing that offers the right
+family of instrument. Every row says which it is — a filename match, a sound match, or just
+the same family — and you can preview each candidate before choosing. Only filename matches
+are pre-selected; suggestions are left unselected on purpose, so nothing is replaced until
+you have listened to it.
+
 **Just want to look, not install anything?** Grab the read-only
 [Web Viewer](#web-viewer-read-only-zero-install) — a single HTML file that runs from a
 double-click.
