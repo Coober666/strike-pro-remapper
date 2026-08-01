@@ -3319,6 +3319,33 @@ async function checkPaths() {
 // an empty editor. Every action here delegates to the existing flow — this is a
 // view over the app, not a second way to do things.
 let _startOpen = false;
+let _startLoading = false;
+let _startReturnFocus = null;
+let _startInerted = [];
+
+function setStartBackgroundInert(on) {
+  if (on) {
+    _startInerted = [...document.body.children].filter(el =>
+      el.id !== 'start-screen' && el.tagName !== 'SCRIPT' && !el.hasAttribute('inert'));
+    _startInerted.forEach(el => { el.setAttribute('inert', ''); });
+  } else {
+    _startInerted.forEach(el => { el.removeAttribute('inert'); });
+    _startInerted = [];
+  }
+}
+
+function trapStartFocus(e) {
+  const el = document.getElementById('start-screen');
+  const focusable = [...el.querySelectorAll('button:not([disabled])')]
+    .filter(node => node.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
 
 function startNode(on, label, detail, warn) {
   const cls = on ? 'on' : (warn ? 'warn' : '');
@@ -3327,7 +3354,7 @@ function startNode(on, label, detail, warn) {
 }
 
 function renderStartScreen(d) {
-  const kitCount = d.kits || 0, instCount = d.instruments || 0;
+  const kitCount = d.local_kits || 0, instCount = d.local_instruments || 0;
   document.getElementById('start-path').innerHTML =
       startNode(instCount > 0, 'Library',
                 instCount ? `${instCount.toLocaleString()} instruments indexed locally`
@@ -3387,19 +3414,30 @@ function renderStartScreen(d) {
 
 async function openStartScreen() {
   if (window.VIEWER) return;  // viewer-mode: no server session to start from
+  if (_startOpen || _startLoading) return;
+  _startLoading = true;
   const el = document.getElementById('start-screen');
+  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
+  _startLoading = false;
+  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
+  _startReturnFocus = document.activeElement;
+  renderStartScreen(d);
+  setStartBackgroundInert(true);
   el.classList.add('open');
   _startOpen = true;
-  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
-  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
-  renderStartScreen(d);
   const first = el.querySelector('.start-card');
   if (first) first.focus();
 }
 
 function closeStartScreen() {
   document.getElementById('start-screen').classList.remove('open');
+  setStartBackgroundInert(false);
   _startOpen = false;
+  const returnFocus = _startReturnFocus;
+  _startReturnFocus = null;
+  if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+    returnFocus.focus();
+  }
 }
 
 async function startLoad(path) {
@@ -5215,6 +5253,7 @@ async function checkStatus() {
     // user would be undoing is not the thing they are looking at.
     if (_startOpen) {
       if (!mod) {
+        if (e.key === 'Tab') { trapStartFocus(e); return; }
         const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
         if (shortcut) { e.preventDefault(); shortcut(); return; }
         if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {

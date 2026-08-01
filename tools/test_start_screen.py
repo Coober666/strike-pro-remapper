@@ -35,16 +35,22 @@ try:
     tmp = Path(tempfile.mkdtemp(prefix='strike-start-test-'))
     app.LIBRARY_DIR = tmp / 'library'
     (app.LIBRARY_DIR / 'kits').mkdir(parents=True)
+    (app.LIBRARY_DIR / 'instruments').mkdir(parents=True)
     app.get_volumes = lambda: (None, None)
-    app.refresh_available = lambda: None
-    app.state['avail'] = {}
+    refresh_calls = []
+    app.refresh_available = lambda: refresh_calls.append(1)
+    avail_sentinel = {'Mounted/Only.sin': Path('/card/Mounted/Only.sin')}
+    app.state['avail'] = dict(avail_sentinel)
     app.state['instruments'] = []
     app.state['kit_display'] = ''
     app.state['dirty'] = False
 
     # --- fresh install: nothing anywhere ----------------------------------
     d = app.start_overview()
-    check(d['kits'] == 0 and d['instruments'] == 0, 'a fresh install reports nothing on disk')
+    check(d['local_kits'] == 0 and d['local_instruments'] == 0,
+          'a fresh install reports nothing on disk')
+    check('kits' not in d and 'instruments' not in d,
+          'the API uses explicit local-count field names')
     check(d['recent'] == [] and d['autosaves'] == [], 'no recents and no recovery on a fresh install')
     check(d['user_mounted'] is False and d['preset_mounted'] is False,
           'both cards report absent when nothing is connected')
@@ -53,9 +59,15 @@ try:
     # --- local library, still no card -------------------------------------
     for name in ('Alpha.skt', 'Beta.skt', 'Gamma.skt'):
         (app.LIBRARY_DIR / 'kits' / name).write_bytes(b'\x00')
-    app.state['avail'] = {f'Kicks/K{i}.sin': Path(f'/x/K{i}.sin') for i in range(5)}
+    for i in range(5):
+        p = app.LIBRARY_DIR / 'instruments' / 'Kicks' / f'K{i}.sin'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b'\x00')
     d = app.start_overview()
-    check(d['kits'] == 3 and d['instruments'] == 5, 'local kits and instruments are counted')
+    check(d['local_kits'] == 3 and d['local_instruments'] == 5,
+          'local kits and instruments are counted from the library')
+    check(app.state['avail'] == avail_sentinel and not refresh_calls,
+          'rendering start data does not populate or mutate the availability index')
     check(len(d['recent']) == 3, 'local kits appear as recents')
     check(all(k['source'] == 'On this computer' for k in d['recent']),
           'sources are friendly names, not raw paths')
@@ -86,7 +98,7 @@ try:
     check(len(d['autosaves']) == 1, 'a recoverable autosave is surfaced')
     check(all('autosave' not in k['name'].lower() for k in d['recent']),
           'autosaves stay out of recent kits — opening a crash copy by mistake is the risk')
-    check(d['kits'] == 3, 'autosaves are not counted as kits')
+    check(d['local_kits'] == 3, 'autosaves are not counted as kits')
     check(d['autosaves'][0]['name'] == 'Beta', 'the recoverable kit is named')
     check(d['autosaves'][0].get('age'), 'the recovery entry carries an age for the banner')
     check(d['autosaves'][0]['autosave_path'].endswith('Beta.autosave.skt'),
@@ -103,15 +115,44 @@ try:
     user = tmp / 'usercard'
     (user / 'Kits').mkdir(parents=True)
     (user / 'Kits' / 'Card Kit.skt').write_bytes(b'\x00')
+    (user / 'Instruments' / 'Kicks').mkdir(parents=True)
+    (user / 'Instruments' / 'Kicks' / 'Card Kick.sin').write_bytes(b'\x00')
     preset = tmp / 'presetcard'
     (preset / 'Kits' / 'ACOUSTIC').mkdir(parents=True)
     (preset / 'Kits' / 'ACOUSTIC' / 'Factory.skt').write_bytes(b'\x00')
+    (preset / 'Instruments' / 'Snares').mkdir(parents=True)
+    (preset / 'Instruments' / 'Snares' / 'Factory Snare.sin').write_bytes(b'\x00')
     app.get_volumes = lambda: (user, preset)
     d = app.start_overview()
     check(d['user_mounted'] and d['preset_mounted'], 'both cards are reported when mounted')
     sources = {k['source'] for k in d['recent']}
     check('User card' in sources and 'Factory card' in sources,
           'card kits are labelled by which card they came from')
+    check(d['local_kits'] == 3 and d['local_instruments'] == 5,
+          'mounted cards do not change local library counts')
+    check(app.state['avail'] == avail_sentinel and not refresh_calls,
+          'mounted-card rendering still leaves the availability index untouched')
+
+    # --- modal isolation contract -----------------------------------------
+    html = app.HTML
+    check('id="start-screen" role="dialog" aria-modal="true"' in html,
+          'the start screen exposes dialog and modal semantics')
+    check('setStartBackgroundInert(true)' in html and
+          'setStartBackgroundInert(false)' in html,
+          'opening and closing apply and remove inert from the editor')
+    check("el.setAttribute('inert', '')" in html and
+          "el.removeAttribute('inert')" in html,
+          'the isolation helper applies and removes the inert attribute')
+    check('returnFocus.focus()' in html,
+          'closing restores focus to the element that opened the screen')
+    check("if (e.key === 'Tab') { trapStartFocus(e); return; }" in html,
+          'Tab and Shift+Tab stay within the modal actions')
+    check('if (_startOpen || _startLoading) return;' in html,
+          'duplicate open requests cannot replace focus or inert bookkeeping')
+    open_source = html[html.index('async function openStartScreen()'):
+                       html.index('function closeStartScreen()')]
+    check(open_source.index("fetch('/api/start')") < open_source.index("classList.add('open')"),
+          'start data renders before the modal traps the editor')
 
     # --- an unreadable kit must not sink the whole screen ------------------
     ghost = app.LIBRARY_DIR / 'kits' / 'Ghost.skt'

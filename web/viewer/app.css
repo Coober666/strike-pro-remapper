@@ -459,7 +459,7 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .start-callout span { color:#7c8378; font-size:.7rem; line-height:1.45; }
 .start-dismiss { margin-top:22px; }
 @media (max-width: 1080px) {
-  #start-screen.open { grid-template-columns:minmax(0,1fr); }
+  #start-screen.open { grid-template-columns:minmax(0,1fr); grid-auto-rows:max-content; align-content:start; }
   .start-rail, .start-aside { min-height:0; border:0; border-bottom:1px solid #23271f; }
   .start-main { padding:20px 18px 30px; order:-1; }
   .start-title { font-size:1.9rem; }

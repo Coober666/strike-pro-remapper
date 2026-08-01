@@ -3854,7 +3854,7 @@ def start_overview(recent_limit: int = 6) -> dict:
     """Everything the start screen needs, composed from what already exists.
 
     Deliberately a read-only view over `volume_status()`, `find_kit_files()`,
-    `find_autosaves()` and the instrument index — card detection and library
+    `find_autosaves()` and the local library — card detection and library
     scanning live in one place and this must not become a second copy of them.
     """
     status = volume_status()
@@ -3862,10 +3862,11 @@ def start_overview(recent_limit: int = 6) -> dict:
     # as kits inflates the total, and listing them invites opening a crash copy
     # by mistake.
     kits = [k for k in find_kit_files() if not k['name'].lower().endswith('.autosave.skt')]
-    # The screen leads with "N instruments indexed locally", and _ensure_avail()
-    # deliberately only scans when a kit is loaded — which it never is here.
-    if not state.get('avail'):
-        refresh_available()
+    # These counts describe the local library only. Card content still belongs
+    # in the recent list, but must not inflate what is "On this computer".
+    local_kits = [k for k in kits if k['source'] == 'library']
+    local_inst_root = LIBRARY_DIR / 'instruments'
+    local_instruments = scan_instruments([local_inst_root]) if local_inst_root.is_dir() else {}
 
     recent = []
     for kit in kits:
@@ -3892,8 +3893,8 @@ def start_overview(recent_limit: int = 6) -> dict:
     return {
         'loaded_kit':  state.get('kit_display') or '',
         'dirty':       bool(state.get('dirty')),
-        'kits':        len(kits),
-        'instruments': len(state.get('avail') or {}),
+        'local_kits':        len(local_kits),
+        'local_instruments': len(local_instruments),
         'recent':      recent[:recent_limit],
         'autosaves':   autosaves,
         'user_mounted':   status['user_mounted'],
@@ -4372,7 +4373,7 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .start-callout span { color:#7c8378; font-size:.7rem; line-height:1.45; }
 .start-dismiss { margin-top:22px; }
 @media (max-width: 1080px) {
-  #start-screen.open { grid-template-columns:minmax(0,1fr); }
+  #start-screen.open { grid-template-columns:minmax(0,1fr); grid-auto-rows:max-content; align-content:start; }
   .start-rail, .start-aside { min-height:0; border:0; border-bottom:1px solid #23271f; }
   .start-main { padding:20px 18px 30px; order:-1; }
   .start-title { font-size:1.9rem; }
@@ -8705,6 +8706,33 @@ async function checkPaths() {
 // an empty editor. Every action here delegates to the existing flow — this is a
 // view over the app, not a second way to do things.
 let _startOpen = false;
+let _startLoading = false;
+let _startReturnFocus = null;
+let _startInerted = [];
+
+function setStartBackgroundInert(on) {
+  if (on) {
+    _startInerted = [...document.body.children].filter(el =>
+      el.id !== 'start-screen' && el.tagName !== 'SCRIPT' && !el.hasAttribute('inert'));
+    _startInerted.forEach(el => { el.setAttribute('inert', ''); });
+  } else {
+    _startInerted.forEach(el => { el.removeAttribute('inert'); });
+    _startInerted = [];
+  }
+}
+
+function trapStartFocus(e) {
+  const el = document.getElementById('start-screen');
+  const focusable = [...el.querySelectorAll('button:not([disabled])')]
+    .filter(node => node.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
 
 function startNode(on, label, detail, warn) {
   const cls = on ? 'on' : (warn ? 'warn' : '');
@@ -8713,7 +8741,7 @@ function startNode(on, label, detail, warn) {
 }
 
 function renderStartScreen(d) {
-  const kitCount = d.kits || 0, instCount = d.instruments || 0;
+  const kitCount = d.local_kits || 0, instCount = d.local_instruments || 0;
   document.getElementById('start-path').innerHTML =
       startNode(instCount > 0, 'Library',
                 instCount ? `${instCount.toLocaleString()} instruments indexed locally`
@@ -8772,19 +8800,30 @@ function renderStartScreen(d) {
 }
 
 async function openStartScreen() {
+  if (_startOpen || _startLoading) return;
+  _startLoading = true;
   const el = document.getElementById('start-screen');
+  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
+  _startLoading = false;
+  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
+  _startReturnFocus = document.activeElement;
+  renderStartScreen(d);
+  setStartBackgroundInert(true);
   el.classList.add('open');
   _startOpen = true;
-  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
-  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
-  renderStartScreen(d);
   const first = el.querySelector('.start-card');
   if (first) first.focus();
 }
 
 function closeStartScreen() {
   document.getElementById('start-screen').classList.remove('open');
+  setStartBackgroundInert(false);
   _startOpen = false;
+  const returnFocus = _startReturnFocus;
+  _startReturnFocus = null;
+  if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+    returnFocus.focus();
+  }
 }
 
 async function startLoad(path) {
@@ -10600,6 +10639,7 @@ async function checkStatus() {
     // user would be undoing is not the thing they are looking at.
     if (_startOpen) {
       if (!mod) {
+        if (e.key === 'Tab') { trapStartFocus(e); return; }
         const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
         if (shortcut) { e.preventDefault(); shortcut(); return; }
         if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {
@@ -10920,7 +10960,7 @@ async function dismissAllAutosaves() {
 
 <!-- Sample relink modal -->
 <!-- Start screen: what the app shows before a kit is open (issue #25) -->
-<div id="start-screen" aria-label="Start">
+<div id="start-screen" role="dialog" aria-modal="true" aria-label="Start">
   <div class="start-rail">
     <div class="start-sec">Signal path</div>
     <div id="start-path" class="start-path"></div>
