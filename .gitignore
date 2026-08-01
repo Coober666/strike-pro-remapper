@@ -5,4 +5,8 @@ library/
 tests/fixtures/
 tests/expected/
 embedded.js
+.build/
+node_modules/
+playwright-report/
+test-results/
 dist/
