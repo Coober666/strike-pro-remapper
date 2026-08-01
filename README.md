@@ -48,11 +48,12 @@ Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
 >   trigger this.
 
 **The start screen.** The app opens on a start screen instead of an empty editor: it shows
-what it can see (local library, user card, factory card), your recent kits, and four ways in
-— open a kit (`O`), copy your library from the module (`S`), import content (`I`), or create
+what it can see (local library, user card, factory card), kits you have actually opened, and four ways in
+— open a kit (`O`), confirm and copy your library from the module (`S`), import content (`I`), or create
 a new kit (`N`). If a previous session left unsaved work, recovery is offered there first.
 Click the **Strike Remapper** logo any time to come back to it; `Esc` returns to your kit.
-Nothing on this screen writes to the module.
+Nothing on this screen writes to the module. A brief signal-path check covers the empty editor
+while the workspace loads; if that check fails, you can retry it or continue into the editor.
 
 **With your SD card:** insert it and the app finds your kits and instruments automatically
 (detected by their content — the factory preset card by its `Kits/<CATEGORY>/` tree, the

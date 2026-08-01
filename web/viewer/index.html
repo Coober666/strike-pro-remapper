@@ -11,6 +11,18 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body data-workspace="pad">
+<div id="boot-screen" role="status" aria-live="polite">
+  <div id="boot-console" class="boot-console">
+    <div class="boot-eyebrow">Self test / signal path</div>
+    <i class="boot-knob" aria-hidden="true"></i>
+    <strong id="boot-title">Reading your workspace</strong>
+    <span id="boot-detail">Checking the local library and connected cards&hellip;</span>
+    <div id="boot-actions" class="boot-actions" hidden>
+      <button class="btn-primary" type="button" onclick="retryStartBoot()">Retry</button>
+      <button class="btn-secondary" type="button" onclick="hideBootScreen()">Continue to editor</button>
+    </div>
+  </div>
+</div>
 <header class="app-topbar">
   <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
        style="cursor:pointer;" onclick="openStartScreen()"
@@ -513,6 +525,15 @@
       <button class="start-card" type="button" onclick="startNewKit()">
         <i class="knob"></i><span><small>Blank or template</small><strong>Create a new kit</strong>
         <span class="d">Start clean, then assign instruments and shape the kit around your setup.</span></span><kbd>N</kbd></button>
+    </div>
+    <div id="start-sync-confirm" class="start-confirm" hidden role="group" aria-labelledby="start-sync-title">
+      <strong id="start-sync-title">Copy the connected library?</strong>
+      <p>This copies kits, instruments, and samples to this computer for offline work. Large libraries can take several minutes and use gigabytes of disk space. The module and cards are never changed.</p>
+      <span id="start-sync-state" class="start-confirm-status"></span>
+      <div class="start-confirm-actions">
+        <button id="start-sync-go" class="btn-primary" type="button" onclick="confirmStartCopyLibrary()">Start local copy</button>
+        <button id="start-sync-cancel" class="btn-secondary" type="button" onclick="cancelStartCopyLibrary()">Not now</button>
+      </div>
     </div>
     <div class="start-dismiss">
       <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>

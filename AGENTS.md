@@ -534,6 +534,7 @@ library/                     # git-ignored — populate from SD card or copy bet
   instruments/               # .sin metadata files (and optionally WAVs alongside)
   samples/                   # WAV files synced from SD via "Sync full library from SD"
   snapshots/                 # Kit time machine: <id>.skt blobs + index.json metadata
+  recent_kits.json           # successful kit opens for the start screen (newest first)
   tags.json                  # instrument tag sidecar {sin_rel: [tag, ...]}
   fingerprints.json          # "More like this" audio-fingerprint sidecar (keyed by sin_rel)
   preset_manifest.json       # factory-card inventory captured while the official editor exposed it

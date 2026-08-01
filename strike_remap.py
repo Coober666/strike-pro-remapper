@@ -12,6 +12,7 @@ import errno
 import hashlib
 import io
 import json
+import math
 import os
 import platform
 import shutil
@@ -1280,6 +1281,63 @@ state = {
 }
 
 
+_RECENT_KITS_MAX = 20
+
+
+def _recent_kits_path() -> Path:
+    return LIBRARY_DIR / 'recent_kits.json'
+
+
+def _recent_kit_key(path) -> str:
+    """Stable comparison key without requiring a currently-mounted path."""
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def load_recent_kits() -> list:
+    """Return successful kit opens, newest first; corrupt sidecars are harmless."""
+    path = _recent_kits_path()
+    try:
+        data = json.loads(path.read_text('utf-8'))
+    except (OSError, ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    clean = []
+    for entry in data:
+        if not isinstance(entry, dict) or not isinstance(entry.get('path'), str):
+            continue
+        try:
+            opened_at = float(entry.get('opened_at', 0))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(opened_at) and opened_at > 0:
+            clean.append({'path': entry['path'], 'opened_at': opened_at})
+    clean.sort(key=lambda entry: -entry['opened_at'])
+    return clean[:_RECENT_KITS_MAX]
+
+
+def record_recent_kit(path, opened_at=None):
+    """Persist a kit only after it has parsed and loaded successfully."""
+    path_str = str(Path(path))
+    key = _recent_kit_key(path_str)
+    entries = [entry for entry in load_recent_kits()
+               if _recent_kit_key(entry['path']) != key]
+    entries.insert(0, {'path': path_str,
+                       'opened_at': float(opened_at if opened_at is not None else time.time())})
+    entries = entries[:_RECENT_KITS_MAX]
+    sidecar = _recent_kits_path()
+    tmp = sidecar.with_suffix('.json.tmp')
+    try:
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False), 'utf-8')
+        tmp.replace(sidecar)
+    except OSError:
+        # History is a convenience, never a reason to fail an otherwise valid
+        # kit open (read-only folders and abruptly removed cards are normal).
+        return False
+    return True
+
+
 def load_kit(path_str: str):
     p = Path(path_str)
     data = read_card_bytes(p)
@@ -1301,6 +1359,8 @@ def load_kit(path_str: str):
     state['dirty']        = False
     state['history']      = []
     state['message']      = f"Loaded {p.name}"
+    if not p.name.lower().endswith('.autosave.skt'):
+        record_recent_kit(p)
     _auto_snapshot(f'Loaded {p.name}', 'load')
 
 
@@ -3868,20 +3928,21 @@ def start_overview(recent_limit: int = 6) -> dict:
     local_inst_root = LIBRARY_DIR / 'instruments'
     local_instruments = scan_instruments([local_inst_root]) if local_inst_root.is_dir() else {}
 
+    # "Recent" means successfully opened in this app, not merely a kit whose
+    # file timestamp happens to be new (factory media often shares one date).
+    kits_by_path = {_recent_kit_key(kit['path']): kit for kit in kits}
     recent = []
-    for kit in kits:
-        try:
-            mtime = Path(kit['path']).stat().st_mtime
-        except OSError:
-            continue
+    for opened in load_recent_kits():
+        kit = kits_by_path.get(_recent_kit_key(opened['path']))
+        if not kit:
+            continue  # card removed, kit renamed, or file deleted
         recent.append({
             'name':   kit['name'][:-4] if kit['name'].lower().endswith('.skt') else kit['name'],
             'path':   kit['path'],
             'source': _START_SOURCE_LABEL.get(kit['source'], kit['source']),
-            'age':    _relative_age(mtime),
-            'mtime':  mtime,
+            'age':    _relative_age(opened['opened_at']),
+            'opened_at': opened['opened_at'],
         })
-    recent.sort(key=lambda k: -k['mtime'])
 
     autosaves = find_autosaves()
     for entry in autosaves:
@@ -4324,6 +4385,24 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .deploy-route-box span { display:block; overflow:hidden; color:#aeb5ae; font:.56rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
 .deploy-route-arrow { color:#b6995d; font:700 .9rem/1 Consolas,monospace; text-align:center; }
 /* ── Start screen (issue #25) ── */
+#boot-screen { position:fixed; inset:0; z-index:600; display:grid; place-items:center; padding:24px;
+  background:radial-gradient(circle at 50% 42%,#20251d 0,#10130f 42%,#090b09 100%); }
+#boot-screen[hidden], #boot-actions[hidden] { display:none; }
+.boot-console { width:min(430px,92vw); padding:24px 26px 22px; border:1px solid #333a2f; border-radius:7px;
+  background:linear-gradient(150deg,#181d16,#0e110d); box-shadow:0 24px 80px #000a,inset 0 1px #ffffff08; text-align:center; }
+.boot-eyebrow { color:#777f70; font:.53rem/1 Consolas,monospace; letter-spacing:.22em; text-transform:uppercase; }
+.boot-knob { position:relative; display:block; width:48px; height:48px; margin:20px auto 18px; border:1px solid #655b42;
+  border-radius:50%; background:#0c0f0b; box-shadow:inset 0 0 0 7px #181d15,0 0 22px #d0aa5b20; }
+.boot-knob::before { content:""; position:absolute; left:22px; top:5px; width:2px; height:12px; border-radius:2px;
+  background:#d0aa5b; box-shadow:0 0 8px #d0aa5b; transform-origin:1px 19px; animation:boot-sweep 1.3s ease-in-out infinite alternate; }
+.boot-console strong { display:block; color:#eee8d9; font:600 1.15rem/1.1 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.boot-console > span { display:block; min-height:2.8em; margin-top:8px; color:#858d80; font:.65rem/1.45 Consolas,monospace; }
+.boot-console.error .boot-knob { border-color:#7a4c43; box-shadow:inset 0 0 0 7px #211512,0 0 22px #bd665455; }
+.boot-console.error .boot-knob::before { background:#d07968; box-shadow:0 0 8px #d07968; animation:none; transform:rotate(46deg); }
+.boot-actions { display:flex; justify-content:center; gap:8px; margin-top:17px; }
+@keyframes boot-sweep { from { transform:rotate(-52deg); } to { transform:rotate(52deg); } }
+@media (prefers-reduced-motion:reduce) { .boot-knob::before { animation:none; } }
+body.viewer-mode #boot-screen { display:none !important; }
 #start-screen { display:none; position:fixed; inset:0; z-index:500; background:#0b0d0b; overflow-y:auto; }
 #start-screen.open { display:grid; grid-template-columns:250px minmax(0,1fr) 300px; align-items:start; }
 .start-rail { padding:22px 18px; border-right:1px solid #23271f; min-height:100vh; }
@@ -4343,6 +4422,13 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .start-card strong { display:block; color:#e7e2d4; font:600 .95rem/1.1 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
 .start-card span.d { display:block; margin-top:4px; color:#8d9488; font-size:.74rem; line-height:1.4; }
 .start-card kbd { position:absolute; top:9px; right:11px; color:#5c6357; font:.56rem/1 Consolas,monospace; }
+.start-confirm { max-width:760px; margin-top:13px; padding:15px 16px; border:1px solid #66532c; border-radius:6px;
+  background:linear-gradient(145deg,#211c10,#15140e); }
+.start-confirm[hidden] { display:none; }
+.start-confirm strong { display:block; color:#e4d3a5; font:600 .9rem/1.15 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-confirm p { margin:7px 0 10px; color:#a79c81; font-size:.73rem; line-height:1.5; }
+.start-confirm-status { display:block; margin-bottom:12px; color:#898e80; font:.55rem/1.4 Consolas,monospace; }
+.start-confirm-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .start-recover { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; padding:13px 15px;
   border:1px solid #6b5423; border-radius:6px; background:linear-gradient(160deg,#221a09,#171204); }
 .start-recover .g { flex:1; min-width:220px; }
@@ -5020,6 +5106,18 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
 </style>
 </head>
 <body data-workspace="pad">
+<div id="boot-screen" role="status" aria-live="polite">
+  <div id="boot-console" class="boot-console">
+    <div class="boot-eyebrow">Self test / signal path</div>
+    <i class="boot-knob" aria-hidden="true"></i>
+    <strong id="boot-title">Reading your workspace</strong>
+    <span id="boot-detail">Checking the local library and connected cards&hellip;</span>
+    <div id="boot-actions" class="boot-actions" hidden>
+      <button class="btn-primary" type="button" onclick="retryStartBoot()">Retry</button>
+      <button class="btn-secondary" type="button" onclick="hideBootScreen()">Continue to editor</button>
+    </div>
+  </div>
+</div>
 <header class="app-topbar">
   <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
        style="cursor:pointer;" onclick="openStartScreen()"
@@ -8709,6 +8807,35 @@ let _startOpen = false;
 let _startLoading = false;
 let _startReturnFocus = null;
 let _startInerted = [];
+let _startSyncReturnFocus = null;
+
+function hideBootScreen() {
+  document.getElementById('boot-screen').hidden = true;
+}
+
+function setBootLoading() {
+  const panel = document.getElementById('boot-console');
+  panel.classList.remove('error');
+  document.getElementById('boot-title').textContent = 'Reading your workspace';
+  document.getElementById('boot-detail').textContent = 'Checking the local library and connected cards…';
+  document.getElementById('boot-actions').hidden = true;
+}
+
+function showBootFailure() {
+  const boot = document.getElementById('boot-screen');
+  boot.hidden = false;
+  document.getElementById('boot-console').classList.add('error');
+  document.getElementById('boot-title').textContent = 'Start screen unavailable';
+  document.getElementById('boot-detail').textContent = 'The editor is still usable. Retry the workspace check, or continue without it.';
+  document.getElementById('boot-actions').hidden = false;
+  document.querySelector('#boot-actions .btn-primary')?.focus();
+}
+
+async function retryStartBoot() {
+  setBootLoading();
+  if (await openStartScreen()) hideBootScreen();
+  else showBootFailure();
+}
 
 function setStartBackgroundInert(on) {
   if (on) {
@@ -8794,18 +8921,29 @@ function renderStartScreen(d) {
     ? d.recent.map(k => `<button class="start-kit" type="button" data-path="${escHtml(k.path)}"
         onclick="startLoad(this.dataset.path)">
         <span><b>${escHtml(k.name)}</b><span>${escHtml(k.source)}</span></span><em>${escHtml(k.age)}</em></button>`).join('')
-    : '<p class="start-note">No kits yet. Import one, copy your library, or create a kit.</p>';
+    : '<p class="start-note">No recently opened kits yet. Open one and it will stay within reach here.</p>';
+
+  const canSync = Boolean(d.user_mounted || d.preset_mounted);
+  document.getElementById('start-sync-go').disabled = !canSync;
+  document.getElementById('start-sync-state').textContent = canSync
+    ? 'A connected card is ready to copy.'
+    : 'Connect a user or factory card before starting the copy.';
+  document.getElementById('start-sync-confirm').hidden = true;
 
   document.getElementById('start-close-btn').style.display = d.loaded_kit ? '' : 'none';
 }
 
 async function openStartScreen() {
-  if (_startOpen || _startLoading) return;
+  if (_startOpen) return true;
+  if (_startLoading) return false;
   _startLoading = true;
   const el = document.getElementById('start-screen');
   const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
   _startLoading = false;
-  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
+  if (!d || d.error) {
+    setMsg((d && d.error) || 'Could not load the start screen', true);
+    return false;
+  }
   _startReturnFocus = document.activeElement;
   renderStartScreen(d);
   setStartBackgroundInert(true);
@@ -8813,9 +8951,11 @@ async function openStartScreen() {
   _startOpen = true;
   const first = el.querySelector('.start-card');
   if (first) first.focus();
+  return true;
 }
 
 function closeStartScreen() {
+  cancelStartCopyLibrary(false);
   document.getElementById('start-screen').classList.remove('open');
   setStartBackgroundInert(false);
   _startOpen = false;
@@ -8837,7 +8977,28 @@ function startOpenKit() {
   menuToggle('kit-menu');
 }
 
-async function startCopyLibrary() { closeStartScreen(); await syncLibrary(); }
+function startCopyLibrary() {
+  const panel = document.getElementById('start-sync-confirm');
+  _startSyncReturnFocus = document.activeElement;
+  panel.hidden = false;
+  const go = document.getElementById('start-sync-go');
+  (go.disabled ? document.getElementById('start-sync-cancel') : go).focus();
+}
+
+function cancelStartCopyLibrary(restoreFocus = true) {
+  const panel = document.getElementById('start-sync-confirm');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const returnFocus = _startSyncReturnFocus;
+  _startSyncReturnFocus = null;
+  if (restoreFocus && returnFocus && returnFocus.isConnected) returnFocus.focus();
+}
+
+async function confirmStartCopyLibrary() {
+  cancelStartCopyLibrary(false);
+  closeStartScreen();
+  await syncLibrary();
+}
 
 function startImport() {
   closeStartScreen();
@@ -10640,6 +10801,9 @@ async function checkStatus() {
     if (_startOpen) {
       if (!mod) {
         if (e.key === 'Tab') { trapStartFocus(e); return; }
+        if (e.key === 'Escape' && !document.getElementById('start-sync-confirm').hidden) {
+          e.preventDefault(); cancelStartCopyLibrary(); return;
+        }
         const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
         if (shortcut) { e.preventDefault(); shortcut(); return; }
         if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {
@@ -10775,13 +10939,17 @@ async function checkStatus() {
   // Rehydrate if the server already has a kit loaded (page reload / second tab):
   // the served HTML is static, so without this the client starts blank.
   const sess = await api('/session');
-  if (sess.loaded) {
+  if (window.VIEWER) {
+    hideBootScreen();
+  } else if (sess.loaded) {
     applyKitData(sess, sess.path, {dirty: sess.dirty, undoCount: sess.undo_count,
                                    historyLabels: sess.history_labels});
     setMsg(`Restored session — ${sess.name}`);
+    hideBootScreen();
   } else {
     // Nothing open: lead with a task rather than an empty editor (issue #25).
-    openStartScreen();
+    if (await openStartScreen()) hideBootScreen();
+    else showBootFailure();
   }
 
   checkPaths();
@@ -10823,7 +10991,10 @@ async function checkStatus() {
     banner.dataset.count = data.autosaves.length;
     document.body.prepend(banner);
   })();
-})();
+})().catch(err => {
+  console.error(err);
+  showBootFailure();
+});
 
 async function recoverAutosave(autosavePath, kitPath) {
   await openKit(autosavePath);
@@ -10986,6 +11157,15 @@ async function dismissAllAutosaves() {
       <button class="start-card" type="button" onclick="startNewKit()">
         <i class="knob"></i><span><small>Blank or template</small><strong>Create a new kit</strong>
         <span class="d">Start clean, then assign instruments and shape the kit around your setup.</span></span><kbd>N</kbd></button>
+    </div>
+    <div id="start-sync-confirm" class="start-confirm" hidden role="group" aria-labelledby="start-sync-title">
+      <strong id="start-sync-title">Copy the connected library?</strong>
+      <p>This copies kits, instruments, and samples to this computer for offline work. Large libraries can take several minutes and use gigabytes of disk space. The module and cards are never changed.</p>
+      <span id="start-sync-state" class="start-confirm-status"></span>
+      <div class="start-confirm-actions">
+        <button id="start-sync-go" class="btn-primary" type="button" onclick="confirmStartCopyLibrary()">Start local copy</button>
+        <button id="start-sync-cancel" class="btn-secondary" type="button" onclick="cancelStartCopyLibrary()">Not now</button>
+      </div>
     </div>
     <div class="start-dismiss">
       <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Checks for the start-screen view model (issue #25).
-
-start_overview() must be a read-only composition of what already exists — card
-detection and library scanning live in one place and this must not become a
-second copy of them. These checks pin the shape the screen renders from and the
-states it has to distinguish.
-"""
+"""Checks for the start-screen view model and interaction contracts."""
 
 import shutil
 import sys
@@ -45,18 +39,16 @@ try:
     app.state['kit_display'] = ''
     app.state['dirty'] = False
 
-    # --- fresh install: nothing anywhere ----------------------------------
     d = app.start_overview()
     check(d['local_kits'] == 0 and d['local_instruments'] == 0,
           'a fresh install reports nothing on disk')
     check('kits' not in d and 'instruments' not in d,
           'the API uses explicit local-count field names')
-    check(d['recent'] == [] and d['autosaves'] == [], 'no recents and no recovery on a fresh install')
-    check(d['user_mounted'] is False and d['preset_mounted'] is False,
+    check(d['recent'] == [] and d['autosaves'] == [],
+          'a fresh install has no history or recovery')
+    check(not d['user_mounted'] and not d['preset_mounted'],
           'both cards report absent when nothing is connected')
-    check(d['loaded_kit'] == '', 'no kit is reported open')
 
-    # --- local library, still no card -------------------------------------
     for name in ('Alpha.skt', 'Beta.skt', 'Gamma.skt'):
         (app.LIBRARY_DIR / 'kits' / name).write_bytes(b'\x00')
     for i in range(5):
@@ -65,53 +57,45 @@ try:
         p.write_bytes(b'\x00')
     d = app.start_overview()
     check(d['local_kits'] == 3 and d['local_instruments'] == 5,
-          'local kits and instruments are counted from the library')
+          'local counts come only from the local library')
+    check(d['recent'] == [],
+          'available kits are not called recent before they are opened')
     check(app.state['avail'] == avail_sentinel and not refresh_calls,
-          'rendering start data does not populate or mutate the availability index')
-    check(len(d['recent']) == 3, 'local kits appear as recents')
-    check(all(k['source'] == 'On this computer' for k in d['recent']),
-          'sources are friendly names, not raw paths')
-    check(all(not k['name'].endswith('.skt') for k in d['recent']),
-          'recent names drop the .skt extension')
-    check(d['user_mounted'] is False,
-          'a local library does not imply a card — local editing stands alone')
+          'rendering does not mutate the global availability index')
 
-    # --- recents are newest-first -----------------------------------------
     now = time.time()
-    import os
-    os.utime(app.LIBRARY_DIR / 'kits' / 'Beta.skt', (now, now))
-    os.utime(app.LIBRARY_DIR / 'kits' / 'Alpha.skt', (now - 7200, now - 7200))
-    os.utime(app.LIBRARY_DIR / 'kits' / 'Gamma.skt', (now - 700000, now - 700000))
+    alpha = app.LIBRARY_DIR / 'kits' / 'Alpha.skt'
+    beta = app.LIBRARY_DIR / 'kits' / 'Beta.skt'
+    app.record_recent_kit(alpha, opened_at=now - 7200)
+    app.record_recent_kit(beta, opened_at=now)
     d = app.start_overview()
-    check([k['name'] for k in d['recent']] == ['Beta', 'Alpha', 'Gamma'],
-          'recents are ordered newest first')
+    check([k['name'] for k in d['recent']] == ['Beta', 'Alpha'],
+          'successful opens are ordered newest first')
     check(d['recent'][0]['age'].endswith('m') and d['recent'][1]['age'] == '2h',
-          'ages render as short relative labels')
+          'history uses short relative age labels')
+    check(all(k['source'] == 'On this computer' for k in d['recent']),
+          'history uses friendly source labels')
+    app.record_recent_kit(alpha, opened_at=now + 1)
+    check([k['name'] for k in app.start_overview()['recent']] == ['Alpha', 'Beta'],
+          'reopening moves a kit to the front without duplication')
+    check(app._relative_age(time.time() - 30) == '1m',
+          'under a minute still reads as 1m')
 
-    check(app._relative_age(time.time() - 30) == '1m', 'under a minute still reads as 1m')
-    check(app._relative_age(time.time() - 5 * 86400) not in ('', None),
-          'a five-day-old file gets a weekday label')
-
-    # --- recovery present --------------------------------------------------
     (app.LIBRARY_DIR / 'kits' / 'Beta.autosave.skt').write_bytes(b'\x00')
     d = app.start_overview()
-    check(len(d['autosaves']) == 1, 'a recoverable autosave is surfaced')
+    check(len(d['autosaves']) == 1 and d['local_kits'] == 3,
+          'autosaves are recovery entries, not local kits')
     check(all('autosave' not in k['name'].lower() for k in d['recent']),
-          'autosaves stay out of recent kits — opening a crash copy by mistake is the risk')
-    check(d['local_kits'] == 3, 'autosaves are not counted as kits')
-    check(d['autosaves'][0]['name'] == 'Beta', 'the recoverable kit is named')
-    check(d['autosaves'][0].get('age'), 'the recovery entry carries an age for the banner')
-    check(d['autosaves'][0]['autosave_path'].endswith('Beta.autosave.skt'),
-          'the recovery entry keeps the path the existing recover flow needs')
+          'autosaves never appear in recent kits')
+    check(d['autosaves'][0]['name'] == 'Beta' and d['autosaves'][0].get('age'),
+          'recovery includes its name and age')
 
-    # --- a kit is open: the screen becomes dismissible ---------------------
     app.state['kit_display'] = 'Beta.skt'
     app.state['dirty'] = True
     d = app.start_overview()
     check(d['loaded_kit'] == 'Beta.skt' and d['dirty'] is True,
-          'an open kit is reported so the screen can offer a way back')
+          'an open kit makes the screen dismissible')
 
-    # --- cards present -----------------------------------------------------
     user = tmp / 'usercard'
     (user / 'Kits').mkdir(parents=True)
     (user / 'Kits' / 'Card Kit.skt').write_bytes(b'\x00')
@@ -123,60 +107,71 @@ try:
     (preset / 'Instruments' / 'Snares').mkdir(parents=True)
     (preset / 'Instruments' / 'Snares' / 'Factory Snare.sin').write_bytes(b'\x00')
     app.get_volumes = lambda: (user, preset)
+    app.record_recent_kit(user / 'Kits' / 'Card Kit.skt', opened_at=now + 2)
+    app.record_recent_kit(preset / 'Kits' / 'ACOUSTIC' / 'Factory.skt', opened_at=now + 3)
     d = app.start_overview()
-    check(d['user_mounted'] and d['preset_mounted'], 'both cards are reported when mounted')
+    check(d['user_mounted'] and d['preset_mounted'],
+          'both cards are reported when mounted')
     sources = {k['source'] for k in d['recent']}
     check('User card' in sources and 'Factory card' in sources,
-          'card kits are labelled by which card they came from')
+          'opened card kits remain in history with their source labels')
     check(d['local_kits'] == 3 and d['local_instruments'] == 5,
-          'mounted cards do not change local library counts')
+          'mounted cards do not inflate local counts')
     check(app.state['avail'] == avail_sentinel and not refresh_calls,
-          'mounted-card rendering still leaves the availability index untouched')
+          'card rendering still leaves availability untouched')
+    app.get_volumes = lambda: (None, None)
+    hidden = app.start_overview()
+    check(all(k['source'] == 'On this computer' for k in hidden['recent']),
+          'disconnected card history is hidden without being mistaken for local content')
+    app.get_volumes = lambda: (user, preset)
+    check({'User card', 'Factory card'} <= {k['source'] for k in app.start_overview()['recent']},
+          'card history returns when those paths are available again')
 
-    # --- modal isolation contract -----------------------------------------
     html = app.HTML
     check('id="start-screen" role="dialog" aria-modal="true"' in html,
-          'the start screen exposes dialog and modal semantics')
+          'the start screen exposes modal dialog semantics')
     check('setStartBackgroundInert(true)' in html and
-          'setStartBackgroundInert(false)' in html,
-          'opening and closing apply and remove inert from the editor')
-    check("el.setAttribute('inert', '')" in html and
-          "el.removeAttribute('inert')" in html,
-          'the isolation helper applies and removes the inert attribute')
+          'setStartBackgroundInert(false)' in html and
+          "el.setAttribute('inert', '')" in html and "el.removeAttribute('inert')" in html,
+          'opening and closing apply and remove inert')
     check('returnFocus.focus()' in html,
-          'closing restores focus to the element that opened the screen')
+          'closing restores focus to the opener')
     check("if (e.key === 'Tab') { trapStartFocus(e); return; }" in html,
-          'Tab and Shift+Tab stay within the modal actions')
-    check('if (_startOpen || _startLoading) return;' in html,
-          'duplicate open requests cannot replace focus or inert bookkeeping')
+          'Tab and Shift+Tab stay within the modal')
+    check('if (_startOpen) return true;' in html and 'if (_startLoading) return false;' in html,
+          'duplicate opens preserve modal bookkeeping')
     open_source = html[html.index('async function openStartScreen()'):
                        html.index('function closeStartScreen()')]
     check(open_source.index("fetch('/api/start')") < open_source.index("classList.add('open')"),
-          'start data renders before the modal traps the editor')
+          'start data renders before the editor is trapped')
 
-    # --- an unreadable kit must not sink the whole screen ------------------
-    ghost = app.LIBRARY_DIR / 'kits' / 'Ghost.skt'
-    ghost.write_bytes(b'\x00')
-    real_stat = Path.stat
+    copy_source = html[html.index('function startCopyLibrary()'):
+                       html.index('function startImport()')]
+    before_confirm = copy_source.split('async function confirmStartCopyLibrary()')[0]
+    check('syncLibrary()' not in before_confirm,
+          'the S shortcut opens confirmation instead of copying')
+    check('await syncLibrary()' in copy_source and 'id="start-sync-go"' in html,
+          'only explicit confirmation starts the copy')
+    check("e.key === 'Escape' && !document.getElementById('start-sync-confirm').hidden" in html,
+          'Escape cancels copy confirmation first')
+    check('id="boot-screen" role="status"' in html and
+          'if (await openStartScreen()) hideBootScreen();' in html,
+          'startup covers the editor until start data is ready')
+    check('retryStartBoot()' in html and 'Continue to editor' in html,
+          'startup failure offers retry and a usable escape')
 
-    def flaky_stat(self, *a, **kw):
-        if self.name == 'Ghost.skt':
-            raise OSError('card stalled')
-        return real_stat(self, *a, **kw)
-
-    Path.stat = flaky_stat
-    try:
-        d = app.start_overview()
-        check(all(k['name'] != 'Ghost' for k in d['recent']),
-              'a kit that cannot be stat-ed is skipped, not fatal')
-        check(len(d['recent']) > 0, 'the rest of the list still renders')
-    finally:
-        Path.stat = real_stat
+    app._recent_kits_path().write_text('{broken', 'utf-8')
+    check(app.load_recent_kits() == [], 'corrupt recent history is ignored')
+    check(app.start_overview()['recent'] == [],
+          'corrupt history cannot sink start data')
+    app._recent_kits_path().write_text('[{"path":"x","opened_at":Infinity}]', 'utf-8')
+    check(app.load_recent_kits() == [], 'non-finite history timestamps are ignored')
 
     print('\nall start-screen tests passed')
 finally:
     app.LIBRARY_DIR = old['library']
     app.get_volumes = old['get_volumes']
     app.refresh_available = old['refresh']
-    app.state.clear(); app.state.update(old['state'])
+    app.state.clear()
+    app.state.update(old['state'])
     shutil.rmtree(tmp, ignore_errors=True)

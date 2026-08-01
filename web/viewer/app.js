@@ -3322,6 +3322,35 @@ let _startOpen = false;
 let _startLoading = false;
 let _startReturnFocus = null;
 let _startInerted = [];
+let _startSyncReturnFocus = null;
+
+function hideBootScreen() {
+  document.getElementById('boot-screen').hidden = true;
+}
+
+function setBootLoading() {
+  const panel = document.getElementById('boot-console');
+  panel.classList.remove('error');
+  document.getElementById('boot-title').textContent = 'Reading your workspace';
+  document.getElementById('boot-detail').textContent = 'Checking the local library and connected cards…';
+  document.getElementById('boot-actions').hidden = true;
+}
+
+function showBootFailure() {
+  const boot = document.getElementById('boot-screen');
+  boot.hidden = false;
+  document.getElementById('boot-console').classList.add('error');
+  document.getElementById('boot-title').textContent = 'Start screen unavailable';
+  document.getElementById('boot-detail').textContent = 'The editor is still usable. Retry the workspace check, or continue without it.';
+  document.getElementById('boot-actions').hidden = false;
+  document.querySelector('#boot-actions .btn-primary')?.focus();
+}
+
+async function retryStartBoot() {
+  setBootLoading();
+  if (await openStartScreen()) hideBootScreen();
+  else showBootFailure();
+}
 
 function setStartBackgroundInert(on) {
   if (on) {
@@ -3407,19 +3436,30 @@ function renderStartScreen(d) {
     ? d.recent.map(k => `<button class="start-kit" type="button" data-path="${escHtml(k.path)}"
         onclick="startLoad(this.dataset.path)">
         <span><b>${escHtml(k.name)}</b><span>${escHtml(k.source)}</span></span><em>${escHtml(k.age)}</em></button>`).join('')
-    : '<p class="start-note">No kits yet. Import one, copy your library, or create a kit.</p>';
+    : '<p class="start-note">No recently opened kits yet. Open one and it will stay within reach here.</p>';
+
+  const canSync = Boolean(d.user_mounted || d.preset_mounted);
+  document.getElementById('start-sync-go').disabled = !canSync;
+  document.getElementById('start-sync-state').textContent = canSync
+    ? 'A connected card is ready to copy.'
+    : 'Connect a user or factory card before starting the copy.';
+  document.getElementById('start-sync-confirm').hidden = true;
 
   document.getElementById('start-close-btn').style.display = d.loaded_kit ? '' : 'none';
 }
 
 async function openStartScreen() {
   if (window.VIEWER) return;  // viewer-mode: no server session to start from
-  if (_startOpen || _startLoading) return;
+  if (_startOpen) return true;
+  if (_startLoading) return false;
   _startLoading = true;
   const el = document.getElementById('start-screen');
   const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
   _startLoading = false;
-  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
+  if (!d || d.error) {
+    setMsg((d && d.error) || 'Could not load the start screen', true);
+    return false;
+  }
   _startReturnFocus = document.activeElement;
   renderStartScreen(d);
   setStartBackgroundInert(true);
@@ -3427,9 +3467,11 @@ async function openStartScreen() {
   _startOpen = true;
   const first = el.querySelector('.start-card');
   if (first) first.focus();
+  return true;
 }
 
 function closeStartScreen() {
+  cancelStartCopyLibrary(false);
   document.getElementById('start-screen').classList.remove('open');
   setStartBackgroundInert(false);
   _startOpen = false;
@@ -3451,7 +3493,28 @@ function startOpenKit() {
   menuToggle('kit-menu');
 }
 
-async function startCopyLibrary() { closeStartScreen(); await syncLibrary(); }
+function startCopyLibrary() {
+  const panel = document.getElementById('start-sync-confirm');
+  _startSyncReturnFocus = document.activeElement;
+  panel.hidden = false;
+  const go = document.getElementById('start-sync-go');
+  (go.disabled ? document.getElementById('start-sync-cancel') : go).focus();
+}
+
+function cancelStartCopyLibrary(restoreFocus = true) {
+  const panel = document.getElementById('start-sync-confirm');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const returnFocus = _startSyncReturnFocus;
+  _startSyncReturnFocus = null;
+  if (restoreFocus && returnFocus && returnFocus.isConnected) returnFocus.focus();
+}
+
+async function confirmStartCopyLibrary() {
+  cancelStartCopyLibrary(false);
+  closeStartScreen();
+  await syncLibrary();
+}
 
 function startImport() {
   closeStartScreen();
@@ -5254,6 +5317,9 @@ async function checkStatus() {
     if (_startOpen) {
       if (!mod) {
         if (e.key === 'Tab') { trapStartFocus(e); return; }
+        if (e.key === 'Escape' && !document.getElementById('start-sync-confirm').hidden) {
+          e.preventDefault(); cancelStartCopyLibrary(); return;
+        }
         const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
         if (shortcut) { e.preventDefault(); shortcut(); return; }
         if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {
@@ -5389,13 +5455,17 @@ async function checkStatus() {
   // Rehydrate if the server already has a kit loaded (page reload / second tab):
   // the served HTML is static, so without this the client starts blank.
   const sess = await api('/session');
-  if (sess.loaded) {
+  if (window.VIEWER) {
+    hideBootScreen();
+  } else if (sess.loaded) {
     applyKitData(sess, sess.path, {dirty: sess.dirty, undoCount: sess.undo_count,
                                    historyLabels: sess.history_labels});
     setMsg(`Restored session — ${sess.name}`);
+    hideBootScreen();
   } else {
     // Nothing open: lead with a task rather than an empty editor (issue #25).
-    openStartScreen();
+    if (await openStartScreen()) hideBootScreen();
+    else showBootFailure();
   }
 
   checkPaths();
@@ -5437,7 +5507,10 @@ async function checkStatus() {
     banner.dataset.count = data.autosaves.length;
     document.body.prepend(banner);
   })();
-})();
+})().catch(err => {
+  console.error(err);
+  showBootFailure();
+});
 
 async function recoverAutosave(autosavePath, kitPath) {
   await openKit(autosavePath);
