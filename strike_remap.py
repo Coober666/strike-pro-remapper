@@ -12,6 +12,7 @@ import errno
 import hashlib
 import io
 import json
+import math
 import os
 import platform
 import shutil
@@ -1280,6 +1281,63 @@ state = {
 }
 
 
+_RECENT_KITS_MAX = 20
+
+
+def _recent_kits_path() -> Path:
+    return LIBRARY_DIR / 'recent_kits.json'
+
+
+def _recent_kit_key(path) -> str:
+    """Stable comparison key without requiring a currently-mounted path."""
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def load_recent_kits() -> list:
+    """Return successful kit opens, newest first; corrupt sidecars are harmless."""
+    path = _recent_kits_path()
+    try:
+        data = json.loads(path.read_text('utf-8'))
+    except (OSError, ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    clean = []
+    for entry in data:
+        if not isinstance(entry, dict) or not isinstance(entry.get('path'), str):
+            continue
+        try:
+            opened_at = float(entry.get('opened_at', 0))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(opened_at) and opened_at > 0:
+            clean.append({'path': entry['path'], 'opened_at': opened_at})
+    clean.sort(key=lambda entry: -entry['opened_at'])
+    return clean[:_RECENT_KITS_MAX]
+
+
+def record_recent_kit(path, opened_at=None):
+    """Persist a kit only after it has parsed and loaded successfully."""
+    path_str = str(Path(path))
+    key = _recent_kit_key(path_str)
+    entries = [entry for entry in load_recent_kits()
+               if _recent_kit_key(entry['path']) != key]
+    entries.insert(0, {'path': path_str,
+                       'opened_at': float(opened_at if opened_at is not None else time.time())})
+    entries = entries[:_RECENT_KITS_MAX]
+    sidecar = _recent_kits_path()
+    tmp = sidecar.with_suffix('.json.tmp')
+    try:
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False), 'utf-8')
+        tmp.replace(sidecar)
+    except OSError:
+        # History is a convenience, never a reason to fail an otherwise valid
+        # kit open (read-only folders and abruptly removed cards are normal).
+        return False
+    return True
+
+
 def load_kit(path_str: str):
     p = Path(path_str)
     data = read_card_bytes(p)
@@ -1301,6 +1359,8 @@ def load_kit(path_str: str):
     state['dirty']        = False
     state['history']      = []
     state['message']      = f"Loaded {p.name}"
+    if not p.name.lower().endswith('.autosave.skt'):
+        record_recent_kit(p)
     _auto_snapshot(f'Loaded {p.name}', 'load')
 
 
@@ -3830,6 +3890,81 @@ def volume_status():
     }
 
 
+_START_SOURCE_LABEL = {
+    'library':   'On this computer',
+    'user SD':   'User card',
+    'preset SD': 'Factory card',
+}
+
+
+def _relative_age(seconds: float) -> str:
+    """Short human age for a start-screen list: 12m, 3h, Tue, Jul 19."""
+    delta = max(0.0, time.time() - seconds)
+    if delta < 3600:
+        return f'{max(1, int(delta // 60))}m'
+    if delta < 86400:
+        return f'{int(delta // 3600)}h'
+    when = datetime.datetime.fromtimestamp(seconds)
+    if delta < 7 * 86400:
+        return when.strftime('%a')
+    return f'{when.strftime("%b")} {when.day}'   # %-d/%#d differ by platform
+
+
+def start_overview(recent_limit: int = 6) -> dict:
+    """Everything the start screen needs, composed from what already exists.
+
+    Deliberately a read-only view over `volume_status()`, `find_kit_files()`,
+    `find_autosaves()` and the local library — card detection and library
+    scanning live in one place and this must not become a second copy of them.
+    """
+    status = volume_status()
+    # Autosaves are recovery artefacts, surfaced separately below. Counting them
+    # as kits inflates the total, and listing them invites opening a crash copy
+    # by mistake.
+    kits = [k for k in find_kit_files() if not k['name'].lower().endswith('.autosave.skt')]
+    # These counts describe the local library only. Card content still belongs
+    # in the recent list, but must not inflate what is "On this computer".
+    local_kits = [k for k in kits if k['source'] == 'library']
+    local_inst_root = LIBRARY_DIR / 'instruments'
+    local_instruments = scan_instruments([local_inst_root]) if local_inst_root.is_dir() else {}
+
+    # "Recent" means successfully opened in this app, not merely a kit whose
+    # file timestamp happens to be new (factory media often shares one date).
+    kits_by_path = {_recent_kit_key(kit['path']): kit for kit in kits}
+    recent = []
+    for opened in load_recent_kits():
+        kit = kits_by_path.get(_recent_kit_key(opened['path']))
+        if not kit:
+            continue  # card removed, kit renamed, or file deleted
+        recent.append({
+            'name':   kit['name'][:-4] if kit['name'].lower().endswith('.skt') else kit['name'],
+            'path':   kit['path'],
+            'source': _START_SOURCE_LABEL.get(kit['source'], kit['source']),
+            'age':    _relative_age(opened['opened_at']),
+            'opened_at': opened['opened_at'],
+        })
+
+    autosaves = find_autosaves()
+    for entry in autosaves:
+        try:
+            entry['age'] = _relative_age(Path(entry['autosave_path']).stat().st_mtime)
+        except OSError:
+            entry['age'] = ''
+
+    return {
+        'loaded_kit':  state.get('kit_display') or '',
+        'dirty':       bool(state.get('dirty')),
+        'local_kits':        len(local_kits),
+        'local_instruments': len(local_instruments),
+        'recent':      recent[:recent_limit],
+        'autosaves':   autosaves,
+        'user_mounted':   status['user_mounted'],
+        'preset_mounted': status['preset_mounted'],
+        'user_path':      status['user_path'],
+        'preset_path':    status['preset_path'],
+    }
+
+
 # ── Web server ─────────────────────────────────────────────────────────────────
 
 HTML = r"""<!DOCTYPE html>
@@ -4249,6 +4384,86 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .deploy-route-box small { display:block; margin-bottom:4px; color:#6f7771; font:.47rem/1 Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
 .deploy-route-box span { display:block; overflow:hidden; color:#aeb5ae; font:.56rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
 .deploy-route-arrow { color:#b6995d; font:700 .9rem/1 Consolas,monospace; text-align:center; }
+/* ── Start screen (issue #25) ── */
+#boot-screen { position:fixed; inset:0; z-index:600; display:grid; place-items:center; padding:24px;
+  background:radial-gradient(circle at 50% 42%,#20251d 0,#10130f 42%,#090b09 100%); }
+#boot-screen[hidden], #boot-actions[hidden] { display:none; }
+.boot-console { width:min(430px,92vw); padding:24px 26px 22px; border:1px solid #333a2f; border-radius:7px;
+  background:linear-gradient(150deg,#181d16,#0e110d); box-shadow:0 24px 80px #000a,inset 0 1px #ffffff08; text-align:center; }
+.boot-eyebrow { color:#777f70; font:.53rem/1 Consolas,monospace; letter-spacing:.22em; text-transform:uppercase; }
+.boot-knob { position:relative; display:block; width:48px; height:48px; margin:20px auto 18px; border:1px solid #655b42;
+  border-radius:50%; background:#0c0f0b; box-shadow:inset 0 0 0 7px #181d15,0 0 22px #d0aa5b20; }
+.boot-knob::before { content:""; position:absolute; left:22px; top:5px; width:2px; height:12px; border-radius:2px;
+  background:#d0aa5b; box-shadow:0 0 8px #d0aa5b; transform-origin:1px 19px; animation:boot-sweep 1.3s ease-in-out infinite alternate; }
+.boot-console strong { display:block; color:#eee8d9; font:600 1.15rem/1.1 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.boot-console > span { display:block; min-height:2.8em; margin-top:8px; color:#858d80; font:.65rem/1.45 Consolas,monospace; }
+.boot-console.error .boot-knob { border-color:#7a4c43; box-shadow:inset 0 0 0 7px #211512,0 0 22px #bd665455; }
+.boot-console.error .boot-knob::before { background:#d07968; box-shadow:0 0 8px #d07968; animation:none; transform:rotate(46deg); }
+.boot-actions { display:flex; justify-content:center; gap:8px; margin-top:17px; }
+@keyframes boot-sweep { from { transform:rotate(-52deg); } to { transform:rotate(52deg); } }
+@media (prefers-reduced-motion:reduce) { .boot-knob::before { animation:none; } }
+body.viewer-mode #boot-screen { display:none !important; }
+#start-screen { display:none; position:fixed; inset:0; z-index:500; background:#0b0d0b; overflow-y:auto; }
+#start-screen.open { display:grid; grid-template-columns:250px minmax(0,1fr) 300px; align-items:start; }
+.start-rail { padding:22px 18px; border-right:1px solid #23271f; min-height:100vh; }
+.start-aside { padding:22px 18px; border-left:1px solid #23271f; min-height:100vh; }
+.start-main { padding:26px 34px 40px; }
+.start-eyebrow { color:#6f7568; font:.56rem/1 Consolas,monospace; letter-spacing:.2em; text-transform:uppercase; margin-bottom:12px; }
+.start-title { margin:0 0 12px; color:#efeade; font:600 2.5rem/1.02 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:-.01em; text-transform:uppercase; }
+.start-title b { color:#d9b463; font-weight:600; }
+.start-lede { max-width:560px; margin:0 0 20px; color:#98a094; font-size:.82rem; line-height:1.5; }
+.start-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:12px; max-width:760px; }
+.start-card { position:relative; display:flex; gap:12px; padding:15px 16px; text-align:left; border:1px solid #2e3429; border-radius:6px;
+  background:linear-gradient(160deg,#171b16,#12150f); color:inherit; font:inherit; cursor:pointer; }
+.start-card:hover, .start-card:focus-visible { border-color:#6b5c38; background:linear-gradient(160deg,#1d2119,#151810); outline:none; }
+.start-card:focus-visible { box-shadow:0 0 0 2px #d0aa5b66; }
+.start-card i.knob { flex:0 0 auto; width:32px; height:32px; border:1px solid #5f5642; border-radius:50%; background:#0f120e; box-shadow:inset 0 0 0 4px #191d16; }
+.start-card small { display:block; color:#6f7568; font:.53rem/1 Consolas,monospace; letter-spacing:.14em; text-transform:uppercase; margin-bottom:4px; }
+.start-card strong { display:block; color:#e7e2d4; font:600 .95rem/1.1 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-card span.d { display:block; margin-top:4px; color:#8d9488; font-size:.74rem; line-height:1.4; }
+.start-card kbd { position:absolute; top:9px; right:11px; color:#5c6357; font:.56rem/1 Consolas,monospace; }
+.start-confirm { max-width:760px; margin-top:13px; padding:15px 16px; border:1px solid #66532c; border-radius:6px;
+  background:linear-gradient(145deg,#211c10,#15140e); }
+.start-confirm[hidden] { display:none; }
+.start-confirm strong { display:block; color:#e4d3a5; font:600 .9rem/1.15 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-confirm p { margin:7px 0 10px; color:#a79c81; font-size:.73rem; line-height:1.5; }
+.start-confirm-status { display:block; margin-bottom:12px; color:#898e80; font:.55rem/1.4 Consolas,monospace; }
+.start-confirm-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.start-recover { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; padding:13px 15px;
+  border:1px solid #6b5423; border-radius:6px; background:linear-gradient(160deg,#221a09,#171204); }
+.start-recover .g { flex:1; min-width:220px; }
+.start-recover strong { display:block; color:#e8d5a4; font-size:.8rem; }
+.start-recover span { display:block; margin-top:2px; color:#9a8c68; font-size:.7rem; }
+.start-sec { margin:0 0 9px; color:#6f7568; font:.56rem/1 Consolas,monospace; letter-spacing:.2em; text-transform:uppercase; }
+.start-path { display:grid; gap:11px; margin-bottom:20px; }
+.start-node { display:grid; grid-template-columns:12px minmax(0,1fr); gap:9px; }
+.start-node i { width:9px; height:9px; margin-top:4px; border-radius:50%; border:1px solid #4d5347; background:#14170f; }
+.start-node.on i { border-color:#7f9a6a; background:#8fc07a; box-shadow:0 0 7px #8fc07a55; }
+.start-node.warn i { border-color:#7a6634; background:#d0aa5b; box-shadow:0 0 7px #d0aa5b55; }
+.start-node b { display:block; color:#c9cfc4; font:600 .64rem/1.2 Consolas,monospace; letter-spacing:.1em; text-transform:uppercase; }
+.start-node span { display:block; margin-top:2px; color:#7c8378; font-size:.68rem; line-height:1.35; }
+.start-counts { display:flex; gap:9px; margin-bottom:12px; }
+.start-count { flex:1; padding:9px 10px; border:1px solid #2b3026; border-radius:5px; background:#111410; }
+.start-count b { display:block; color:#d7bc7e; font:650 1.05rem/1 Bahnschrift,"Arial Narrow",sans-serif; }
+.start-count span { display:block; margin-top:2px; color:#6f7568; font:.52rem/1 Consolas,monospace; letter-spacing:.13em; text-transform:uppercase; }
+.start-note { color:#7c8378; font-size:.7rem; line-height:1.5; }
+.start-recent { display:grid; gap:1px; margin-bottom:18px; }
+.start-kit { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; width:100%; padding:8px 9px; text-align:left;
+  border:1px solid transparent; border-radius:5px; background:none; color:inherit; font:inherit; cursor:pointer; }
+.start-kit:hover, .start-kit:focus-visible { border-color:#4d5a3f; background:#141810; outline:none; }
+.start-kit b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#dcd7c8; font:600 .72rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-kit span { display:block; margin-top:2px; color:#6f7568; font:.52rem/1 Consolas,monospace; letter-spacing:.1em; text-transform:uppercase; }
+.start-kit em { color:#6f7568; font:.56rem/1 Consolas,monospace; font-style:normal; }
+.start-callout { padding:11px 12px; border:1px solid #2e3429; border-radius:5px; background:#101310; }
+.start-callout b { display:block; margin-bottom:4px; color:#9aa38f; font:.53rem/1 Consolas,monospace; letter-spacing:.14em; text-transform:uppercase; }
+.start-callout span { color:#7c8378; font-size:.7rem; line-height:1.45; }
+.start-dismiss { margin-top:22px; }
+@media (max-width: 1080px) {
+  #start-screen.open { grid-template-columns:minmax(0,1fr); grid-auto-rows:max-content; align-content:start; }
+  .start-rail, .start-aside { min-height:0; border:0; border-bottom:1px solid #23271f; }
+  .start-main { padding:20px 18px 30px; order:-1; }
+  .start-title { font-size:1.9rem; }
+}
 .deploy-issues { display:grid; gap:5px; }
 .deploy-issue { display:grid; grid-template-columns:8px minmax(0,1fr); gap:8px; padding:7px 9px; border:1px solid #3b423c; background:#151916; }
 .deploy-issue i { width:7px; height:7px; margin-top:3px; border-radius:50%; background:#788078; }
@@ -4891,8 +5106,22 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
 </style>
 </head>
 <body data-workspace="pad">
+<div id="boot-screen" role="status" aria-live="polite">
+  <div id="boot-console" class="boot-console">
+    <div class="boot-eyebrow">Self test / signal path</div>
+    <i class="boot-knob" aria-hidden="true"></i>
+    <strong id="boot-title">Reading your workspace</strong>
+    <span id="boot-detail">Checking the local library and connected cards&hellip;</span>
+    <div id="boot-actions" class="boot-actions" hidden>
+      <button class="btn-primary" type="button" onclick="retryStartBoot()">Retry</button>
+      <button class="btn-secondary" type="button" onclick="hideBootScreen()">Continue to editor</button>
+    </div>
+  </div>
+</div>
 <header class="app-topbar">
-  <div class="brand-lockup">
+  <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
+       style="cursor:pointer;" onclick="openStartScreen()"
+       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStartScreen();}">
     <span class="brand-hardware" aria-hidden="true"></span>
     <span><strong>Strike Remapper</strong><small>Kit workstation</small></span>
   </div>
@@ -8570,6 +8799,226 @@ async function checkPaths() {
   if (['repair','tools'].includes(document.body.dataset.workspace)) renderAdvancedWorkspace(document.body.dataset.workspace);
 }
 
+// ── Start screen (issue #25) ──────────────────────────────────────────────────
+// Shown when no kit is open, so the first thing on screen is a task rather than
+// an empty editor. Every action here delegates to the existing flow — this is a
+// view over the app, not a second way to do things.
+let _startOpen = false;
+let _startLoading = false;
+let _startReturnFocus = null;
+let _startInerted = [];
+let _startSyncReturnFocus = null;
+
+function hideBootScreen() {
+  document.getElementById('boot-screen').hidden = true;
+}
+
+function setBootLoading() {
+  const panel = document.getElementById('boot-console');
+  panel.classList.remove('error');
+  document.getElementById('boot-title').textContent = 'Reading your workspace';
+  document.getElementById('boot-detail').textContent = 'Checking the local library and connected cards…';
+  document.getElementById('boot-actions').hidden = true;
+}
+
+function showBootFailure() {
+  const boot = document.getElementById('boot-screen');
+  boot.hidden = false;
+  document.getElementById('boot-console').classList.add('error');
+  document.getElementById('boot-title').textContent = 'Start screen unavailable';
+  document.getElementById('boot-detail').textContent = 'The editor is still usable. Retry the workspace check, or continue without it.';
+  document.getElementById('boot-actions').hidden = false;
+  document.querySelector('#boot-actions .btn-primary')?.focus();
+}
+
+async function retryStartBoot() {
+  setBootLoading();
+  if (await openStartScreen()) hideBootScreen();
+  else showBootFailure();
+}
+
+function setStartBackgroundInert(on) {
+  if (on) {
+    _startInerted = [...document.body.children].filter(el =>
+      el.id !== 'start-screen' && el.tagName !== 'SCRIPT' && !el.hasAttribute('inert'));
+    _startInerted.forEach(el => { el.setAttribute('inert', ''); });
+  } else {
+    _startInerted.forEach(el => { el.removeAttribute('inert'); });
+    _startInerted = [];
+  }
+}
+
+function trapStartFocus(e) {
+  const el = document.getElementById('start-screen');
+  const focusable = [...el.querySelectorAll('button:not([disabled])')]
+    .filter(node => node.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
+
+function startNode(on, label, detail, warn) {
+  const cls = on ? 'on' : (warn ? 'warn' : '');
+  return `<div class="start-node ${cls}"><i></i><div><b>${escHtml(label)}</b>
+    <span>${escHtml(detail)}</span></div></div>`;
+}
+
+function renderStartScreen(d) {
+  const kitCount = d.local_kits || 0, instCount = d.local_instruments || 0;
+  document.getElementById('start-path').innerHTML =
+      startNode(instCount > 0, 'Library',
+                instCount ? `${instCount.toLocaleString()} instruments indexed locally`
+                          : 'No local library yet — copy one from the card')
+    + startNode(d.user_mounted, 'User card',
+                d.user_mounted ? 'Connected — ready to deploy'
+                               : 'Not connected — local editing still works')
+    + startNode(d.preset_mounted, 'Factory card',
+                d.preset_mounted ? 'Connected'
+                                 : 'Not connected — open the official editor to expose it');
+
+  document.getElementById('start-counts').innerHTML =
+      `<div class="start-count"><b>${kitCount.toLocaleString()}</b><span>Kits</span></div>`
+    + `<div class="start-count"><b>${instCount.toLocaleString()}</b><span>Instruments</span></div>`;
+
+  document.getElementById('start-note').textContent = d.autosaves.length
+    ? 'Recovery files stay untouched until you explicitly recover or dismiss them.'
+    : 'You can edit, audition, and organise kits now. Connect the module only when you are ready to deploy.';
+
+  // Recovery outranks everything else on this screen: unsaved work is the one
+  // thing that gets worse if the user starts something else first.
+  const rec = document.getElementById('start-recover');
+  if (d.autosaves.length) {
+    const a = d.autosaves[0];
+    const more = d.autosaves.length > 1
+      ? `<span>${d.autosaves.length - 1} more recoverable kit(s) — see the banner in the editor.</span>` : '';
+    // "12m"/"3h" are durations; "Tue"/"Jul 19" are dates. Only one takes "ago".
+    const when = /^\d+[mh]$/.test(a.age || '') ? `${a.age} ago` : (a.age || 'recently');
+    rec.innerHTML = `<div class="start-recover"><i class="knob" style="width:14px;height:14px;border-radius:50%;background:#d0aa5b;border:0;box-shadow:0 0 8px #d0aa5b66;"></i>
+      <div class="g"><strong>Unsaved work found: ${escHtml(a.name)}</strong>
+      <span>Last captured ${escHtml(when)} on this computer.</span>${more}</div>
+      <button class="btn-primary" type="button"
+        data-autosave="${escHtml(a.autosave_path)}" data-kit="${escHtml(a.kit_path)}"
+        onclick="startRecover(this.dataset.autosave, this.dataset.kit)">Recover kit</button></div>`;
+  } else {
+    rec.innerHTML = '';
+  }
+
+  document.getElementById('start-lede').textContent = d.autosaves.length
+    ? 'There is unsaved work from your last session. Recover it first, or choose another action without deleting the recovery copy.'
+    : 'Open something you already have, bring in content, or start a new kit. Nothing is written to the module until you choose Deploy to Module.';
+  document.getElementById('start-eyebrow').textContent = d.autosaves.length
+    ? 'Start / recovery available'
+    : (instCount ? 'Start / local workspace ready' : 'Start / no local library yet');
+
+  // Paths travel in data attributes, never inside a JS string literal: a Windows
+  // path like ...\Temp\claude loses \T and \c to escape-sequence parsing.
+  const recent = document.getElementById('start-recent');
+  recent.innerHTML = d.recent.length
+    ? d.recent.map(k => `<button class="start-kit" type="button" data-path="${escHtml(k.path)}"
+        onclick="startLoad(this.dataset.path)">
+        <span><b>${escHtml(k.name)}</b><span>${escHtml(k.source)}</span></span><em>${escHtml(k.age)}</em></button>`).join('')
+    : '<p class="start-note">No recently opened kits yet. Open one and it will stay within reach here.</p>';
+
+  const canSync = Boolean(d.user_mounted || d.preset_mounted);
+  document.getElementById('start-sync-go').disabled = !canSync;
+  document.getElementById('start-sync-state').textContent = canSync
+    ? 'A connected card is ready to copy.'
+    : 'Connect a user or factory card before starting the copy.';
+  document.getElementById('start-sync-confirm').hidden = true;
+
+  document.getElementById('start-close-btn').style.display = d.loaded_kit ? '' : 'none';
+}
+
+async function openStartScreen() {
+  if (_startOpen) return true;
+  if (_startLoading) return false;
+  _startLoading = true;
+  const el = document.getElementById('start-screen');
+  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
+  _startLoading = false;
+  if (!d || d.error) {
+    setMsg((d && d.error) || 'Could not load the start screen', true);
+    return false;
+  }
+  _startReturnFocus = document.activeElement;
+  renderStartScreen(d);
+  setStartBackgroundInert(true);
+  el.classList.add('open');
+  _startOpen = true;
+  const first = el.querySelector('.start-card');
+  if (first) first.focus();
+  return true;
+}
+
+function closeStartScreen() {
+  cancelStartCopyLibrary(false);
+  document.getElementById('start-screen').classList.remove('open');
+  setStartBackgroundInert(false);
+  _startOpen = false;
+  const returnFocus = _startReturnFocus;
+  _startReturnFocus = null;
+  if (returnFocus && returnFocus.isConnected && typeof returnFocus.focus === 'function') {
+    returnFocus.focus();
+  }
+}
+
+async function startLoad(path) {
+  closeStartScreen();
+  await openKit(path);
+}
+
+function startOpenKit() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+}
+
+function startCopyLibrary() {
+  const panel = document.getElementById('start-sync-confirm');
+  _startSyncReturnFocus = document.activeElement;
+  panel.hidden = false;
+  const go = document.getElementById('start-sync-go');
+  (go.disabled ? document.getElementById('start-sync-cancel') : go).focus();
+}
+
+function cancelStartCopyLibrary(restoreFocus = true) {
+  const panel = document.getElementById('start-sync-confirm');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const returnFocus = _startSyncReturnFocus;
+  _startSyncReturnFocus = null;
+  if (restoreFocus && returnFocus && returnFocus.isConnected) returnFocus.focus();
+}
+
+async function confirmStartCopyLibrary() {
+  cancelStartCopyLibrary(false);
+  closeStartScreen();
+  await syncLibrary();
+}
+
+function startImport() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+  setMsg('Pick an import from the Kits menu — bundle, editor .zip, or assignment CSV');
+}
+
+function startNewKit() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+  showNewKitForm();
+}
+
+async function startRecover(autosavePath, kitPath) {
+  closeStartScreen();
+  await recoverAutosave(autosavePath, kitPath);
+}
+
 // ── Sample relink wizard ──────────────────────────────────────────────────────
 // A filename match is a fact; a sound or family match is a guess. The basis is
 // shown on every row and only filename matches are pre-selected, so a stack of
@@ -10346,6 +10795,24 @@ async function checkStatus() {
 
     const mod = e.ctrlKey || e.metaKey;
 
+    // Start screen owns the keyboard while it is up (issue #25). Nothing behind
+    // it may act on a keystroke — undo and save included, since the editor the
+    // user would be undoing is not the thing they are looking at.
+    if (_startOpen) {
+      if (!mod) {
+        if (e.key === 'Tab') { trapStartFocus(e); return; }
+        if (e.key === 'Escape' && !document.getElementById('start-sync-confirm').hidden) {
+          e.preventDefault(); cancelStartCopyLibrary(); return;
+        }
+        const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
+        if (shortcut) { e.preventDefault(); shortcut(); return; }
+        if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {
+          e.preventDefault(); closeStartScreen(); return;
+        }
+      }
+      return;
+    }
+
     if (mod && !e.shiftKey && e.key === 'z') {
       e.preventDefault();
       if (undoCount > 0) undoLast();
@@ -10472,10 +10939,17 @@ async function checkStatus() {
   // Rehydrate if the server already has a kit loaded (page reload / second tab):
   // the served HTML is static, so without this the client starts blank.
   const sess = await api('/session');
-  if (sess.loaded) {
+  if (window.VIEWER) {
+    hideBootScreen();
+  } else if (sess.loaded) {
     applyKitData(sess, sess.path, {dirty: sess.dirty, undoCount: sess.undo_count,
                                    historyLabels: sess.history_labels});
     setMsg(`Restored session — ${sess.name}`);
+    hideBootScreen();
+  } else {
+    // Nothing open: lead with a task rather than an empty editor (issue #25).
+    if (await openStartScreen()) hideBootScreen();
+    else showBootFailure();
   }
 
   checkPaths();
@@ -10494,10 +10968,16 @@ async function checkStatus() {
     if (!data.autosaves?.length) return;
     const banner = document.createElement('div');
     banner.id = 'autosave-banner';
+    // Paths go in data attributes, not JS string literals: a Windows path is
+    // full of escape sequences (\U vanishes, \b is a backspace), so
+    // C:\Users\bocaj\... reached these handlers as C:Usersocaj... and recovery
+    // failed on every Windows install.
     const rows = data.autosaves.map(a =>
       `<span class="as-item"><strong>${escHtml(a.name)}</strong>`
-      + `<a href="#" onclick="recoverAutosave('${escHtml(a.autosave_path)}','${escHtml(a.kit_path)}');return false;">Recover</a>`
-      + `<a href="#" onclick="dismissAutosave('${escHtml(a.autosave_path)}',this);return false;">&#x2715;</a></span>`
+      + `<a href="#" data-autosave="${escHtml(a.autosave_path)}" data-kit="${escHtml(a.kit_path)}"`
+      + ` onclick="recoverAutosave(this.dataset.autosave,this.dataset.kit);return false;">Recover</a>`
+      + `<a href="#" data-autosave="${escHtml(a.autosave_path)}"`
+      + ` onclick="dismissAutosave(this.dataset.autosave,this);return false;">&#x2715;</a></span>`
     ).join('');
     if (data.autosaves.length === 1) {
       banner.innerHTML = `<span>&#9888;&nbsp;Unsaved changes found:</span>${rows}`;
@@ -10511,7 +10991,10 @@ async function checkStatus() {
     banner.dataset.count = data.autosaves.length;
     document.body.prepend(banner);
   })();
-})();
+})().catch(err => {
+  console.error(err);
+  showBootFailure();
+});
 
 async function recoverAutosave(autosavePath, kitPath) {
   await openKit(autosavePath);
@@ -10647,6 +11130,58 @@ async function dismissAllAutosaves() {
 </div>
 
 <!-- Sample relink modal -->
+<!-- Start screen: what the app shows before a kit is open (issue #25) -->
+<div id="start-screen" role="dialog" aria-modal="true" aria-label="Start">
+  <div class="start-rail">
+    <div class="start-sec">Signal path</div>
+    <div id="start-path" class="start-path"></div>
+    <div class="start-sec">On this computer</div>
+    <div id="start-counts" class="start-counts"></div>
+    <p id="start-note" class="start-note"></p>
+  </div>
+  <div class="start-main">
+    <div id="start-eyebrow" class="start-eyebrow">Start</div>
+    <h1 class="start-title">What are you <b>working on?</b></h1>
+    <p id="start-lede" class="start-lede"></p>
+    <div id="start-recover"></div>
+    <div class="start-actions">
+      <button class="start-card" type="button" onclick="startOpenKit()">
+        <i class="knob"></i><span><small>From this computer or card</small><strong>Open a kit</strong>
+        <span class="d">Continue editing a local kit, a user-card kit, or a factory preset copy.</span></span><kbd>O</kbd></button>
+      <button class="start-card" type="button" onclick="startCopyLibrary()">
+        <i class="knob"></i><span><small>Module or SD card</small><strong>Copy your library</strong>
+        <span class="d">Connect the Strike when you want a complete local copy for offline work.</span></span><kbd>S</kbd></button>
+      <button class="start-card" type="button" onclick="startImport()">
+        <i class="knob"></i><span><small>Bundles, editor zips, WAVs</small><strong>Import content</strong>
+        <span class="d">Bring in a shared kit, commercial pack, or your own samples.</span></span><kbd>I</kbd></button>
+      <button class="start-card" type="button" onclick="startNewKit()">
+        <i class="knob"></i><span><small>Blank or template</small><strong>Create a new kit</strong>
+        <span class="d">Start clean, then assign instruments and shape the kit around your setup.</span></span><kbd>N</kbd></button>
+    </div>
+    <div id="start-sync-confirm" class="start-confirm" hidden role="group" aria-labelledby="start-sync-title">
+      <strong id="start-sync-title">Copy the connected library?</strong>
+      <p>This copies kits, instruments, and samples to this computer for offline work. Large libraries can take several minutes and use gigabytes of disk space. The module and cards are never changed.</p>
+      <span id="start-sync-state" class="start-confirm-status"></span>
+      <div class="start-confirm-actions">
+        <button id="start-sync-go" class="btn-primary" type="button" onclick="confirmStartCopyLibrary()">Start local copy</button>
+        <button id="start-sync-cancel" class="btn-secondary" type="button" onclick="cancelStartCopyLibrary()">Not now</button>
+      </div>
+    </div>
+    <div class="start-dismiss">
+      <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>
+    </div>
+  </div>
+  <div class="start-aside">
+    <div class="start-sec">Recent kits</div>
+    <div id="start-recent" class="start-recent"></div>
+    <div class="start-callout">
+      <b>No module required</b>
+      <span>You can edit and organise everything locally. Connect the Strike only to copy its
+      library, or when you are ready to Deploy to Module.</span>
+    </div>
+  </div>
+</div>
+
 <div id="relink-modal" onclick="if(event.target===this)closeRelinkModal()">
   <div class="sin-box">
     <h3>&#x1F527; Fix broken instrument paths</h3>
@@ -10827,6 +11362,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/status':
             self.send_json(volume_status())
+            return
+
+        if path == '/api/start':
+            try:
+                self.send_json(start_overview())
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)})
             return
 
         if path == '/api/deploy_preflight':

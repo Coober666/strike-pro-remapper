@@ -11,8 +11,22 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body data-workspace="pad">
+<div id="boot-screen" role="status" aria-live="polite">
+  <div id="boot-console" class="boot-console">
+    <div class="boot-eyebrow">Self test / signal path</div>
+    <i class="boot-knob" aria-hidden="true"></i>
+    <strong id="boot-title">Reading your workspace</strong>
+    <span id="boot-detail">Checking the local library and connected cards&hellip;</span>
+    <div id="boot-actions" class="boot-actions" hidden>
+      <button class="btn-primary" type="button" onclick="retryStartBoot()">Retry</button>
+      <button class="btn-secondary" type="button" onclick="hideBootScreen()">Continue to editor</button>
+    </div>
+  </div>
+</div>
 <header class="app-topbar">
-  <div class="brand-lockup">
+  <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
+       style="cursor:pointer;" onclick="openStartScreen()"
+       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openStartScreen();}">
     <span class="brand-hardware" aria-hidden="true"></span>
     <span><strong>Strike Remapper</strong><small>Kit workstation</small></span>
   </div>
@@ -484,6 +498,58 @@
 </div>
 
 <!-- Sample relink modal -->
+<!-- Start screen: what the app shows before a kit is open (issue #25) -->
+<div id="start-screen" role="dialog" aria-modal="true" aria-label="Start">
+  <div class="start-rail">
+    <div class="start-sec">Signal path</div>
+    <div id="start-path" class="start-path"></div>
+    <div class="start-sec">On this computer</div>
+    <div id="start-counts" class="start-counts"></div>
+    <p id="start-note" class="start-note"></p>
+  </div>
+  <div class="start-main">
+    <div id="start-eyebrow" class="start-eyebrow">Start</div>
+    <h1 class="start-title">What are you <b>working on?</b></h1>
+    <p id="start-lede" class="start-lede"></p>
+    <div id="start-recover"></div>
+    <div class="start-actions">
+      <button class="start-card" type="button" onclick="startOpenKit()">
+        <i class="knob"></i><span><small>From this computer or card</small><strong>Open a kit</strong>
+        <span class="d">Continue editing a local kit, a user-card kit, or a factory preset copy.</span></span><kbd>O</kbd></button>
+      <button class="start-card" type="button" onclick="startCopyLibrary()">
+        <i class="knob"></i><span><small>Module or SD card</small><strong>Copy your library</strong>
+        <span class="d">Connect the Strike when you want a complete local copy for offline work.</span></span><kbd>S</kbd></button>
+      <button class="start-card" type="button" onclick="startImport()">
+        <i class="knob"></i><span><small>Bundles, editor zips, WAVs</small><strong>Import content</strong>
+        <span class="d">Bring in a shared kit, commercial pack, or your own samples.</span></span><kbd>I</kbd></button>
+      <button class="start-card" type="button" onclick="startNewKit()">
+        <i class="knob"></i><span><small>Blank or template</small><strong>Create a new kit</strong>
+        <span class="d">Start clean, then assign instruments and shape the kit around your setup.</span></span><kbd>N</kbd></button>
+    </div>
+    <div id="start-sync-confirm" class="start-confirm" hidden role="group" aria-labelledby="start-sync-title">
+      <strong id="start-sync-title">Copy the connected library?</strong>
+      <p>This copies kits, instruments, and samples to this computer for offline work. Large libraries can take several minutes and use gigabytes of disk space. The module and cards are never changed.</p>
+      <span id="start-sync-state" class="start-confirm-status"></span>
+      <div class="start-confirm-actions">
+        <button id="start-sync-go" class="btn-primary" type="button" onclick="confirmStartCopyLibrary()">Start local copy</button>
+        <button id="start-sync-cancel" class="btn-secondary" type="button" onclick="cancelStartCopyLibrary()">Not now</button>
+      </div>
+    </div>
+    <div class="start-dismiss">
+      <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>
+    </div>
+  </div>
+  <div class="start-aside">
+    <div class="start-sec">Recent kits</div>
+    <div id="start-recent" class="start-recent"></div>
+    <div class="start-callout">
+      <b>No module required</b>
+      <span>You can edit and organise everything locally. Connect the Strike only to copy its
+      library, or when you are ready to Deploy to Module.</span>
+    </div>
+  </div>
+</div>
+
 <div id="relink-modal" onclick="if(event.target===this)closeRelinkModal()">
   <div class="sin-box">
     <h3>&#x1F527; Fix broken instrument paths</h3>

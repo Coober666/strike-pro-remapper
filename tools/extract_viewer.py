@@ -45,6 +45,7 @@ VIEWER_GUARDS = {
     "previewInstrument": "  if (window.VIEWER) return;  // viewer-mode: no audio in v1 (/api/wav 404s)",
     "setParam": "  if (window.VIEWER) return;  // viewer-mode: pad detail is read-only display",
     "assignInstrument": "  if (window.VIEWER) return;  // viewer-mode: read-only, no pad assignment",
+    "openStartScreen": "  if (window.VIEWER) return;  // viewer-mode: no server session to start from",
 }
 
 HEAD_COMMENT = """<!-- Extracted from strike_remap.py's HTML string by tools/extract_viewer.py —
