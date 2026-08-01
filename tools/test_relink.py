@@ -8,6 +8,7 @@ guess is always labelled as one.
 """
 
 from pathlib import Path
+import html
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -23,6 +24,23 @@ def check(condition, label):
 def feats(centroid, rolloff, zcr, brightness, decay):
     return {'centroid': centroid, 'rolloff': rolloff, 'zcr': zcr,
             'brightness': brightness, 'decay': decay}
+
+
+def test_preview_markup_contract():
+    """Candidate paths stay HTML data, never executable JavaScript source."""
+    source = app.HTML
+    check('data-rel="${escHtml(cand.rel)}"' in source,
+          'relink preview stores the candidate in an escaped data attribute')
+    check('previewInstrument(this.dataset.rel)' in source,
+          'relink preview reads the browser-decoded candidate from dataset')
+    check("previewInstrument('${escHtml(cand.rel)}')" not in source,
+          'legacy JavaScript string interpolation cannot return')
+
+    for rel in ("Snares/John's Snare.sin", 'Snares/John "Quoted" & Co.sin',
+                'Percussion/Unicode 雪\\Side.sin'):
+        encoded = html.escape(rel, quote=True)
+        check(html.unescape(encoded) == rel,
+              f'quoted relink path survives attribute escaping: {rel!a}')
 
 
 # Two families that are far apart in feature space: kicks are dark and long,
@@ -61,6 +79,8 @@ old = {
 }
 
 try:
+    test_preview_markup_contract()
+
     # No catalog, so grouping falls through to the folder names above.
     app._factory_catalog_data = {}
     app._factory_catalog_keys = set()
