@@ -3314,6 +3314,126 @@ async function checkPaths() {
   if (['repair','tools'].includes(document.body.dataset.workspace)) renderAdvancedWorkspace(document.body.dataset.workspace);
 }
 
+// ── Start screen (issue #25) ──────────────────────────────────────────────────
+// Shown when no kit is open, so the first thing on screen is a task rather than
+// an empty editor. Every action here delegates to the existing flow — this is a
+// view over the app, not a second way to do things.
+let _startOpen = false;
+
+function startNode(on, label, detail, warn) {
+  const cls = on ? 'on' : (warn ? 'warn' : '');
+  return `<div class="start-node ${cls}"><i></i><div><b>${escHtml(label)}</b>
+    <span>${escHtml(detail)}</span></div></div>`;
+}
+
+function renderStartScreen(d) {
+  const kitCount = d.kits || 0, instCount = d.instruments || 0;
+  document.getElementById('start-path').innerHTML =
+      startNode(instCount > 0, 'Library',
+                instCount ? `${instCount.toLocaleString()} instruments indexed locally`
+                          : 'No local library yet — copy one from the card')
+    + startNode(d.user_mounted, 'User card',
+                d.user_mounted ? 'Connected — ready to deploy'
+                               : 'Not connected — local editing still works')
+    + startNode(d.preset_mounted, 'Factory card',
+                d.preset_mounted ? 'Connected'
+                                 : 'Not connected — open the official editor to expose it');
+
+  document.getElementById('start-counts').innerHTML =
+      `<div class="start-count"><b>${kitCount.toLocaleString()}</b><span>Kits</span></div>`
+    + `<div class="start-count"><b>${instCount.toLocaleString()}</b><span>Instruments</span></div>`;
+
+  document.getElementById('start-note').textContent = d.autosaves.length
+    ? 'Recovery files stay untouched until you explicitly recover or dismiss them.'
+    : 'You can edit, audition, and organise kits now. Connect the module only when you are ready to deploy.';
+
+  // Recovery outranks everything else on this screen: unsaved work is the one
+  // thing that gets worse if the user starts something else first.
+  const rec = document.getElementById('start-recover');
+  if (d.autosaves.length) {
+    const a = d.autosaves[0];
+    const more = d.autosaves.length > 1
+      ? `<span>${d.autosaves.length - 1} more recoverable kit(s) — see the banner in the editor.</span>` : '';
+    // "12m"/"3h" are durations; "Tue"/"Jul 19" are dates. Only one takes "ago".
+    const when = /^\d+[mh]$/.test(a.age || '') ? `${a.age} ago` : (a.age || 'recently');
+    rec.innerHTML = `<div class="start-recover"><i class="knob" style="width:14px;height:14px;border-radius:50%;background:#d0aa5b;border:0;box-shadow:0 0 8px #d0aa5b66;"></i>
+      <div class="g"><strong>Unsaved work found: ${escHtml(a.name)}</strong>
+      <span>Last captured ${escHtml(when)} on this computer.</span>${more}</div>
+      <button class="btn-primary" type="button"
+        data-autosave="${escHtml(a.autosave_path)}" data-kit="${escHtml(a.kit_path)}"
+        onclick="startRecover(this.dataset.autosave, this.dataset.kit)">Recover kit</button></div>`;
+  } else {
+    rec.innerHTML = '';
+  }
+
+  document.getElementById('start-lede').textContent = d.autosaves.length
+    ? 'There is unsaved work from your last session. Recover it first, or choose another action without deleting the recovery copy.'
+    : 'Open something you already have, bring in content, or start a new kit. Nothing is written to the module until you choose Deploy to Module.';
+  document.getElementById('start-eyebrow').textContent = d.autosaves.length
+    ? 'Start / recovery available'
+    : (instCount ? 'Start / local workspace ready' : 'Start / no local library yet');
+
+  // Paths travel in data attributes, never inside a JS string literal: a Windows
+  // path like ...\Temp\claude loses \T and \c to escape-sequence parsing.
+  const recent = document.getElementById('start-recent');
+  recent.innerHTML = d.recent.length
+    ? d.recent.map(k => `<button class="start-kit" type="button" data-path="${escHtml(k.path)}"
+        onclick="startLoad(this.dataset.path)">
+        <span><b>${escHtml(k.name)}</b><span>${escHtml(k.source)}</span></span><em>${escHtml(k.age)}</em></button>`).join('')
+    : '<p class="start-note">No kits yet. Import one, copy your library, or create a kit.</p>';
+
+  document.getElementById('start-close-btn').style.display = d.loaded_kit ? '' : 'none';
+}
+
+async function openStartScreen() {
+  if (window.VIEWER) return;  // viewer-mode: no server session to start from
+  const el = document.getElementById('start-screen');
+  el.classList.add('open');
+  _startOpen = true;
+  const d = await fetch('/api/start').then(r => r.json()).catch(() => null);
+  if (!d || d.error) { setMsg((d && d.error) || 'Could not load the start screen', true); return; }
+  renderStartScreen(d);
+  const first = el.querySelector('.start-card');
+  if (first) first.focus();
+}
+
+function closeStartScreen() {
+  document.getElementById('start-screen').classList.remove('open');
+  _startOpen = false;
+}
+
+async function startLoad(path) {
+  closeStartScreen();
+  await openKit(path);
+}
+
+function startOpenKit() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+}
+
+async function startCopyLibrary() { closeStartScreen(); await syncLibrary(); }
+
+function startImport() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+  setMsg('Pick an import from the Kits menu — bundle, editor .zip, or assignment CSV');
+}
+
+function startNewKit() {
+  closeStartScreen();
+  setWorkspaceMode('kit');
+  menuToggle('kit-menu');
+  showNewKitForm();
+}
+
+async function startRecover(autosavePath, kitPath) {
+  closeStartScreen();
+  await recoverAutosave(autosavePath, kitPath);
+}
+
 // ── Sample relink wizard ──────────────────────────────────────────────────────
 // A filename match is a fact; a sound or family match is a guess. The basis is
 // shown on every row and only filename matches are pre-selected, so a stack of
@@ -5090,6 +5210,20 @@ async function checkStatus() {
 
     const mod = e.ctrlKey || e.metaKey;
 
+    // Start screen owns the keyboard while it is up (issue #25). Nothing behind
+    // it may act on a keystroke — undo and save included, since the editor the
+    // user would be undoing is not the thing they are looking at.
+    if (_startOpen) {
+      if (!mod) {
+        const shortcut = {o: startOpenKit, s: startCopyLibrary, i: startImport, n: startNewKit}[e.key.toLowerCase()];
+        if (shortcut) { e.preventDefault(); shortcut(); return; }
+        if (e.key === 'Escape' && document.getElementById('start-close-btn').style.display !== 'none') {
+          e.preventDefault(); closeStartScreen(); return;
+        }
+      }
+      return;
+    }
+
     if (mod && !e.shiftKey && e.key === 'z') {
       e.preventDefault();
       if (undoCount > 0) undoLast();
@@ -5220,6 +5354,9 @@ async function checkStatus() {
     applyKitData(sess, sess.path, {dirty: sess.dirty, undoCount: sess.undo_count,
                                    historyLabels: sess.history_labels});
     setMsg(`Restored session — ${sess.name}`);
+  } else {
+    // Nothing open: lead with a task rather than an empty editor (issue #25).
+    openStartScreen();
   }
 
   checkPaths();
@@ -5238,10 +5375,16 @@ async function checkStatus() {
     if (!data.autosaves?.length) return;
     const banner = document.createElement('div');
     banner.id = 'autosave-banner';
+    // Paths go in data attributes, not JS string literals: a Windows path is
+    // full of escape sequences (\U vanishes, \b is a backspace), so
+    // C:\Users\bocaj\... reached these handlers as C:Usersocaj... and recovery
+    // failed on every Windows install.
     const rows = data.autosaves.map(a =>
       `<span class="as-item"><strong>${escHtml(a.name)}</strong>`
-      + `<a href="#" onclick="recoverAutosave('${escHtml(a.autosave_path)}','${escHtml(a.kit_path)}');return false;">Recover</a>`
-      + `<a href="#" onclick="dismissAutosave('${escHtml(a.autosave_path)}',this);return false;">&#x2715;</a></span>`
+      + `<a href="#" data-autosave="${escHtml(a.autosave_path)}" data-kit="${escHtml(a.kit_path)}"`
+      + ` onclick="recoverAutosave(this.dataset.autosave,this.dataset.kit);return false;">Recover</a>`
+      + `<a href="#" data-autosave="${escHtml(a.autosave_path)}"`
+      + ` onclick="dismissAutosave(this.dataset.autosave,this);return false;">&#x2715;</a></span>`
     ).join('');
     if (data.autosaves.length === 1) {
       banner.innerHTML = `<span>&#9888;&nbsp;Unsaved changes found:</span>${rows}`;

@@ -409,6 +409,61 @@ button { padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; f
 .deploy-route-box small { display:block; margin-bottom:4px; color:#6f7771; font:.47rem/1 Consolas,monospace; letter-spacing:.12em; text-transform:uppercase; }
 .deploy-route-box span { display:block; overflow:hidden; color:#aeb5ae; font:.56rem/1.3 Consolas,monospace; text-overflow:ellipsis; white-space:nowrap; }
 .deploy-route-arrow { color:#b6995d; font:700 .9rem/1 Consolas,monospace; text-align:center; }
+/* ── Start screen (issue #25) ── */
+#start-screen { display:none; position:fixed; inset:0; z-index:500; background:#0b0d0b; overflow-y:auto; }
+#start-screen.open { display:grid; grid-template-columns:250px minmax(0,1fr) 300px; align-items:start; }
+.start-rail { padding:22px 18px; border-right:1px solid #23271f; min-height:100vh; }
+.start-aside { padding:22px 18px; border-left:1px solid #23271f; min-height:100vh; }
+.start-main { padding:26px 34px 40px; }
+.start-eyebrow { color:#6f7568; font:.56rem/1 Consolas,monospace; letter-spacing:.2em; text-transform:uppercase; margin-bottom:12px; }
+.start-title { margin:0 0 12px; color:#efeade; font:600 2.5rem/1.02 Bahnschrift,"Arial Narrow",sans-serif; letter-spacing:-.01em; text-transform:uppercase; }
+.start-title b { color:#d9b463; font-weight:600; }
+.start-lede { max-width:560px; margin:0 0 20px; color:#98a094; font-size:.82rem; line-height:1.5; }
+.start-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:12px; max-width:760px; }
+.start-card { position:relative; display:flex; gap:12px; padding:15px 16px; text-align:left; border:1px solid #2e3429; border-radius:6px;
+  background:linear-gradient(160deg,#171b16,#12150f); color:inherit; font:inherit; cursor:pointer; }
+.start-card:hover, .start-card:focus-visible { border-color:#6b5c38; background:linear-gradient(160deg,#1d2119,#151810); outline:none; }
+.start-card:focus-visible { box-shadow:0 0 0 2px #d0aa5b66; }
+.start-card i.knob { flex:0 0 auto; width:32px; height:32px; border:1px solid #5f5642; border-radius:50%; background:#0f120e; box-shadow:inset 0 0 0 4px #191d16; }
+.start-card small { display:block; color:#6f7568; font:.53rem/1 Consolas,monospace; letter-spacing:.14em; text-transform:uppercase; margin-bottom:4px; }
+.start-card strong { display:block; color:#e7e2d4; font:600 .95rem/1.1 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-card span.d { display:block; margin-top:4px; color:#8d9488; font-size:.74rem; line-height:1.4; }
+.start-card kbd { position:absolute; top:9px; right:11px; color:#5c6357; font:.56rem/1 Consolas,monospace; }
+.start-recover { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; padding:13px 15px;
+  border:1px solid #6b5423; border-radius:6px; background:linear-gradient(160deg,#221a09,#171204); }
+.start-recover .g { flex:1; min-width:220px; }
+.start-recover strong { display:block; color:#e8d5a4; font-size:.8rem; }
+.start-recover span { display:block; margin-top:2px; color:#9a8c68; font-size:.7rem; }
+.start-sec { margin:0 0 9px; color:#6f7568; font:.56rem/1 Consolas,monospace; letter-spacing:.2em; text-transform:uppercase; }
+.start-path { display:grid; gap:11px; margin-bottom:20px; }
+.start-node { display:grid; grid-template-columns:12px minmax(0,1fr); gap:9px; }
+.start-node i { width:9px; height:9px; margin-top:4px; border-radius:50%; border:1px solid #4d5347; background:#14170f; }
+.start-node.on i { border-color:#7f9a6a; background:#8fc07a; box-shadow:0 0 7px #8fc07a55; }
+.start-node.warn i { border-color:#7a6634; background:#d0aa5b; box-shadow:0 0 7px #d0aa5b55; }
+.start-node b { display:block; color:#c9cfc4; font:600 .64rem/1.2 Consolas,monospace; letter-spacing:.1em; text-transform:uppercase; }
+.start-node span { display:block; margin-top:2px; color:#7c8378; font-size:.68rem; line-height:1.35; }
+.start-counts { display:flex; gap:9px; margin-bottom:12px; }
+.start-count { flex:1; padding:9px 10px; border:1px solid #2b3026; border-radius:5px; background:#111410; }
+.start-count b { display:block; color:#d7bc7e; font:650 1.05rem/1 Bahnschrift,"Arial Narrow",sans-serif; }
+.start-count span { display:block; margin-top:2px; color:#6f7568; font:.52rem/1 Consolas,monospace; letter-spacing:.13em; text-transform:uppercase; }
+.start-note { color:#7c8378; font-size:.7rem; line-height:1.5; }
+.start-recent { display:grid; gap:1px; margin-bottom:18px; }
+.start-kit { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; width:100%; padding:8px 9px; text-align:left;
+  border:1px solid transparent; border-radius:5px; background:none; color:inherit; font:inherit; cursor:pointer; }
+.start-kit:hover, .start-kit:focus-visible { border-color:#4d5a3f; background:#141810; outline:none; }
+.start-kit b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#dcd7c8; font:600 .72rem/1.2 Bahnschrift,"Arial Narrow",sans-serif; text-transform:uppercase; }
+.start-kit span { display:block; margin-top:2px; color:#6f7568; font:.52rem/1 Consolas,monospace; letter-spacing:.1em; text-transform:uppercase; }
+.start-kit em { color:#6f7568; font:.56rem/1 Consolas,monospace; font-style:normal; }
+.start-callout { padding:11px 12px; border:1px solid #2e3429; border-radius:5px; background:#101310; }
+.start-callout b { display:block; margin-bottom:4px; color:#9aa38f; font:.53rem/1 Consolas,monospace; letter-spacing:.14em; text-transform:uppercase; }
+.start-callout span { color:#7c8378; font-size:.7rem; line-height:1.45; }
+.start-dismiss { margin-top:22px; }
+@media (max-width: 1080px) {
+  #start-screen.open { grid-template-columns:minmax(0,1fr); }
+  .start-rail, .start-aside { min-height:0; border:0; border-bottom:1px solid #23271f; }
+  .start-main { padding:20px 18px 30px; order:-1; }
+  .start-title { font-size:1.9rem; }
+}
 .deploy-issues { display:grid; gap:5px; }
 .deploy-issue { display:grid; grid-template-columns:8px minmax(0,1fr); gap:8px; padding:7px 9px; border:1px solid #3b423c; background:#151916; }
 .deploy-issue i { width:7px; height:7px; margin-top:3px; border-radius:50%; background:#788078; }
@@ -1177,3 +1232,8 @@ body.viewer-mode #sim-build {
   border: 1px solid var(--border, #242c3d); border-radius: 4px;
 }
 .viewer-file-pick:hover { border-color: var(--accent, #f0b32e); }
+
+/* The start screen needs a live server session; the viewer has none, so
+   openStartScreen() is guarded out and its Home affordance is inert here. */
+body.viewer-mode #start-screen { display: none !important; }
+body.viewer-mode .brand-lockup { cursor: default; }
