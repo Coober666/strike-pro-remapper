@@ -8589,8 +8589,8 @@ function relinkCandidateRow(sugg, cand, idx) {
                : '';
   return `<label class="sim-row" style="cursor:pointer;">
     <input type="radio" name="rl-${idx}" value="${escHtml(cand.rel)}">
-    <button class="play-btn" title="Preview this sound"
-            onclick="event.preventDefault();event.stopPropagation();previewInstrument('${escHtml(cand.rel)}')">&#9654;</button>
+    <button class="play-btn" title="Preview this sound" data-rel="${escHtml(cand.rel)}"
+            onclick="event.preventDefault();event.stopPropagation();previewInstrument(this.dataset.rel)">&#9654;</button>
     <span class="sim-name" title="${escHtml(cand.rel)}">${escHtml(short)}</span>
     <span class="sim-grp">${escHtml(cand.rel.split('/')[0])}</span>
     <span class="sim-grp" style="color:${label.color};">${escHtml(label.text)}</span>
