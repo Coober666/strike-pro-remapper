@@ -407,7 +407,8 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   `brightness` (energy fraction >2 kHz), `decay` (s for RMS envelope to fall 20 dB).
   - `_fft(re, im)` — hand-rolled in-place iterative radix-2 FFT (no numpy; stdlib-only rule).
     `_read_wav_mono(path, secs)` reads ≤~1.5 s of a 16/24-bit PCM WAV → mono floats + rate.
-  - `extract_fingerprint(wav_path)` → feats dict | None. Spectral features come from one
+  - `strike_remapper.audio.extract_fingerprint(wav_path)` → feats dict | None;
+    `strike_remap` re-exports the pure DSP helpers. Spectral features come from one
     Hann-windowed `_FP_FFT_SIZE`(4096)-pt FFT at the loudest sample; `_decay_time()` from a
     10 ms-block RMS envelope.
   - `_representative_wav_for_sin(sin_rel)` → picks the **hardest-velocity ("full hit")**
@@ -536,7 +537,7 @@ Legacy unprefixed UI state still in use: `loop_state`, `loopPanelOpen`,
 ```
 strike_remap.py              # runnable application, HTTP/UI, and compatibility imports
 strike_remapper/
-  audio.py                   # state-independent WAV inspection/normalization/waveforms
+  audio.py                   # state-independent WAV utilities and fingerprint DSP
   formats.py                 # pure binary format parsers/writers; no app-state imports
 factory_fingerprints.json    # committed: baked similarity vectors for the factory library
 factory_catalog.json         # committed: baked catalog of every factory .sin (name/group/mappings) for the web viewer
