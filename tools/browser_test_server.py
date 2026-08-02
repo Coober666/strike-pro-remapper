@@ -30,10 +30,7 @@ def main():
     shutil.copy2(fixture, kits / "John's Test Kit.skt")
 
     # Keep browser tests independent from the developer's library and hardware.
-    app.LIBRARY_DIR = test_root
-    app.SNAP_DIR = test_root / 'snapshots'
-    app.FP_PATH = test_root / 'fingerprints.json'
-    app.PRESET_MANIFEST_PATH = test_root / 'preset_manifest.json'
+    app.set_library_root(test_root)
     app.get_volumes = lambda: (None, None)
 
     server = app._Server(('127.0.0.1', args.port), app.Handler)

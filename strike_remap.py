@@ -104,6 +104,34 @@ from strike_remapper.formats import (
 )
 
 LIBRARY_DIR = Path(__file__).resolve().parent / 'library'
+_TAGS_PATH = LIBRARY_DIR / 'tags.json'
+SNAP_DIR = LIBRARY_DIR / 'snapshots'
+SNAP_INDEX_PATH = SNAP_DIR / 'index.json'
+FP_PATH = LIBRARY_DIR / 'fingerprints.json'
+PRESET_MANIFEST_PATH = LIBRARY_DIR / 'preset_manifest.json'
+
+
+def set_library_root(root):
+    """Redirect every writable library path before serving requests.
+
+    This is a startup-time configuration boundary, primarily for isolated test
+    servers. It also invalidates in-memory data derived from the previous root.
+    """
+    global LIBRARY_DIR, _TAGS_PATH, SNAP_DIR, SNAP_INDEX_PATH
+    global FP_PATH, PRESET_MANIFEST_PATH, _fp_cache, _preset_manifest_cache
+
+    LIBRARY_DIR = Path(root).resolve()
+    _TAGS_PATH = LIBRARY_DIR / 'tags.json'
+    SNAP_DIR = LIBRARY_DIR / 'snapshots'
+    SNAP_INDEX_PATH = SNAP_DIR / 'index.json'
+    FP_PATH = LIBRARY_DIR / 'fingerprints.json'
+    PRESET_MANIFEST_PATH = LIBRARY_DIR / 'preset_manifest.json'
+
+    _waveform_cache.clear()
+    with _fp_lock:
+        _fp_cache = None
+    with _preset_manifest_lock:
+        _preset_manifest_cache = None
 
 # ── Platform-aware SD card detection ─────────────────────────────────────────────
 
@@ -1802,9 +1830,6 @@ def batch_set_param(pad_ids: list, param: str, value: int):
     state['message'] = f'Batch set {_param_label(param)}={value} on {changed} pads'
 
 
-_TAGS_PATH = LIBRARY_DIR / 'tags.json'
-
-
 def load_tags() -> dict:
     """Return {sin_rel: [tag, ...]} from library/tags.json."""
     if _TAGS_PATH.exists():
@@ -1939,8 +1964,6 @@ def diff_kit(path: str) -> dict:
 # survive server restarts and browser reloads, round-trip byte-identical through
 # parse_skt/build_skt, and never touch uncertain binary offsets. A JSON index holds
 # the metadata; retention caps count-per-kit and age so the store can't grow forever.
-SNAP_DIR          = LIBRARY_DIR / 'snapshots'
-SNAP_INDEX_PATH   = SNAP_DIR / 'index.json'
 SNAP_MAX_PER_KIT  = 50       # non-pinned snapshots kept per kit (newest win)
 SNAP_MAX_AGE_DAYS = 30       # non-pinned snapshots older than this are pruned
 _SNAP_LOCK        = threading.Lock()
@@ -2350,7 +2373,6 @@ def start_sync_library():
 # instrument can surface its ~N closest-sounding neighbours across SIN groups.
 # READ-ONLY: never writes/renames/modifies any WAV/.sin/.skt — vectors live in a
 # sidecar (library/fingerprints.json), mirroring the tags.json pattern.
-FP_PATH      = LIBRARY_DIR / 'fingerprints.json'                       # user sidecar (writable)
 FACTORY_FP_PATH = Path(__file__).resolve().parent / 'factory_fingerprints.json'  # baked base layer (read-only, committed)
 FP_SCHEMA    = 1              # bump to invalidate every cached vector on algo change
 FP_FEATURES  = ('centroid', 'rolloff', 'zcr', 'brightness', 'decay')
@@ -2821,7 +2843,6 @@ def _atomic_write(path: Path, data: bytes):
         tmp.unlink(missing_ok=True)
 
 
-PRESET_MANIFEST_PATH = LIBRARY_DIR / 'preset_manifest.json'   # user sidecar (writable)
 PRESET_MANIFEST_SCHEMA = 1
 _preset_manifest_cache = None
 _preset_manifest_lock = threading.Lock()
