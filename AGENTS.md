@@ -17,7 +17,8 @@ Standard-library Python web app (`strike_remap.py`) for editing Alesis Strike Pr
 - `npm run lint:js` extracts the embedded editor JavaScript to `.build/embedded.js`, then
   runs pinned ESLint rules and `node --check` against that exact artifact.
 - `npm run test:browser` generates synthetic fixtures and runs the pinned Playwright/Chromium
-  suite against an isolated `.build/browser-library`; it must never inspect the developer's
+  suite against an isolated `.build/browser-library`; `set_library_root()` redirects every
+  writable sidecar before the server starts, and the suite must never inspect the developer's
   real library or connected cards.
 
 **README.md is user-facing and must stay current**: whenever a feature ships, a format
@@ -576,6 +577,7 @@ tools/
   test_sin_roundtrip.py      # verifies parse_sin/patch_sin preserve .sin files exactly
   test_audio.py              # deterministic 16/24-bit WAV utility contracts
   test_fingerprint.py        # verifies the fingerprint extractor + k-NN + factory-layer logic
+  test_library_isolation.py  # proves test re-rooting cannot write into the prior library
   test_time_machine.py       # exercises snapshot create/dedupe/diff/restore/retention
   build_factory_fingerprints.py  # regenerate committed factory_fingerprints.json (needs SD)
   build_factory_catalog.py   # regenerate committed factory_catalog.json (needs SD/library)
