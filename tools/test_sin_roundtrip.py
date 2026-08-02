@@ -15,27 +15,34 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import strike_remap as sr
+from strike_remapper import formats
+
+
+COMPAT_NAMES = (
+    '_build_sin', 'parse_sin_first_wav', 'parse_sin_all_wavs',
+    'parse_sin', 'patch_sin', 'rebuild_sin_zones',
+)
 
 
 def test_file(path: Path) -> bool:
     original = path.read_bytes()
     try:
-        parsed = sr.parse_sin(original)
+        parsed = formats.parse_sin(original)
     except Exception as e:
         print(f'FAIL {path.name}: parse error: {e}')
         return False
 
-    for name, (_, _, lo, hi) in sr._SIN_PARAM_MAP.items():
+    for name, (_, _, lo, hi) in formats._SIN_PARAM_MAP.items():
         v = parsed['params'][name]
         if not lo <= v <= hi:
             print(f'FAIL {path.name}: {name}={v} outside [{lo},{hi}]')
             return False
 
-    if sr.patch_sin(original) != original:
+    if formats.patch_sin(original) != original:
         print(f'FAIL {path.name}: no-op patch changed bytes')
         return False
 
-    identity = sr.patch_sin(
+    identity = formats.patch_sin(
         original,
         params=parsed['params'],
         cycle_random=parsed['cycle_random'],
@@ -50,6 +57,11 @@ def test_file(path: Path) -> bool:
 
 
 def main():
+    for name in COMPAT_NAMES:
+        if getattr(sr, name) is not getattr(formats, name):
+            print(f'FAIL strike_remap.{name} is not the formats compatibility alias')
+            sys.exit(1)
+
     if len(sys.argv) > 1:
         files = [Path(a) for a in sys.argv[1:]]
     else:

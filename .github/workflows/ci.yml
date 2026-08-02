@@ -15,7 +15,7 @@ jobs:
           python-version: '3.12'
 
       - name: Compile check
-        run: python -m py_compile strike_remap.py
+        run: python -m compileall -q strike_remap.py strike_remapper
 
       - name: Generate synthetic fixtures
         run: python tools/make_fixtures.py

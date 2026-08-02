@@ -3,6 +3,7 @@
 
 import importlib.util
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -10,6 +11,8 @@ OUTPUT = ROOT / '.build' / 'embedded.js'
 
 
 def main():
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     spec = importlib.util.spec_from_file_location('strike_remap', ROOT / 'strike_remap.py')
     app = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(app)

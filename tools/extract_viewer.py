@@ -67,6 +67,8 @@ class ExtractError(RuntimeError):
 
 
 def load_embedded_html() -> str:
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     spec = importlib.util.spec_from_file_location("sr", ROOT / "strike_remap.py")
     sr = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sr)
