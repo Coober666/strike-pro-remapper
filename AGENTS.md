@@ -315,7 +315,8 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   `_push_history()` now bumps `param_rev` (was set_pad_param-only) so assignment edits also
   invalidate the manifest for pollers. Tests: `tools/test_playback_manifest.py`.
 - `set_kit_fx(param, value)` — writes one kit-level FX param into `kit_raw` via `_KIT_FX_PARAM_MAP`
-- `normalize_wav(wav_data)` → `(bytes, peak_db_str)` — peak-normalize 16/24-bit PCM WAV
+- `strike_remapper.audio.normalize_wav(wav_data)` → `(bytes, peak_db_str)` —
+  peak-normalize 16/24-bit PCM WAV; `strike_remap` re-exports the audio helpers
 - `batch_assign_csv(assignments)` — assign multiple pads from `[{pad_id, layer, sin_rel}]`
 - `swap_pads(pad_id_a, pad_id_b)` — swap full payloads between two pads
 - `batch_set_param(pad_ids, param, value)` — apply one param to many pads (single undo entry)
@@ -535,6 +536,7 @@ Legacy unprefixed UI state still in use: `loop_state`, `loopPanelOpen`,
 ```
 strike_remap.py              # runnable application, HTTP/UI, and compatibility imports
 strike_remapper/
+  audio.py                   # state-independent WAV inspection/normalization/waveforms
   formats.py                 # pure binary format parsers/writers; no app-state imports
 factory_fingerprints.json    # committed: baked similarity vectors for the factory library
 factory_catalog.json         # committed: baked catalog of every factory .sin (name/group/mappings) for the web viewer
@@ -571,6 +573,7 @@ tools/
   make_metal_kit.py          # generates a baseline metal kit from library instruments
   test_roundtrip.py          # verifies parse→build is byte-for-byte lossless
   test_sin_roundtrip.py      # verifies parse_sin/patch_sin preserve .sin files exactly
+  test_audio.py              # deterministic 16/24-bit WAV utility contracts
   test_fingerprint.py        # verifies the fingerprint extractor + k-NN + factory-layer logic
   test_time_machine.py       # exercises snapshot create/dedupe/diff/restore/retention
   build_factory_fingerprints.py  # regenerate committed factory_fingerprints.json (needs SD)
