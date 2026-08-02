@@ -48,7 +48,7 @@ pkill -f strike_remap.py && python3 strike_remap.py &
 
 | Layer | Where |
 |---|---|
-| Binary parser/writer | `parse_skt()`, `build_skt()` — top of file |
+| Binary parser/writer | `strike_remapper/formats.py`; compatibility imports in `strike_remap.py` |
 | Mutable server state | `state` dict (kit_path, pads, instruments, avail, dirty, history) |
 | HTTP handlers | `Handler.do_GET` / `do_POST` — all `/api/*` routes |
 | Frontend | Embedded string `HTML`; pure JS, no framework |
