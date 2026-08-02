@@ -1,7 +1,7 @@
 # Architecture stabilization roadmap
 
-The remapper remains a clone-and-run, dependency-free Python application. This roadmap
-strengthens its internal boundaries without changing the single-file distribution contract.
+The remapper remains a clone-and-run Python application with no third-party runtime
+dependencies. Its source may be split into focused modules as those boundaries become clear.
 
 ## Measured baseline
 
@@ -60,10 +60,9 @@ Pure card classification moves in Phase 2a; physical I/O behavior belongs here.
 
 ## Separate product RFC: UI source direction
 
-The embedded UI remains the source of truth. Moving it to `web/app/` and generating
-`strike_remap.py` would change the project’s distribution and review model, so it is not part
-of stabilization. Any such change requires a separate decision about whether “one Python
-file, no dependencies” remains a permanent product promise.
+The embedded UI remains the source of truth. Moving it to `web/app/` and generating the
+runtime UI would add another generation hop and change the review model, so it is not part of
+stabilization. Any such change requires a separate product decision.
 
 ## Delivery rules
 

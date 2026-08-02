@@ -29,6 +29,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
+from strike_remapper.formats import (
+    SIN_GROUPS,
+    _SIN_INST_BYTES,
+    _SIN_MAPPING_SIZE,
+    _SIN_PARAM_MAP,
+    _build_sin,
+    _sin_blocks,
+    parse_sin,
+    parse_sin_all_wavs,
+    parse_sin_first_wav,
+    patch_sin,
+    rebuild_sin_zones,
+)
+
 LIBRARY_DIR = Path(__file__).resolve().parent / 'library'
 
 # ── Platform-aware SD card detection ─────────────────────────────────────────────
@@ -547,53 +561,6 @@ def parse_skt(data: bytes):
 
 
 # ── Custom instrument import ───────────────────────────────────────────────────
-
-# INST block: 24-byte instrument-level params (cloned from 808 Clap.sin, group=CLAPS_SFX)
-_SIN_INST_BYTES = bytes([
-    0x00, 0x12, 0x01, 0x00, 0x00, 0x00, 0x4b, 0x00,
-    0x63, 0x00, 0x00, 0x00, 0x00, 0x7f, 0x00, 0x00,
-    0x00, 0x00, 0x4f, 0x00, 0x7f, 0x00, 0x00, 0x00,
-])
-
-
-def _build_sin(entries: list) -> bytes:
-    """
-    Build a .sin metadata file.
-
-    entries: list of (wav_rel, min_vel, max_vel, rr_index) where:
-      wav_rel   - WAV path relative to library/instruments root
-      min_vel   - minimum velocity (0-127, inclusive)
-      max_vel   - maximum velocity (0-127, inclusive)
-      rr_index  - 1-based round-robin index within a velocity band (1 = only/first sample)
-
-    Format confirmed by hex analysis of real multi-velocity preset .sin files:
-    28 bytes per mapping; bytes [3]=minVel, [4]=maxVel, [7]=rr_index (1-based).
-    """
-    inst_block = b'INST' + struct.pack('<I', len(_SIN_INST_BYTES)) + _SIN_INST_BYTES
-
-    count = len(entries)
-    msmp_payload = bytearray([0x00, 0x00, count & 0xFF, 0x00])
-    for i, (wav_rel, min_vel, max_vel, rr_index) in enumerate(entries):
-        m = bytearray(28)
-        struct.pack_into('<H', m, 0, i)   # strIdx → i-th WAV in str table
-        m[2]  = 0x63
-        m[3]  = min_vel & 0xFF
-        m[4]  = max_vel & 0xFF
-        m[5]  = 0x00
-        m[6]  = 0x7F
-        m[7]  = max(1, rr_index) & 0xFF
-        m[11] = 0x7F
-        m[18] = 0x40
-        m[24] = 0x3C
-        msmp_payload += bytes(m)
-    msmp_block = b'msmp' + struct.pack('<I', len(msmp_payload)) + bytes(msmp_payload)
-
-    wav_bytes = b''.join(wr.encode('ascii') + b'\x00' for wr, *_ in entries)
-    str_block = b'str ' + struct.pack('<I', len(wav_bytes)) + wav_bytes
-
-    return inst_block + msmp_block + str_block
-
-
 def _safe_name(s: str) -> str:
     return ''.join(c for c in s if c not in r'\/:*?"<>|').strip()
 
@@ -758,235 +725,7 @@ def import_custom_wav(wav_data: bytes, category: str, name: str) -> str:
     return sin_rel
 
 
-def parse_sin_first_wav(data: bytes) -> str | None:
-    """
-    Parse a .sin file's str block and return the first WAV path.
-    The str block holds null-separated WAV filenames ordered by velocity (loudest first).
-    Returns a relative path like 'Claps/808 Clap.WAV', or None if not found.
-    """
-    pos = 0
-    while pos + 8 <= len(data):
-        magic = data[pos:pos+4]
-        size  = struct.unpack_from('<I', data, pos+4)[0]
-        if magic == b'str ':
-            str_data = data[pos+8 : pos+8+size]
-            for raw in str_data.split(b'\x00'):
-                s = raw.decode('ascii', errors='replace').strip()
-                if s and s.lower().endswith(('.wav', '.wave')):
-                    return s
-            break
-        if pos + 8 + size > len(data):
-            break
-        pos += 8 + size
-    return None
-
-
-def parse_sin_all_wavs(data: bytes) -> list:
-    """Return every WAV path listed in a .sin str block (all velocity layers)."""
-    pos = 0
-    while pos + 8 <= len(data):
-        magic = data[pos:pos+4]
-        size  = struct.unpack_from('<I', data, pos+4)[0]
-        if magic == b'str ':
-            str_data = data[pos+8 : pos+8+size]
-            return [
-                raw.decode('ascii', errors='replace').strip()
-                for raw in str_data.split(b'\x00')
-                if raw and raw.decode('ascii', errors='replace').strip().lower().endswith(('.wav', '.wave'))
-            ]
-        if pos + 8 + size > len(data):
-            break
-        pos += 8 + size
-    return []
-
-
 # ── .sin instrument parameter editor ───────────────────────────────────────────
-# INST 24-byte payload layout decoded by the strike4j project (github.com/cbuschka/strike4j),
-# verified here against all 1749 library preset .sin files (constants hold with 0 exceptions).
-
-SIN_GROUPS = {
-    0: 'Kick', 1: 'Snare', 2: 'Tom', 3: 'Hi-Hat', 4: 'Crash', 5: 'Ride',
-    6: 'Group 6', 7: 'E. Kick', 8: 'E. Snare', 9: 'E. Tom', 10: 'Percussion',
-    11: 'Perc Ethnic', 12: 'Group 12', 13: 'Perc Orchestral', 14: 'E. Perc',
-    15: 'Group 15', 16: 'Group 16', 17: 'Group 17', 18: 'Claps/SFX', 19: 'Melodic',
-}
-
-# name: (offset into INST payload, signed, lo, hi)
-_SIN_PARAM_MAP = {
-    'group':      (1,  False, 0, 19),
-    'level':      (6,  False, 0, 127),
-    'pan':        (7,  True, -50, 50),
-    'decay':      (8,  False, 0, 127),
-    'semi':       (11, True, -12, 12),
-    'fine':       (12, True, -50, 50),
-    'cutoff':     (13, False, 0, 127),
-    'hipass':     (14, False, 0, 1),
-    'vel_decay':  (15, True, -99, 99),
-    'vel_pitch':  (16, True, -99, 99),
-    'vel_filter': (17, True, -99, 99),
-    'vel_level':  (18, True, -99, 99),
-    'loop':       (21, False, 0, 1),
-}
-
-_SIN_MAPPING_SIZE = 28
-# per-mapping offsets: str_idx u16 @0, command @2, vel min/max @3/4, rr index @7,
-# hihat pedal-open range @10/11 — everything else preserved untouched
-
-def _sin_blocks(data: bytes) -> dict:
-    """Walk .sin chunks → {magic: (payload_offset, payload_size)}. Magics: INST/msmp/str ."""
-    blocks, pos = {}, 0
-    while pos + 8 <= len(data):
-        magic = data[pos:pos+4]
-        size  = struct.unpack_from('<I', data, pos+4)[0]
-        if pos + 8 + size > len(data):
-            break
-        blocks[magic] = (pos + 8, size)
-        pos += 8 + size
-    return blocks
-
-
-def parse_sin(data: bytes) -> dict:
-    """Parse a .sin file → {params, cycle_random, mappings, strings}. Raises ValueError."""
-    blocks = _sin_blocks(data)
-    if b'INST' not in blocks or blocks[b'INST'][1] < 24:
-        raise ValueError('Not a valid .sin file (missing INST block)')
-    ioff, _ = blocks[b'INST']
-
-    def _val(off, signed):
-        v = data[ioff + off]
-        return v - 256 if signed and v > 127 else v
-
-    params = {name: _val(off, signed) for name, (off, signed, _, _) in _SIN_PARAM_MAP.items()}
-
-    strings = []
-    if b'str ' in blocks:
-        soff, ssize = blocks[b'str ']
-        strings = [s.decode('ascii', errors='replace')
-                   for s in data[soff:soff+ssize].split(b'\x00') if s]
-
-    cycle_random, mappings = 0, []
-    if b'msmp' in blocks:
-        moff, msize = blocks[b'msmp']
-        if msize >= 4:
-            cycle_random = data[moff]
-            count = data[moff + 2]
-            for i in range(count):
-                m = moff + 4 + i * _SIN_MAPPING_SIZE
-                if m + _SIN_MAPPING_SIZE > moff + msize:
-                    break
-                str_idx = struct.unpack_from('<H', data, m)[0]
-                mappings.append({
-                    'sample':  strings[str_idx] if str_idx < len(strings) else f'<str {str_idx}>',
-                    'vmin':    data[m + 3],
-                    'vmax':    data[m + 4],
-                    'rr':      data[m + 7],
-                    'hh_min':  data[m + 10],
-                    'hh_max':  data[m + 11],
-                })
-    return {'params': params, 'cycle_random': cycle_random, 'mappings': mappings,
-            'strings': strings}
-
-
-def patch_sin(data: bytes, params: dict = None, cycle_random=None, mappings: list = None) -> bytes:
-    """
-    Patch known fields of a .sin file in place; every unknown byte is preserved.
-    params: {name: value} subset of _SIN_PARAM_MAP (values clamped to documented range).
-    cycle_random: 0 = round-robin, 1 = random.
-    mappings: [{index, vmin?, vmax?, rr?, hh_min?, hh_max?}] — patches per-mapping bytes.
-    """
-    blocks = _sin_blocks(data)
-    if b'INST' not in blocks or blocks[b'INST'][1] < 24:
-        raise ValueError('Not a valid .sin file (missing INST block)')
-    out  = bytearray(data)
-    ioff = blocks[b'INST'][0]
-
-    for name, value in (params or {}).items():
-        if name not in _SIN_PARAM_MAP:
-            raise ValueError(f'Unknown .sin param: {name}')
-        off, signed, lo, hi = _SIN_PARAM_MAP[name]
-        v = max(lo, min(hi, int(value)))
-        out[ioff + off] = v & 0xFF
-
-    if (cycle_random is not None or mappings) and b'msmp' not in blocks:
-        raise ValueError('.sin file has no msmp block')
-    if b'msmp' in blocks:
-        moff, msize = blocks[b'msmp']
-        if cycle_random is not None:
-            out[moff] = 1 if int(cycle_random) else 0
-        count = data[moff + 2] if msize >= 4 else 0
-        for mp in (mappings or []):
-            i = int(mp['index'])
-            if not 0 <= i < count:
-                raise ValueError(f'Mapping index {i} out of range (count={count})')
-            m = moff + 4 + i * _SIN_MAPPING_SIZE
-            for key, off in (('vmin', 3), ('vmax', 4), ('rr', 7),
-                             ('hh_min', 10), ('hh_max', 11)):
-                if key in mp and mp[key] is not None:
-                    v = int(mp[key])
-                    if key != 'rr':  # rr is signed: 0xFE/-2 marks hi-hat pedal function
-                        v = max(0, min(127, v))
-                    out[m + off] = v & 0xFF
-    return bytes(out)
-
-
-def rebuild_sin_zones(data: bytes, zones: list, cycle_random=None) -> bytes:
-    """
-    Rebuild the msmp + str blocks with a new zone list (add/remove/reorder mappings).
-
-    zones: [{src, vmin, vmax, rr?, hh_min?, hh_max?, sample?}] — `src` is the index of an
-    ORIGINAL mapping whose 28-byte block is cloned, so every unknown byte comes from a real
-    sibling. New samples are appended to the string table; original string order is kept.
-    The INST block is passed through untouched.
-    """
-    blocks = _sin_blocks(data)
-    if b'INST' not in blocks or b'msmp' not in blocks or b'str ' not in blocks:
-        raise ValueError('Not a rebuildable .sin (missing INST/msmp/str block)')
-    if not zones:
-        raise ValueError('An instrument needs at least one zone')
-    if len(zones) > 255:
-        raise ValueError('Too many zones (max 255)')
-
-    old       = parse_sin(data)
-    old_count = len(old['mappings'])
-    moff, _   = blocks[b'msmp']
-    ioff, isize = blocks[b'INST']
-
-    strings = list(old['strings'])
-    def _str_idx(s):
-        if s not in strings:
-            strings.append(s)
-        return strings.index(s)
-
-    maps_out = bytearray()
-    for z in zones:
-        src = int(z.get('src', -1))
-        if not 0 <= src < old_count:
-            raise ValueError(f'Zone src index {src} out of range (0-{old_count - 1})')
-        m   = moff + 4 + src * _SIN_MAPPING_SIZE
-        blk = bytearray(data[m:m + _SIN_MAPPING_SIZE])
-        orig = old['mappings'][src]
-        struct.pack_into('<H', blk, 0, _str_idx(z.get('sample', orig['sample'])))
-        blk[3]  = max(0, min(127, int(z['vmin'])))
-        blk[4]  = max(0, min(127, int(z['vmax'])))
-        blk[7]  = int(z.get('rr', orig['rr'])) & 0xFF
-        blk[10] = max(0, min(127, int(z.get('hh_min', orig['hh_min']))))
-        blk[11] = max(0, min(127, int(z.get('hh_max', orig['hh_max']))))
-        maps_out += blk
-
-    msmp_hdr = bytearray(data[moff:moff + 4])  # preserve unknown header bytes 1 and 3
-    if cycle_random is not None:
-        msmp_hdr[0] = 1 if int(cycle_random) else 0
-    msmp_hdr[2] = len(zones)
-    msmp_payload = bytes(msmp_hdr) + bytes(maps_out)
-    str_payload  = b''.join(s.encode('ascii', errors='replace') + b'\x00' for s in strings)
-
-    out = (data[:ioff + isize]
-           + b'msmp' + struct.pack('<I', len(msmp_payload)) + msmp_payload
-           + b'str ' + struct.pack('<I', len(str_payload)) + str_payload)
-    out += b'\x00' * (-len(out) % 4)   # module files are 4-byte aligned
-    return bytes(out)
-
-
 def _sin_abs(sin_rel: str) -> 'Path':
     # Prefer the library copy: scan_instruments lets a mounted SD card shadow
     # identical rel paths, but edits must always land in library/instruments.

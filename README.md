@@ -3,7 +3,7 @@
 ![CI](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml/badge.svg)
 
 **An offline kit and instrument editor for the Alesis Strike / Strike Pro drum module.**
-No module connection required. No install. No dependencies. One Python file.
+No module connection required. No install. No third-party dependencies. Clone and run.
 
 ![Strike Pro Remapper — drum map, pad editor, and instrument browser](docs/screenshot.png)
 
@@ -23,7 +23,8 @@ everything it doesn't touch.
 
 ## Quick start
 
-Requirements: **Python 3.10+**. Standard library only — there is nothing to `pip install`.
+Requirements: **Python 3.10+**. The application uses only the standard library, so there is
+nothing to `pip install`.
 
 ```
 git clone https://github.com/Coober666/strike-pro-remapper

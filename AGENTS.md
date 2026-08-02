@@ -4,7 +4,7 @@
 or anything else) — CLAUDE.md is just a pointer here. Read this whole file before changing
 code, and keep it current when you change how things work.
 
-Single-file Python web app (`strike_remap.py`) for editing Alesis Strike Pro drum kit files
+Standard-library Python web app (`strike_remap.py`) for editing Alesis Strike Pro drum kit files
 (`.skt`). Runs an HTTP server on port 8765; all HTML/CSS/JS is embedded as `HTML = r"""..."""`.
 
 **Conventions CI enforces** (you don't have to remember these, but know why they fail):
@@ -260,7 +260,9 @@ msmp payload:  [0] cycle (0=round-robin 1=random)  [2] mapping count, then 28-by
                (signed: 0xFE = hi-hat pedal function)  [10] hh-open min  [11] hh-open max
 ```
 
-Python API: `parse_sin(data)`, `patch_sin(data, params, cycle_random, mappings)` — patcher
+Python API: `strike_remapper.formats` owns `parse_sin(data)` and
+`patch_sin(data, params, cycle_random, mappings)`; `strike_remap` re-exports them for
+compatibility. The patcher
 writes only known offsets, preserving every unknown byte. `tools/test_sin_roundtrip.py`
 verifies no-op + identity patches are byte-identical across the whole library.
 
@@ -531,7 +533,9 @@ Legacy unprefixed UI state still in use: `loop_state`, `loopPanelOpen`,
 ## File layout
 
 ```
-strike_remap.py              # entire application (~5500 lines)
+strike_remap.py              # runnable application, HTTP/UI, and compatibility imports
+strike_remapper/
+  formats.py                 # pure binary format parsers/writers; no app-state imports
 factory_fingerprints.json    # committed: baked similarity vectors for the factory library
 factory_catalog.json         # committed: baked catalog of every factory .sin (name/group/mappings) for the web viewer
 library/                     # git-ignored — populate from SD card or copy between machines
