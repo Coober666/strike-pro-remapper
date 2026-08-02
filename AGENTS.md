@@ -20,6 +20,8 @@ Standard-library Python web app (`strike_remap.py`) for editing Alesis Strike Pr
   suite against an isolated `.build/browser-library`; `set_library_root()` redirects every
   writable sidecar before the server starts, and the suite must never inspect the developer's
   real library or connected cards.
+- Node tooling resolves Python through `tools/python.mjs`. Set `PYTHON` to an executable path
+  (paths containing spaces are supported) to override the platform defaults.
 
 **README.md is user-facing and must stay current**: whenever a feature ships, a format
 discovery lands, or the verification status of an offset changes, update README.md in the
@@ -569,6 +571,8 @@ tests/
   browser/                   # Playwright workflows + deterministic server lifecycle
 tools/
   browser_test_server.py     # isolated real-app server for Playwright (no physical cards)
+  python.mjs                 # portable PYTHON/python3/py resolver for Node tooling
+  test_python.mjs            # deterministic interpreter-resolution contracts
   extract_embedded_js.py     # write .build/embedded.js for ESLint/node --check
   extract_viewer.py          # regenerate web/viewer/* from the embedded UI; --check in CI
   hex_explorer.py            # annotated hex dump tool for .skt files
