@@ -159,6 +159,8 @@ factory library's folder structure — groups 6/12/15/16/17 unused by the factor
 
 ### `msmp` block — sample mappings
 
+This layout was confirmed by hex analysis of real multi-velocity preset `.sin` files.
+
 Header (4 bytes): `[0]` cycle mode (0 = round-robin, 1 = random), `[1]` ❓, `[2]` mapping
 count, `[3]` ❓. Then `count` × 28-byte mapping records:
 
