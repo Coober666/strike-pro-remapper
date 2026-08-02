@@ -13,15 +13,46 @@ Asserts the extractor tracks intuition and that nearest-neighbour ordering is
 deterministic: a bright tone ranks nearer the other bright tone than any dark one,
 and a long-decay tone ranks nearer the other long-decay tone than any short one.
 """
+import io
+import math
+import struct
 import sys
+import tempfile
+import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import strike_remap as sr
+from strike_remapper import audio
 
 FIX = Path(__file__).resolve().parent.parent / 'tests' / 'fixtures'
 NAMES = ['bright_a', 'bright_b', 'dark_a', 'dark_b',
          'long_a', 'long_b', 'short_a', 'short_b']
+
+
+def _sample_bytes(value, width):
+    if width == 1:
+        return bytes([value])
+    if width == 2:
+        return struct.pack('<h', value)
+    if width == 3:
+        return int(value).to_bytes(3, 'little', signed=True)
+    raise ValueError(width)
+
+
+def _wav_bytes(frames, width=2, channels=1, rate=8000):
+    raw = bytearray()
+    for frame in frames:
+        values = frame if channels > 1 else (frame,)
+        for value in values:
+            raw += _sample_bytes(value, width)
+    out = io.BytesIO()
+    with wave.open(out, 'wb') as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(width)
+        wav.setframerate(rate)
+        wav.writeframes(bytes(raw))
+    return out.getvalue()
 
 
 def main():
@@ -37,7 +68,72 @@ def main():
         if not cond:
             fails.append(msg)
 
-    fp = {n: sr.extract_fingerprint(FIX / (n + '.wav')) for n in NAMES}
+    for name in ('_fft', '_read_wav_mono', '_decay_time', 'extract_fingerprint'):
+        check(getattr(sr, name) is getattr(audio, name),
+              f'strike_remap.{name} is the audio compatibility alias')
+    for name in ('_FP_READ_SEC', '_FP_FFT_SIZE', '_FP_BRIGHT_HZ'):
+        check(getattr(sr, name) == getattr(audio, name),
+              f'strike_remap.{name} preserves the DSP constant')
+
+    # --- low-level DSP contracts ---
+    re = [1.0, -2.0, 0.5, 3.0]
+    im = [0.0] * len(re)
+    expected = [
+        sum(complex(value) * complex(
+            math.cos(-2 * math.pi * k * n / len(re)),
+            math.sin(-2 * math.pi * k * n / len(re)),
+        ) for n, value in enumerate(re))
+        for k in range(len(re))
+    ]
+    result = audio._fft(re, im)
+    check(result is None, 'FFT mutates its buffers in place')
+    check(all(abs(complex(re[k], im[k]) - expected[k]) < 1e-9
+              for k in range(len(re))),
+          'FFT matches a direct DFT on a deterministic vector')
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        stereo16 = root / 'stereo16.wav'
+        stereo16.write_bytes(_wav_bytes(
+            [(32767, -32768), (16384, 0), (0, 0)],
+            width=2, channels=2, rate=4,
+        ))
+        samples16, rate16 = audio._read_wav_mono(stereo16, 0.5)
+        check(rate16 == 4 and len(samples16) == 2,
+              'mono reader enforces its duration limit')
+        check(abs(samples16[0] + 1 / 65536) < 1e-12 and samples16[1] == 0.25,
+              '16-bit stereo channels are averaged and scaled')
+
+        stereo24 = root / 'stereo24.wav'
+        stereo24.write_bytes(_wav_bytes(
+            [(4194304, -4194304), (8388607, 0)],
+            width=3, channels=2, rate=8000,
+        ))
+        samples24, rate24 = audio._read_wav_mono(stereo24, None)
+        check(rate24 == 8000 and samples24[0] == 0.0,
+              '24-bit stereo channels are averaged')
+        check(abs(samples24[1] - (8388607 / 2 / 8388608)) < 1e-12,
+              '24-bit samples preserve the signed full-scale denominator')
+
+        unsupported = root / 'eight-bit.wav'
+        unsupported.write_bytes(_wav_bytes([0, 128, 255], width=1))
+        check(audio._read_wav_mono(unsupported, None) == (None, 0),
+              'unsupported sample widths return the safe fallback')
+        broken = root / 'broken.wav'
+        broken.write_bytes(b'not a wav')
+        check(audio._read_wav_mono(broken, None) == (None, 0),
+              'malformed WAVs return the safe fallback')
+
+    check(audio._decay_time([], 10, 1000) == 0.0,
+          'an empty envelope has zero decay')
+    check(audio._decay_time([0.0, 0.0], 10, 1000) == 0.0,
+          'a silent envelope has zero decay')
+    check(audio._decay_time([0.2, 1.0, 0.5, 0.09], 10, 1000) == 0.02,
+          'decay measures from the peak to the first -20 dB block')
+    check(audio._decay_time([1.0, 0.5, 0.2], 10, 1000) == 0.03,
+          'non-decaying envelopes return the remaining window length')
+
+    fp = {n: audio.extract_fingerprint(FIX / (n + '.wav')) for n in NAMES}
     for n in NAMES:
         check(fp[n] is not None, f'{n}: extractor returned a fingerprint')
     if fails:
