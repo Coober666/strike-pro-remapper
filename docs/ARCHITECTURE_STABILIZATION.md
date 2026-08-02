@@ -23,6 +23,10 @@ stateful.
 - Extract embedded JavaScript to a temporary build directory and lint that exact artifact.
 - Preserve the existing viewer extraction and single-file bundle checks.
 
+The current Playwright beachhead covers the start screen and its handoff into the editor. The
+remaining browser-safety backlog is deploy, relink, A/B rack editing, and autosave; backend
+work must not treat those surfaces as browser-covered until their workflows land.
+
 ## Phase 2a: mechanically extract pure clusters
 
 Move transitively pure code without redesigning behavior:
@@ -67,6 +71,8 @@ stabilization. Any such change requires a separate product decision.
 ## Delivery rules
 
 - Keep `main` releasable after every PR.
-- Separate mechanical extraction from behavioral changes.
+- Keep mechanical extraction literal: preserve names, bodies, formatting, comments, and
+  docstrings in the relocation commit. Put renames, reflow, and cleanup in a separate commit
+  after equivalence validation.
 - Do not impose a blanket feature freeze; avoid only changes that overlap an active extraction.
 - Never weaken byte-for-byte format tests or generated-viewer drift gates.
