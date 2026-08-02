@@ -11,17 +11,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import strike_remap as sr
+from strike_remapper import formats
 
 
 def test_file(path: Path) -> bool:
     original = path.read_bytes()
     try:
-        kit_raw, pads, instruments, tail = sr.parse_skt(original)
+        kit_raw, pads, instruments, tail = formats.parse_skt(original)
     except Exception as e:
         print(f'  PARSE ERROR  {e}')
         return False
 
-    rebuilt = sr.build_skt(kit_raw, pads, instruments, tail)
+    rebuilt = formats.build_skt(kit_raw, pads, instruments, tail)
 
     if original == rebuilt:
         print(f'  PASS  ({len(original)} bytes)')
@@ -41,6 +42,11 @@ def test_file(path: Path) -> bool:
 
 
 def main():
+    for name in ('parse_skt', 'build_skt'):
+        if getattr(sr, name) is not getattr(formats, name):
+            print(f'FAIL strike_remap.{name} is not the formats compatibility alias')
+            sys.exit(1)
+
     if len(sys.argv) > 1:
         paths = [Path(p) for p in sys.argv[1:]]
     else:
