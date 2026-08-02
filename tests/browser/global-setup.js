@@ -2,6 +2,8 @@ import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'nod
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
+import { resolvePython } from '../../tools/python.mjs';
+
 const buildDir = path.resolve('.build');
 const pidFile = path.join(buildDir, 'browser-server.pid');
 const logFile = path.join(buildDir, 'browser-server.log');
@@ -9,8 +11,14 @@ const port = 8767;
 
 export default async function globalSetup() {
   mkdirSync(buildDir, { recursive: true });
+  const python = resolvePython();
   const log = openSync(logFile, 'w');
-  const server = spawn('python', ['tools/browser_test_server.py', '--port', String(port)], {
+  const server = spawn(python.command, [
+    ...python.args,
+    'tools/browser_test_server.py',
+    '--port',
+    String(port),
+  ], {
     cwd: process.cwd(),
     detached: false,
     stdio: ['ignore', log, log],

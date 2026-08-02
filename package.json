@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "extract:embedded-js": "python tools/extract_embedded_js.py",
+    "extract:embedded-js": "node tools/python.mjs tools/extract_embedded_js.py",
+    "make:fixtures": "node tools/python.mjs tools/make_fixtures.py",
     "lint:js": "npm run extract:embedded-js && eslint .build/embedded.js && node --check .build/embedded.js",
-    "test:browser": "python tools/make_fixtures.py && playwright test"
+    "test:python": "node tools/test_python.mjs",
+    "test:browser": "npm run make:fixtures && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
