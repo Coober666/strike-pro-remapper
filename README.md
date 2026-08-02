@@ -305,6 +305,21 @@ Bug reports and format discoveries are very welcome — especially hardware hex-
 confirmations of the ⚠️ items above (change one value on the module, save the kit, run
 `python tools/hex_explorer.py <kit.skt> <pad>`, and open an issue with the diff).
 
+For development, Python remains dependency-free. The optional pinned Node toolchain adds
+JavaScript linting and real-browser regression tests:
+
+```bash
+npm ci
+npm run lint:js
+npx playwright install chromium
+npm run test:browser
+```
+
+The browser suite runs the real embedded application against a throwaway library under
+`.build/`; it does not access connected Strike cards or your working library. See
+[`docs/ARCHITECTURE_STABILIZATION.md`](docs/ARCHITECTURE_STABILIZATION.md) for the phased
+stabilization and decomposition roadmap.
+
 ## License
 
 [MIT](LICENSE)

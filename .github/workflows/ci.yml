@@ -63,13 +63,40 @@ jobs:
 
       - name: Embedded JS syntax check
         run: |
-          python - <<'EOF'
-          import importlib.util, re, pathlib
-          spec = importlib.util.spec_from_file_location('sr', 'strike_remap.py')
-          sr = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(sr)
-          m = re.findall(r'<script>(.*?)</script>', sr.HTML, re.S)
-          assert m, 'no script block found'
-          pathlib.Path('embedded.js').write_text('\n'.join(m), encoding='utf-8')
-          EOF
-          node --check embedded.js
+          python tools/extract_embedded_js.py
+          node --check .build/embedded.js
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install pinned JS tooling
+        run: npm ci
+
+      - name: Lint embedded editor JavaScript
+        run: npm run lint:js
+
+      - name: Install pinned Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser workflows
+        run: npm run test:browser
+
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures
+          path: test-results/
+          if-no-files-found: ignore

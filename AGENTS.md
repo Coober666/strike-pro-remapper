@@ -14,6 +14,11 @@ Single-file Python web app (`strike_remap.py`) for editing Alesis Strike Pro dru
 - `python tools/extract_viewer.py --check` fails the build if `web/viewer/` drifts from the
   embedded UI. After ANY change to the HTML/CSS/JS inside `strike_remap.py`, run
   `python tools/extract_viewer.py` and commit the regenerated files alongside your change.
+- `npm run lint:js` extracts the embedded editor JavaScript to `.build/embedded.js`, then
+  runs pinned ESLint rules and `node --check` against that exact artifact.
+- `npm run test:browser` generates synthetic fixtures and runs the pinned Playwright/Chromium
+  suite against an isolated `.build/browser-library`; it must never inspect the developer's
+  real library or connected cards.
 
 **README.md is user-facing and must stay current**: whenever a feature ships, a format
 discovery lands, or the verification status of an offset changes, update README.md in the
@@ -551,7 +556,12 @@ dist/                        # git-ignored — build output: strike_viewer.html 
 docs/
   screenshot.png             # README hero screenshot (captured from the running app)
   QA_PLAYBOOK.md             # fresh-start UAT procedure (agent-run, human-in-the-loop; phases A–D)
+  ARCHITECTURE_STABILIZATION.md  # phased safety/decomposition roadmap
+tests/
+  browser/                   # Playwright workflows + deterministic server lifecycle
 tools/
+  browser_test_server.py     # isolated real-app server for Playwright (no physical cards)
+  extract_embedded_js.py     # write .build/embedded.js for ESLint/node --check
   extract_viewer.py          # regenerate web/viewer/* from the embedded UI; --check in CI
   hex_explorer.py            # annotated hex dump tool for .skt files
   make_metal_kit.py          # generates a baseline metal kit from library instruments
@@ -571,6 +581,7 @@ tools/
 PLANNED.md                   # feature backlog (all medium items now done)
 RESEARCH.md                  # community research, official editor reverse-engineering notes
 FORMAT.md                    # public .skt/.sin format spec — keep in sync with offset tables here
+package.json/package-lock.json  # pinned Playwright + ESLint development tooling only
 AGENTS.md                    # this file — canonical agent instructions (all providers)
 CLAUDE.md                    # pointer that imports AGENTS.md for Claude Code
 ```

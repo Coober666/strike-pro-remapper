@@ -1,0 +1,15 @@
+{
+  "name": "strike-pro-remapper-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "extract:embedded-js": "python tools/extract_embedded_js.py",
+    "lint:js": "npm run extract:embedded-js && eslint .build/embedded.js && node --check .build/embedded.js",
+    "test:browser": "python tools/make_fixtures.py && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "eslint": "10.8.0",
+    "globals": "17.8.0"
+  }
+}
