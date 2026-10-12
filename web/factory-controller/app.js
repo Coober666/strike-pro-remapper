@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const hostSession = document.documentElement.dataset.hostSession === 'true';
 const pairing = new URLSearchParams(location.hash.slice(1)).get('pair');
 if (pairing) {
   if (pairing !== sessionStorage.getItem('strike_factory_pair')) sessionStorage.removeItem('strike_factory_job');
@@ -8,7 +9,7 @@ if (pairing) {
 window.addEventListener('hashchange', () => {
   if (new URLSearchParams(location.hash.slice(1)).get('pair')) location.reload();
 });
-let token = sessionStorage.getItem('strike_factory_pair') || '';
+let token = hostSession ? 'paired-editor-session' : sessionStorage.getItem('strike_factory_pair') || '';
 let busy = false;
 const message = text => { $('status').textContent = text; };
 function controls() {
@@ -16,13 +17,14 @@ function controls() {
   $('output').disabled = busy || !token;
   $('activate').disabled = busy || !token || !$('output').value;
   $('forget').disabled = busy;
-  $('pair-status').textContent = token ? 'Pairing link ready. Find the Strike to connect to its host.' : 'Open the pairing link shown on the USB host to begin.';
+  $('pair-status').textContent = hostSession ? 'Using your paired editor connection.' : token ? 'Pairing link ready. Find the Strike to connect to its host.' : 'Open the pairing link shown on the USB host to begin.';
+  if (hostSession) $('forget').textContent = 'Back to editor';
 }
 async function api(path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch(path, { signal:controller.signal, headers:{ Authorization:'Bearer ' + token, ...(body ? {'Content-Type':'application/json'} : {}) },
+    const response = await fetch(path, { signal:controller.signal, headers:{ ...(hostSession ? {} : {Authorization:'Bearer ' + token}), ...(body ? {'Content-Type':'application/json'} : {}) },
       ...(body ? {method:'POST', body:JSON.stringify(body)} : {}) });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || 'Controller request failed.');
@@ -66,6 +68,7 @@ $('activate').onclick = async () => {
   finally { busy = false; controls(); }
 };
 $('forget').onclick = () => {
+  if (hostSession) { location.assign('/'); return; }
   sessionStorage.removeItem('strike_factory_pair');
   sessionStorage.removeItem('strike_factory_job');
   token = ''; controls(); message('Pairing forgotten on this iPad.');

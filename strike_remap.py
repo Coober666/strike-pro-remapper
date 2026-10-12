@@ -3842,6 +3842,8 @@ body.viewer-mode #boot-screen { display:none !important; }
 #factory-card-dialog select { width:100%; margin:8px 0 16px; }
 .factory-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
 #factory-card-status { min-height:3em; color:var(--text); }
+.wifi-session { display:none; }
+html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 14px; background:#283127; color:#d1d7c7; font-size:.75rem; }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
@@ -4473,6 +4475,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     </div>
   </div>
 </div>
+<div class="wifi-session"><span>Wi-Fi editor · Files stay on the USB computer</span><button class="btn-secondary" type="button" onclick="wifiDisconnect()">Disconnect</button></div>
 <header class="app-topbar">
   <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
        style="cursor:pointer;" onclick="openStartScreen()"
@@ -5649,6 +5652,10 @@ function updateFactoryCardControls() {
 
 function showFactoryCard() {
   if (window.VIEWER || deployBusy) return;
+  if (document.documentElement.dataset.wifiEditor === 'true') {
+    window.open('/factory', '_blank', 'noopener');
+    return;
+  }
   const dialog = document.getElementById('factory-card-dialog');
   if (dialog.open) return;
   factoryFromStart = _startOpen;
@@ -6710,7 +6717,15 @@ async function api(path, body) {
     ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }
     : {};
   const r = await fetch('/api' + path, opts);
+  if (r.status === 401 && document.documentElement.dataset.wifiEditor === 'true') location.assign('/wifi/pair');
   return r.json();
+}
+
+async function wifiDisconnect() {
+  if (!await appConfirm('Disconnect this browser? The active kit stays on the host. Save any edits before stopping the host editor.', 'Disconnect')) return;
+  const response = await fetch('/wifi/logout', {method:'POST'});
+  if (response.ok) location.replace('/');
+  else setMsg('Could not disconnect. Try again.', true);
 }
 
 // In-app async replacement for window.confirm(): themed, and automatable —
