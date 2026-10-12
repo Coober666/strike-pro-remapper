@@ -5,7 +5,7 @@
   "scripts": {
     "extract:embedded-js": "node tools/python.mjs tools/extract_embedded_js.py",
     "make:fixtures": "node tools/python.mjs tools/make_fixtures.py",
-    "lint:js": "npm run extract:embedded-js && eslint .build/embedded.js && node --check .build/embedded.js",
+    "lint:js": "npm run extract:embedded-js && eslint .build/embedded.js web/factory-controller/app.js && node --check .build/embedded.js && node --check web/factory-controller/app.js",
     "test:python": "node tools/test_python.mjs",
     "test:browser": "npm run make:fixtures && playwright test"
   },

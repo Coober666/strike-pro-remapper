@@ -78,7 +78,8 @@ Sending MIDI and accessing the resulting mass-storage volume are separate concer
 A browser's Web MIDI endpoints belong to the **browser's machine**. If the Strike is
 plugged into a Pi but the browser runs on an iPad, MIDI activation must happen on the
 Pi through a backend, and the Pi must also handle card access. This bridge is a proposed
-architecture, not an existing feature. Direct Web MIDI requires a supported secure
+architecture for full editor access. A separate paired, activation-only host controller
+is now implemented; see [iPad Wi-Fi setup](IPAD_FACTORY_CONTROLLER.md). Direct Web MIDI requires a supported secure
 context and explicit SysEx permission.
 
 ### Current browser implementation
@@ -99,7 +100,8 @@ Factory write protection is unchanged; activation makes no card-file write reque
 
 Remote hostnames and the read-only viewer are blocked. This ensures the supported setup
 uses the same computer for Web MIDI and disk discovery; do not use a forwarded localhost
-port for this feature. There is no server MIDI bridge or iPad activation implementation.
+port for this local Web MIDI feature. The separate Wi-Fi controller provides native host
+MIDI for iPad activation; it does not expose the full editor. A direct-USB iPad app is paused.
 The browser workflow is covered by simulated MIDI/card tests, **not a new hardware run**.
 The native macOS protocol experiments above remain the hardware evidence.
 
