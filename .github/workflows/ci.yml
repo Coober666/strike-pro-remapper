@@ -90,8 +90,8 @@ jobs:
       - name: Lint embedded editor JavaScript
         run: npm run lint:js
 
-      - name: Install pinned Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install pinned Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Browser workflows
         run: npm run test:browser

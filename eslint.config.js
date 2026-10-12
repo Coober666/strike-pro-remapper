@@ -2,7 +2,7 @@ import globals from 'globals';
 
 export default [
   {
-    files: ['.build/embedded.js'],
+    files: ['.build/embedded.js', 'web/factory-controller/app.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',

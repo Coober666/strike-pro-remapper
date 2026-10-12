@@ -373,6 +373,18 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   automatic retry, backend MIDI bridge, or deactivation. Keep the read-only viewer blocked.
   Tests: `tests/browser/factory-card.spec.js` (simulated hardware). Do not infer a
   deactivation packet or general live-sync protocol.
+- **iPad Wi-Fi factory controller** is a separate opt-in service:
+  `python -m strike_remapper.factory_bridge --bind <private LAN IPv4>`. It exposes only
+  static controller assets, authenticated output discovery, fixed activation, and job
+  status. Never relax the full editor's localhost guard for this feature. Pairing uses
+  a fresh process token, exact Host/Origin checks, and no CORS. Native MIDI runs in a
+  bounded subprocess (CoreMIDI / WinMM / Linux amidi); only the captured activation packet
+  is sendable. Jobs deduplicate the latest 64 IDs and serialize activation; failures never
+  auto-retry. Card discovery uses read-only OS flags and factory content shape, **no write
+  probes**, and does not prove USB identity. Never claim Windows/Linux/iPad hardware
+  validation from simulated tests. See `docs/IPAD_FACTORY_CONTROLLER.md` and
+  `tools/test_factory_bridge.py`; `tests/browser/factory-controller.spec.js` runs in
+  Chromium and iPad WebKit. Direct-USB native iPad app work is paused and not included.
 - **Content shape alone cannot identify the factory card** (issue #39). A personal copy of the
   factory library on any drive has the same `Kits/<CATEGORY>/*.skt` shape, and picking it
   silently would bake the wrong inventory into a captured preset manifest. When several

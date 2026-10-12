@@ -99,9 +99,16 @@ Copying the library and capturing its inventory remain separate actions.
 The packet is hardware-confirmed on one Strike connected to an Intel Mac running Monterey,
 including after a module power cycle. The browser flow has automated tests with simulated
 MIDI and cards; Windows and Linux hardware validation is still needed. Remote browsers,
-iPad control, and the read-only web viewer are not supported for activation. See the
+iPad direct USB, and the read-only web viewer are not supported by this local flow. See the
 [protocol findings and evidence](docs/FACTORY_SD_ACTIVATION.md). Live parameter sync and
 deactivation remain unmapped.
+
+**iPad over Wi-Fi:** leave the Strike connected to your Mac, PC, or Pi and start the
+paired factory controller on that host. Open its pairing link in iPad Safari to request
+activation; the host handles MIDI and read-only card discovery. This companion exposes
+activation only, while the full editor remains local. See the
+[setup guide and validation limits](docs/IPAD_FACTORY_CONTROLLER.md). The native app
+for a USB cable connected directly to an iPad is paused.
 
 **Kits that came from another Strike library.** Commercial and hand-me-down kits often
 reference sounds by names your card does not use, so matching on filename finds nothing.

@@ -20,6 +20,11 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] }
+    },
+    {
+      name: 'ipad-webkit',
+      testMatch: '**/factory-controller.spec.js',
+      use: { ...devices['iPad Pro 11'], browserName: 'webkit' }
     }
   ]
 });
