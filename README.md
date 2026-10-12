@@ -80,13 +80,21 @@ this; if the message does appear, give it a few seconds and try again. If it kee
 leave the official Strike Editor open while you work — the module appears to hold on to the
 card when the editor is closed.
 
-**"Could not be verified" in preflight.** The module only exposes its factory card while the
-official Alesis Strike Editor is running, so with that closed the app cannot see factory
-sounds your kit uses. Those references are reported as a warning, never as an error —
+**"Could not be verified" in preflight.** The module's factory card needs an activation
+message before the computer can access it. The official Alesis Strike Editor sends that
+message; the remapper does not yet send it automatically. When the card is unavailable,
+factory sounds your kit uses are reported as a warning, never as an error —
 the module resolves them itself, so deploying is still safe. To silence the warning, open
 the official editor once so the factory card appears, then press **Capture factory card**
 in the Deploy dialog; the inventory is saved to `library/preset_manifest.json` and reused
 from then on. If a sound really is gone, **Fix broken paths** is the tool for that.
+
+**Factory-card activation discovery (October 2026).** A single MIDI SysEx message exposed
+the factory card with the official editor closed, including after a module power cycle.
+This is hardware-confirmed on one Strike connected to an Intel Mac running Monterey;
+Windows, Linux, and iPad operation remain untested. See the
+[protocol findings and evidence](docs/FACTORY_SD_ACTIVATION.md). This discovery does not
+add automatic activation or live parameter sync to the app.
 
 **Kits that came from another Strike library.** Commercial and hand-me-down kits often
 reference sounds by names your card does not use, so matching on filename finds nothing.

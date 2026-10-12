@@ -1,0 +1,644 @@
+{
+  "scope": "Projection of original evidence; personal identifiers omitted.",
+  "power_cycle": "User confirmed physical power cycle; agent verified post-cycle disk/process state.",
+  "runs": {
+    "editor-launch": {
+      "original_run": "capture-20261012T065056Z",
+      "events": [
+        {
+          "time_utc": "2026-10-12T06:50:56.986980+00:00",
+          "epoch": 1791787856.987006,
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "time_utc": "2026-10-12T06:51:02.260590+00:00",
+          "epoch": 1791787862.2606149,
+          "kind": "editor_launch_requested"
+        },
+        {
+          "time_utc": "2026-10-12T06:51:02.379774+00:00",
+          "epoch": 1791787862.3798242,
+          "kind": "editor_launch_returned",
+          "returncode": 0,
+          "stderr": ""
+        },
+        {
+          "time_utc": "2026-10-12T06:51:05.163195+00:00",
+          "epoch": 1791787865.163229,
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk6",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk6s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "time_utc": "2026-10-12T06:52:37.005585+00:00",
+          "epoch": 1791787957.005638,
+          "kind": "capture_complete",
+          "spy_exit": 0
+        }
+      ],
+      "disk_properties": {
+        "disk-info-000-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-000-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-008-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-008-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-008-disk6.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6",
+          "Internal": false,
+          "Size": 7948206080,
+          "TotalSize": 7948206080,
+          "WholeDisk": true,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        },
+        "disk-info-008-disk6s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 7944011776,
+          "TotalSize": 7939817472,
+          "WholeDisk": false,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        }
+      }
+    },
+    "shutdown-partial": {
+      "original_run": "shutdown-20261012T065615Z",
+      "events": [
+        {
+          "epoch": 1791788175.228332,
+          "utc": "2026-10-12T06:56:15.228345+00:00",
+          "kind": "precondition",
+          "editor_running": true,
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk6",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk6s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788175.298503,
+          "utc": "2026-10-12T06:56:15.298515+00:00",
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk6",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk6s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788179.682344,
+          "utc": "2026-10-12T06:56:19.682355+00:00",
+          "kind": "shutdown_requested"
+        },
+        {
+          "epoch": 1791788179.869078,
+          "utc": "2026-10-12T06:56:19.869091+00:00",
+          "kind": "shutdown_returned",
+          "returncode": 1,
+          "stdout": "",
+          "stderr": "68:72: execution error: Alesis Strike Editor got an error: User canceled. (-128)\n"
+        }
+      ],
+      "disk_properties": {
+        "disk-info-000-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-000-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-000-disk6.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6",
+          "Internal": false,
+          "Size": 7948206080,
+          "TotalSize": 7948206080,
+          "WholeDisk": true,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        },
+        "disk-info-000-disk6s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 7944011776,
+          "TotalSize": 7939817472,
+          "WholeDisk": false,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        }
+      }
+    },
+    "warm-replay": {
+      "original_run": "replay-20261012T065719Z",
+      "events": [
+        {
+          "epoch": 1791788240.003541,
+          "utc": "2026-10-12T06:57:20.003551+00:00",
+          "kind": "precondition",
+          "editor_running": false,
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788240.088976,
+          "utc": "2026-10-12T06:57:20.088987+00:00",
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788244.244373,
+          "utc": "2026-10-12T06:57:24.244384+00:00",
+          "kind": "replay_requested"
+        },
+        {
+          "epoch": 1791788244.979883,
+          "utc": "2026-10-12T06:57:24.979896+00:00",
+          "kind": "replay_returned",
+          "returncode": 0,
+          "stdout": "MIDISend endpoint=341483544 status=0 hex=F000000E480E330301F7\n",
+          "stderr": ""
+        },
+        {
+          "epoch": 1791788247.241354,
+          "utc": "2026-10-12T06:57:27.241364+00:00",
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk6",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk6s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788280.3695402,
+          "utc": "2026-10-12T06:58:00.369553+00:00",
+          "kind": "complete",
+          "editor_running": false,
+          "spy_exit": 0,
+          "disks": [
+            {
+              "device": "disk5",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk6",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk6s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "disk_properties": {
+        "disk-info-000-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-000-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-007-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-007-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-007-disk6.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6",
+          "Internal": false,
+          "Size": 7948206080,
+          "TotalSize": 7948206080,
+          "WholeDisk": true,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        },
+        "disk-info-007-disk6s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk6s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 7944011776,
+          "TotalSize": 7939817472,
+          "WholeDisk": false,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        }
+      }
+    },
+    "fresh-boot-replay": {
+      "original_run": "replay-20261012T070214Z",
+      "events": [
+        {
+          "epoch": 1791788534.3823931,
+          "utc": "2026-10-12T07:02:14.382406+00:00",
+          "kind": "precondition",
+          "editor_running": false,
+          "disks": [
+            {
+              "device": "disk2",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk2s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788534.4666948,
+          "utc": "2026-10-12T07:02:14.466708+00:00",
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk2",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk2s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788538.573695,
+          "utc": "2026-10-12T07:02:18.573705+00:00",
+          "kind": "replay_requested"
+        },
+        {
+          "epoch": 1791788538.920928,
+          "utc": "2026-10-12T07:02:18.920943+00:00",
+          "kind": "replay_returned",
+          "returncode": 0,
+          "stdout": "MIDISend endpoint=341483544 status=0 hex=F000000E480E330301F7\n",
+          "stderr": ""
+        },
+        {
+          "epoch": 1791788540.599215,
+          "utc": "2026-10-12T07:02:20.599225+00:00",
+          "kind": "disk_inventory",
+          "disks": [
+            {
+              "device": "disk2",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk2s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk5",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "epoch": 1791788574.780631,
+          "utc": "2026-10-12T07:02:54.780645+00:00",
+          "kind": "complete",
+          "editor_running": false,
+          "spy_exit": 0,
+          "disks": [
+            {
+              "device": "disk2",
+              "bytes": 15931539456,
+              "partitions": [
+                {
+                  "device": "disk2s1",
+                  "bytes": 15927345152,
+                  "filesystem_type": "Windows_FAT_32"
+                }
+              ]
+            },
+            {
+              "device": "disk5",
+              "bytes": 7948206080,
+              "partitions": [
+                {
+                  "device": "disk5s1",
+                  "bytes": 7944011776,
+                  "filesystem_type": "DOS_FAT_32"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "disk_properties": {
+        "disk-info-000-disk2.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk2",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-000-disk2s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk2s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-006-disk2.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk2",
+          "Internal": false,
+          "Size": 15931539456,
+          "TotalSize": 15931539456,
+          "WholeDisk": true,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": false
+        },
+        "disk-info-006-disk2s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk2s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 15927345152,
+          "TotalSize": 15923150848,
+          "WholeDisk": false,
+          "Writable": true,
+          "WritableMedia": true,
+          "WritableVolume": true
+        },
+        "disk-info-006-disk5.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5",
+          "Internal": false,
+          "Size": 7948206080,
+          "TotalSize": 7948206080,
+          "WholeDisk": true,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        },
+        "disk-info-006-disk5s1.plist": {
+          "BusProtocol": "USB",
+          "DeviceIdentifier": "disk5s1",
+          "FilesystemType": "msdos",
+          "Internal": false,
+          "Size": 7944011776,
+          "TotalSize": 7939817472,
+          "WholeDisk": false,
+          "Writable": false,
+          "WritableMedia": false,
+          "WritableVolume": false
+        }
+      }
+    }
+  }
+}
