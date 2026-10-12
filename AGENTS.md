@@ -363,6 +363,16 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   two `ALESIS STRIKE` USB disks: the user card online, and a second one reporting **`No
   Media`**. That second entry is the factory/preset LUN — present but empty until the official
   editor handshakes. Useful for diagnosing preset-card questions (see #33).
+  **Activation mapped October 12, 2026:** one `F0 00 00 0E 48 0E 33 03 01 F7`
+  SysEx sent to the Strike exposed the factory card with the editor closed, including
+  after a user-confirmed module power cycle on Intel macOS Monterey. See
+  `docs/FACTORY_SD_ACTIVATION.md` for evidence and limits. The explicit **Activate factory
+  card** dialog sends this packet through Web MIDI with SysEx permission. It is local-only
+  (localhost/loopback), filters for connected Strike outputs, skips sending if already mounted,
+  and confirms `/api/status` card discovery with a 15-second deadline. No startup activation,
+  automatic retry, backend MIDI bridge, or deactivation. Keep the read-only viewer blocked.
+  Tests: `tests/browser/factory-card.spec.js` (simulated hardware). Do not infer a
+  deactivation packet or general live-sync protocol.
 - **Content shape alone cannot identify the factory card** (issue #39). A personal copy of the
   factory library on any drive has the same `Kits/<CATEGORY>/*.skt` shape, and picking it
   silently would bake the wrong inventory into a captured preset manifest. When several
@@ -391,9 +401,10 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   candidate `.sin` (a filesystem read each, across the whole library).
   Test: `tools/test_relink.py`.
 - `load_tags()` / `save_tags()` / `set_instrument_tags()` — `library/tags.json` sidecar
-- **Deploy asset resolution has three states, not two** (issue #33). The module only exposes
-  its factory card while the official Strike Editor runs, so an unresolvable path does NOT
-  mean the file is gone. In `_deploy_plan()`'s `add_asset()`: resolved on a mounted volume →
+- **Deploy asset resolution has three states, not two** (issue #33). The module's factory
+  card needs activation (use the explicit Activate factory card action or official editor), so an
+  unresolvable path does NOT mean the file is gone. In `_deploy_plan()`'s `add_asset()`:
+  resolved on a mounted volume →
   `available`/`copy`/`present`/`conflict` as before; unresolvable but listed in the preset
   manifest → `available`; otherwise → `unverified`, which rolls up into ONE `warning` issue
   and **never blocks** (writing the `.skt` is harmless — the module resolves paths itself).

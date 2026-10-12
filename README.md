@@ -80,13 +80,28 @@ this; if the message does appear, give it a few seconds and try again. If it kee
 leave the official Strike Editor open while you work — the module appears to hold on to the
 card when the editor is closed.
 
-**"Could not be verified" in preflight.** The module only exposes its factory card while the
-official Alesis Strike Editor is running, so with that closed the app cannot see factory
-sounds your kit uses. Those references are reported as a warning, never as an error —
+**"Could not be verified" in preflight.** The module's factory card needs an activation
+message before the computer can access it. Use **Activate factory card** in Start,
+Tools, or Deploy to send it from this app. When the card is unavailable,
+factory sounds your kit uses are reported as a warning, never as an error —
 the module resolves them itself, so deploying is still safe. To silence the warning, open
-the official editor once so the factory card appears, then press **Capture factory card**
+the activation dialog and wait for the card to be detected, then press **Capture factory card**
 in the Deploy dialog; the inventory is saved to `library/preset_manifest.json` and reused
 from then on. If a sound really is gone, **Fix broken paths** is the tool for that.
+
+**Activate the factory card without the official editor.** Plug the Strike into the
+computer running both this app and its browser. Open `http://localhost:8765` in Chrome
+or Edge, choose **Activate factory card**, allow MIDI access with SysEx, select the Strike,
+and press **Activate factory card**. The app sends the verified message once and checks
+for the card for up to 15 seconds. It does not activate on startup or retry automatically.
+Copying the library and capturing its inventory remain separate actions.
+
+The packet is hardware-confirmed on one Strike connected to an Intel Mac running Monterey,
+including after a module power cycle. The browser flow has automated tests with simulated
+MIDI and cards; Windows and Linux hardware validation is still needed. Remote browsers,
+iPad control, and the read-only web viewer are not supported for activation. See the
+[protocol findings and evidence](docs/FACTORY_SD_ACTIVATION.md). Live parameter sync and
+deactivation remain unmapped.
 
 **Kits that came from another Strike library.** Commercial and hand-me-down kits often
 reference sounds by names your card does not use, so matching on filename finds nothing.

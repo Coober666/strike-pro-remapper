@@ -200,6 +200,28 @@ Reverb and FX are per-kit, not per-pad. You can adjust send levels per zone, but
 
 ## Technical Blockers by Category
 
+### Factory SD activation — hardware-confirmed October 12, 2026
+
+The factory card can be exposed without the official editor by sending exactly one
+MIDI SysEx message to the Strike's MIDI destination:
+
+```text
+F0 00 00 0E 48 0E 33 03 01 F7
+```
+
+Captured through Snoize MIDI Monitor's installed output-spy driver on an Intel Mac
+running macOS Monterey 12.7.6, then replayed with the editor closed. Both a post-editor
+test and a test after a user-confirmed module power cycle succeeded. The fresh-boot
+test exposed the 7.9 GB factory card approximately 1.983 seconds after transmission;
+the media and volume were read-only. No raw USB capture or SIP changes were needed.
+
+This establishes factory-card activation on the tested module, not live kit/parameter
+sync, an off command, or compatibility with all host platforms and firmware versions.
+The application's explicit **Activate factory card** dialog now sends this message
+using Web MIDI on the USB-connected computer, then checks for the mounted card. Browser
+tests use simulated hardware; native macOS replay remains the hardware evidence. See
+[the full findings, platform limits, and evidence](docs/FACTORY_SD_ACTIVATION.md).
+
 ### USB / Hardware Access
 
 - **WebUSB API**: Chromium-only, cannot access USB Mass Storage class devices (OS claims them at driver level) — cannot reach SD card this way

@@ -513,6 +513,14 @@ body.viewer-mode #boot-screen { display:none !important; }
 .deploy-actions .deploy-spacer { flex:1; color:#69716a; font:.5rem/1.3 Consolas,monospace; }
 @media (max-width:620px) { #deploy-modal{padding:7px;align-items:flex-start}.deploy-console{width:100%;max-height:calc(100vh - 14px)}.deploy-destination,.deploy-route{grid-template-columns:1fr}.deploy-route-arrow{transform:rotate(90deg)}.deploy-actions{flex-wrap:wrap}.deploy-actions .deploy-spacer{flex-basis:100%;order:-1} }
 @media (prefers-reduced-motion:reduce) { .deploy-progress-line i{animation:none;width:100%} }
+#factory-card-dialog { width:min(520px,92vw); max-height:calc(100vh - 32px); overflow:auto; margin:auto; box-sizing:border-box; padding:24px; color:var(--text); background:var(--raised); border:1px solid var(--border); border-radius:8px; }
+#factory-card-dialog::backdrop { background:#050706b8; backdrop-filter:blur(4px); }
+#factory-card-dialog h3 { margin:0 0 12px; }
+#factory-card-dialog p { margin:12px 0; font-size:.85rem; line-height:1.5; }
+#factory-card-dialog select { width:100%; margin:8px 0 16px; }
+.factory-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
+#factory-card-status { min-height:3em; color:var(--text); }
+body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
 .sim-row { display:flex; align-items:center; gap:8px; padding:5px 6px; border-bottom:1px solid #222b3a; font-size:.76rem; }

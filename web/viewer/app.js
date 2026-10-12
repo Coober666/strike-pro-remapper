@@ -754,6 +754,154 @@ async function vmRefreshManifest() {
   } catch(e){}
 }
 
+// ── Factory card activation (explicit, local Web MIDI only) ──────────────────
+const FACTORY_SD_ACTIVATE = Object.freeze([0xF0,0x00,0x00,0x0E,0x48,0x0E,0x33,0x03,0x01,0xF7]);
+let factoryAccess = null;
+let factoryOperation = null;
+let factoryFromStart = false;
+
+function factoryCardUnavailableReason() {
+  if (window.VIEWER) return 'Factory-card activation needs the full editor running on this computer.';
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+    return 'Open the editor at http://localhost:8765 on the computer connected to the Strike. Remote-browser activation is not supported yet.';
+  }
+  if (!window.isSecureContext || !navigator.requestMIDIAccess) {
+    return 'This browser cannot send MIDI here. Use a Web MIDI browser such as Chrome or Edge on the computer connected to the Strike.';
+  }
+  return '';
+}
+
+function factoryCardMessage(message) {
+  document.getElementById('factory-card-status').textContent = message;
+}
+
+function factoryCardOutputs() {
+  return factoryAccess ? Array.from(factoryAccess.outputs.values()).filter(
+    out => out.state === 'connected' && /\bstrike\b/i.test(out.name || '')
+  ) : [];
+}
+
+function renderFactoryCardOutputs() {
+  const select = document.getElementById('factory-card-output');
+  const previous = select.value;
+  const outputs = factoryCardOutputs();
+  select.innerHTML = '<option value="">Select the connected Strike</option>' + outputs.map(
+    out => `<option value="${escHtml(out.id)}">${escHtml(out.name)}${out.manufacturer ? ' — ' + escHtml(out.manufacturer) : ''}</option>`
+  ).join('');
+  if (outputs.some(out => out.id === previous)) select.value = previous;
+  else if (outputs.length === 1) select.value = outputs[0].id;
+  updateFactoryCardControls();
+}
+
+function updateFactoryCardControls() {
+  const blocked = Boolean(factoryCardUnavailableReason());
+  const busy = Boolean(factoryOperation);
+  const select = document.getElementById('factory-card-output');
+  select.disabled = blocked || busy || !factoryAccess;
+  document.getElementById('factory-card-connect').disabled = blocked || busy;
+  document.getElementById('factory-card-send').disabled = blocked || busy || !select.value;
+}
+
+function showFactoryCard() {
+  if (window.VIEWER || deployBusy) return;
+  const dialog = document.getElementById('factory-card-dialog');
+  if (dialog.open) return;
+  factoryFromStart = _startOpen;
+  if (_startOpen) closeStartScreen();
+  closeAllPopovers();
+  dialog.showModal();
+  renderFactoryCardOutputs();
+  factoryCardMessage(factoryCardUnavailableReason() || 'Connect MIDI, select your Strike, then activate its factory card.');
+}
+
+function closeFactoryCard() {
+  if (factoryOperation) factoryOperation.abort();
+  factoryOperation = null;
+  document.getElementById('factory-card-dialog').close();
+  if (factoryFromStart) { factoryFromStart = false; void openStartScreen(); }
+}
+
+async function connectFactoryCard() {
+  if (factoryOperation || factoryCardUnavailableReason() || !document.getElementById('factory-card-dialog').open) return;
+  const operation = new AbortController();
+  factoryOperation = operation;
+  updateFactoryCardControls();
+  factoryCardMessage('Waiting for MIDI permission…');
+  try {
+    const access = factoryAccess || (trigAccess?.sysexEnabled ? trigAccess : await navigator.requestMIDIAccess({sysex:true}));
+    if (operation.signal.aborted) return;
+    if (!access.sysexEnabled) throw new Error('MIDI SysEx permission is required to activate the factory card.');
+    if (factoryAccess !== access) {
+      factoryAccess = access;
+      access.addEventListener('statechange', () => {
+        if (document.getElementById('factory-card-dialog').open && !factoryOperation) renderFactoryCardOutputs();
+      });
+    }
+    renderFactoryCardOutputs();
+    factoryCardMessage(factoryCardOutputs().length
+      ? 'Select your connected Strike, then press Activate factory card.'
+      : 'No connected Strike MIDI output found. Check USB and power, then connect again.');
+  } catch (err) {
+    if (!operation.signal.aborted) factoryCardMessage('MIDI connection failed: ' + err.message);
+  } finally {
+    if (factoryOperation === operation) { factoryOperation = null; updateFactoryCardControls(); }
+  }
+}
+
+async function activateFactoryCard() {
+  if (factoryOperation || factoryCardUnavailableReason() || !document.getElementById('factory-card-dialog').open) return;
+  const id = document.getElementById('factory-card-output').value;
+  const output = factoryCardOutputs().find(out => out.id === id);
+  if (!output || !factoryAccess?.sysexEnabled) {
+    factoryCardMessage('Select a connected Strike MIDI output with SysEx permission.');
+    renderFactoryCardOutputs();
+    return;
+  }
+  const operation = new AbortController();
+  factoryOperation = operation;
+  updateFactoryCardControls();
+  let timedOut = false;
+  let sent = false;
+  const timeout = setTimeout(() => { timedOut = true; operation.abort(); }, 15000);
+  const status = async () => {
+    const response = await fetch('/api/status', {signal:operation.signal});
+    if (!response.ok) throw new Error('Could not check connected cards.');
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+  try {
+    factoryCardMessage('Checking connected cards…');
+    let state = await status();
+    operation.signal.throwIfAborted();
+    if (!state.preset_mounted) {
+      if (output.state !== 'connected' || factoryAccess.outputs.get(id) !== output) throw new Error('The selected Strike disconnected. Reconnect it and try again.');
+      output.send(new Uint8Array(FACTORY_SD_ACTIVATE));
+      sent = true;
+      factoryCardMessage('Activation sent. Waiting for the factory card…');
+      do {
+        await new Promise(resolve => { setTimeout(resolve, 500); });
+        if (operation.signal.aborted) break;
+        if (output.state !== 'connected') throw new Error('The selected Strike disconnected before its factory card appeared.');
+        state = await status();
+      } while (!state.preset_mounted);
+    }
+    if (operation.signal.aborted) {
+      if (timedOut && factoryOperation === operation) factoryCardMessage('The factory card was not confirmed within 15 seconds. Check USB and power, then try again. No automatic retry was sent.');
+      return;
+    }
+    factoryCardMessage(sent ? 'Factory card detected. You can now copy its library or capture its inventory.' : 'Factory card is already available. No activation message was sent.');
+    void checkStatus().catch(() => {});
+    if (document.getElementById('deploy-modal').classList.contains('open')) void loadDeployPreflight();
+  } catch (err) {
+    if (timedOut && factoryOperation === operation) factoryCardMessage('The factory card was not confirmed within 15 seconds. Check USB and power, then try again. No automatic retry was sent.');
+    else if (!operation.signal.aborted) factoryCardMessage((sent ? 'Activation sent, but card detection failed: ' : 'Activation failed: ') + err.message);
+  } finally {
+    clearTimeout(timeout);
+    if (factoryOperation === operation) { factoryOperation = null; renderFactoryCardOutputs(); }
+  }
+}
+
 // ── Trigger settings backup (SysEx over Web MIDI) ─────────────────────────────
 // The module's trigger config (per-input sensitivity, scan time, xTalk, MIDI
 // mapping) lives in firmware, not on the SD card. Its Send function emits it as
@@ -3393,7 +3541,7 @@ function renderStartScreen(d) {
                                : 'Not connected — local editing still works')
     + startNode(d.preset_mounted, 'Factory card',
                 d.preset_mounted ? 'Connected'
-                                 : 'Not connected — open the official editor to expose it');
+                                 : 'Not connected — use Activate factory card to connect it');
 
   document.getElementById('start-counts').innerHTML =
       `<div class="start-count"><b>${kitCount.toLocaleString()}</b><span>Kits</span></div>`
@@ -5096,6 +5244,7 @@ function renderDeployPreflight(plan) {
   // matters when something went unverified.
   const capture = document.getElementById('deploy-capture');
   capture.style.display = (unverified && plan.preset_mounted) ? '' : 'none';
+  document.getElementById('deploy-activate').style.display = plan.preset_mounted ? 'none' : '';
   document.getElementById('deploy-action-note').textContent = !plan.ready
     ? 'Resolve the blocking checks, then run preflight again.'
     : unverified
@@ -5305,6 +5454,8 @@ async function checkStatus() {
 
   // Global keyboard shortcuts
   document.addEventListener('keydown', e => {
+    // The native factory-card dialog owns focus and keyboard actions while open.
+    if (document.getElementById('factory-card-dialog').open) return;
     // Don't intercept when focus is inside a text input
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;

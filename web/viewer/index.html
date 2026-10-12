@@ -144,6 +144,8 @@
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('tools-menu');loadTools()">&#x1F527; Tools &#9660;</button>
     <div id="tools-menu" class="tb-popover" style="display:none;right:0;left:auto;min-width:260px;max-height:60vh;overflow-y:auto;">
+      <button class="btn-secondary" data-factory-card style="width:100%;font-size:.72rem;margin-bottom:6px;"
+        onclick="showFactoryCard()">Activate factory card…</button>
       <button class="btn-secondary" style="width:100%;font-size:.72rem;margin-bottom:6px;"
         title="Back up / restore the module's trigger settings (sensitivity, xTalk, scan time) via MIDI SysEx — Chrome/Edge only"
         onclick="showTrigModal()">&#x1F39B; Trigger settings backup&#x2026;</button>
@@ -414,6 +416,7 @@
     <div id="deploy-body" class="deploy-body"></div>
     <div class="deploy-actions">
       <span id="deploy-action-note" class="deploy-spacer">The factory preset card is never written.</span>
+      <button id="deploy-activate" data-factory-card class="btn-secondary" type="button" onclick="showFactoryCard()">Activate factory card…</button>
       <button id="deploy-capture" class="btn-secondary" type="button" style="display:none;" onclick="capturePresetManifest()" title="Record what the factory card holds so later preflights can verify these references without the official editor open">Capture factory card</button>
       <button id="deploy-refresh" class="btn-secondary" type="button" onclick="loadDeployPreflight()">Run preflight again</button>
       <button id="deploy-cancel" class="btn-secondary" type="button" onclick="closeDeploy()">Close</button>
@@ -506,6 +509,7 @@
     <div class="start-sec">On this computer</div>
     <div id="start-counts" class="start-counts"></div>
     <p id="start-note" class="start-note"></p>
+    <button class="btn-secondary" data-factory-card type="button" onclick="showFactoryCard()">Activate factory card…</button>
   </div>
   <div class="start-main">
     <div id="start-eyebrow" class="start-eyebrow">Start</div>
@@ -580,6 +584,25 @@
     </div>
   </div>
 </div>
+
+<!-- Explicit activation; no MIDI permission or sends until the user acts. -->
+<dialog id="factory-card-dialog" aria-labelledby="factory-card-title"
+        oncancel="event.preventDefault();closeFactoryCard()">
+  <h3 id="factory-card-title">Activate factory card</h3>
+  <p>Connect the Strike by USB to this computer and run the editor here. This makes
+    the factory card available without opening the official Alesis editor. It does not
+    copy or change card files.</p>
+  <button id="factory-card-connect" class="btn-secondary" type="button" onclick="connectFactoryCard()">Connect MIDI</button>
+  <p><label for="factory-card-output">Strike MIDI output</label></p>
+  <select id="factory-card-output" class="midi-select" onchange="updateFactoryCardControls()" disabled>
+    <option value="">Select the connected Strike</option>
+  </select>
+  <div class="factory-card-actions">
+    <button id="factory-card-send" class="btn-primary" type="button" onclick="activateFactoryCard()" disabled>Activate factory card</button>
+    <button class="btn-secondary" type="button" onclick="closeFactoryCard()">Close</button>
+  </div>
+  <p id="factory-card-status" role="status" aria-live="polite"></p>
+</dialog>
 
 <!-- Trigger settings backup modal (SysEx) -->
 <div id="trig-modal" onclick="if(event.target===this)this.classList.remove('open')">
