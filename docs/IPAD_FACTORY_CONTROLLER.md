@@ -5,8 +5,9 @@ The iPad opens a paired controller in Safari; the host sends the verified activa
 message and checks for its mounted read-only factory library. Web MIDI is not needed
 on the iPad, and no browser needs to remain open on the USB host.
 
-This is an **activation companion**, not the full kit editor. The editor continues to
-bind to localhost. Direct USB from an iPad needs a native app; that work is paused.
+This service is an **activation companion**. For kit editing and deployment from an
+iPad, use the separate [paired full Wi-Fi editor](WIFI_EDITOR.md). Normal editor startup
+still binds to localhost. Direct USB from an iPad needs a native app; that work is paused.
 
 ## Start and pair
 
@@ -87,8 +88,16 @@ Strike attached to Windows). The new controller's sends and card transitions use
 simulated hardware in tests. The macOS native transport also delivered exactly one
 evidence-matching packet to a temporary virtual CoreMIDI destination; that test sent
 nothing to the real module. Its browser flow is tested in Chromium and WebKit with
-an iPad viewport and Web MIDI disabled. These are not physical iPad or Linux hardware
-tests, and the new native sender backends still need end-to-end device validation.
+an iPad viewport and Web MIDI disabled. Those automated tests do not establish physical
+iPad or Linux hardware validation.
+
+**Subsequent physical-device run, October 12, 2026:** the user activated factory access
+from the iPad and reported “Read-only factory library detected”; Mac inspection confirmed
+the Strike's factory card mounted read-only. The separate full editor then completed a
+user-operated iPad edit, Mac save, and user-card deployment, with byte-for-byte file
+verification and user-confirmed playback. See the [hardware verification and user-card
+recovery record](WIFI_EDITOR.md#hardware-verification-october-12-2026). Windows/Linux
+native activation hardware and direct iPad USB remain unverified.
 
 Implementation: `strike_remapper/factory_bridge.py`, `factory_midi.py`, and
 `web/factory-controller/`. Tests: `tools/test_factory_bridge.py` and

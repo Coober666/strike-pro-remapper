@@ -804,6 +804,10 @@ function updateFactoryCardControls() {
 
 function showFactoryCard() {
   if (window.VIEWER || deployBusy) return;
+  if (document.documentElement.dataset.wifiEditor === 'true') {
+    window.open('/factory', '_blank', 'noopener');
+    return;
+  }
   const dialog = document.getElementById('factory-card-dialog');
   if (dialog.open) return;
   factoryFromStart = _startOpen;
@@ -1866,7 +1870,15 @@ async function api(path, body) {
     ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }
     : {};
   const r = await fetch('/api' + path, opts);
+  if (r.status === 401 && document.documentElement.dataset.wifiEditor === 'true') location.assign('/wifi/pair');
   return r.json();
+}
+
+async function wifiDisconnect() {
+  if (!await appConfirm('Disconnect this browser? The active kit stays on the host. Save any edits before stopping the host editor.', 'Disconnect')) return;
+  const response = await fetch('/wifi/logout', {method:'POST'});
+  if (response.ok) location.replace('/');
+  else setMsg('Could not disconnect. Try again.', true);
 }
 
 // In-app async replacement for window.confirm(): themed, and automatable —

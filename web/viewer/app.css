@@ -520,6 +520,8 @@ body.viewer-mode #boot-screen { display:none !important; }
 #factory-card-dialog select { width:100%; margin:8px 0 16px; }
 .factory-card-actions { display:flex; gap:8px; flex-wrap:wrap; }
 #factory-card-status { min-height:3em; color:var(--text); }
+.wifi-session { display:none; }
+html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 14px; background:#283127; color:#d1d7c7; font-size:.75rem; }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }

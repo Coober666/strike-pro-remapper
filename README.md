@@ -103,12 +103,19 @@ iPad direct USB, and the read-only web viewer are not supported by this local fl
 [protocol findings and evidence](docs/FACTORY_SD_ACTIVATION.md). Live parameter sync and
 deactivation remain unmapped.
 
-**iPad over Wi-Fi:** leave the Strike connected to your Mac, PC, or Pi and start the
-paired factory controller on that host. Open its pairing link in iPad Safari to request
-activation; the host handles MIDI and read-only card discovery. This companion exposes
-activation only, while the full editor remains local. See the
-[setup guide and validation limits](docs/IPAD_FACTORY_CONTROLLER.md). The native app
-for a USB cable connected directly to an iPad is paused.
+**Full editor on iPad over Wi-Fi:** leave the Strike connected to your computer and run
+`python3 -m strike_remapper.wifi_editor --bind <computer-LAN-IP> --library-root <library-folder>`
+with Python 3.10+. Open the printed private pairing link on your iPad, on the same trusted
+Wi-Fi network. Use **HTTP**, including in Brave. Open kits, edit pads and instruments,
+audition sounds, and save to the computer's library. Deploy remains an explicit action.
+**Activate factory card** uses the computer's MIDI connection in this mode.
+**Hardware verified October 12, 2026:** an iPad user changed SEVENzREC's snare sound,
+saved it to an Intel MacBook's library, deployed it to the Strike's user card, and
+confirmed the changed sound on the module. The deployed kit matched the saved library
+copy byte-for-byte. See the [verification record and Mac card-recovery notes](docs/WIFI_EDITOR.md#hardware-verification-october-12-2026).
+See [full-editor setup and limitations](docs/WIFI_EDITOR.md). The separate
+[activation-only controller](docs/IPAD_FACTORY_CONTROLLER.md) remains available.
+The native app for a USB cable connected directly to an iPad is paused.
 
 **Kits that came from another Strike library.** Commercial and hand-me-down kits often
 reference sounds by names your card does not use, so matching on filename finds nothing.
@@ -290,8 +297,10 @@ Reverse-engineered formats deserve paranoia. Here is how your files are protecte
   copy; the preset SD volume is never written.
 - **Undo, autosave, and snapshots.** 20-step in-memory undo, crash-recovery autosave,
   and the kit time machine's persistent snapshots on every load/save.
-- **Local-only server.** The app binds `127.0.0.1` and rejects requests whose
-  Host/Origin isn't localhost, so a random webpage can't reach your kit files.
+- **Local by default, paired Wi-Fi by choice.** Normal startup binds `127.0.0.1` and
+  checks localhost Host/Origin. The separate Wi-Fi startup requires a private pairing
+  link, expiring browser sessions, and exact Host/Origin checks. It grants full editor
+  access; use only on a trusted LAN without port forwarding.
 - **Experimental features are labeled.** SysEx *restore-to-module* and the inferred
   (not hex-diff-anchored) FX/reverb type names are marked as such in the UI.
 

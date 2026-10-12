@@ -385,6 +385,26 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   validation from simulated tests. See `docs/IPAD_FACTORY_CONTROLLER.md` and
   `tools/test_factory_bridge.py`; `tests/browser/factory-controller.spec.js` runs in
   Chromium and iPad WebKit. Direct-USB native iPad app work is paused and not included.
+- **Full Wi-Fi editor** is a separate opt-in `strike_remapper.wifi_editor` entry point.
+  It subclasses `Handler` with pairing/session and exact Host/Origin guards; normal
+  `strike_remap.py` remains localhost-only. Every editor API and stream requires a valid
+  HttpOnly, SameSite=Strict session; writes additionally require matching Origin.
+  Pairing and sessions are process-scoped; logout revokes one session, expiry is 12 hours.
+  `--library-root` persists host files independently of releases. Browsers share the
+  existing single active-kit state: one editing client at a time. LAN HTTP does not
+  encrypt traffic; do not expose publicly. The Wi-Fi HTML marks the root element so
+  factory activation uses the native host controller, while local Web MIDI is unchanged.
+  `tools/test_wifi_editor.py` checks auth boundaries; `tests/browser/wifi-editor.spec.js`
+  checks actual editing/saving on an isolated library in Chromium and iPad WebKit.
+  **Physical iPad → Intel Mac → Strike verified October 12, 2026:** user changed
+  SEVENzREC snare Layer A from BJ DWMaple Center to BJ DWBallad Center, saved on the
+  Mac, deployed from iPad, and confirmed playback. Independent reads verified Save
+  changed only the library kit, then Deploy made the user-card kit byte-identical.
+  Layer B stayed NAC14inMaple Center. See `docs/WIFI_EDITOR.md` for evidence and limits.
+  A separate missing-user-card incident was a macOS `loginwindow` mount veto followed
+  by eject (`0xF8DA0008`), before the full editor started. Unlock/safe eject/USB reconnect
+  recovered both cards without a module power cycle. The underlying policy reason was
+  not established; do not assert a lock-screen rule, alter SIP, or guess protocol bytes.
 - **Content shape alone cannot identify the factory card** (issue #39). A personal copy of the
   factory library on any drive has the same `Kits/<CATEGORY>/*.skt` shape, and picking it
   silently would bake the wrong inventory into a captured preset manifest. When several
