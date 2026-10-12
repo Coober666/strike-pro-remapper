@@ -43,11 +43,79 @@ This does not make kit edits live on the module; deploy and reload the kit there
   features such as live pad input and trigger SysEx backup still require a supported
   local browser. Wi-Fi forwards only the verified factory activation command through MIDI.
 - Native activation is verified on the Intel MacBook/Monterey with the Strike. Windows
-  and Linux adapters remain hardware-unverified. Chromium and simulated iPad WebKit tests
-  cover pairing, actual synthetic-kit edit/save/reload, logout, and host activation routing;
-  they do not establish physical iPad or non-Mac hardware validation.
+  and Linux adapters remain hardware-unverified. The physical iPad-to-Mac workflow below
+  is verified separately from automated tests. Chromium and simulated iPad WebKit tests
+  cover pairing, actual synthetic-kit edit/save/reload, logout, and host activation routing.
 - Direct USB from iPad to Strike needs the paused native iPad app and is not included here.
 
 The earlier “Read-only factory library detected” result confirms the host found a mounted,
 read-only volume with the factory content shape after activation. It is not a general
 live-editing protocol or a raw USB capture, and content shape alone is not proof of USB identity.
+
+## Hardware verification: October 12, 2026
+
+Verified with a physical iPad controlling the full editor over Wi-Fi, a late-2016 Intel
+MacBook Pro running macOS Monterey 12.7.6 and Python 3.14.3, and an Alesis Strike attached
+to that Mac by USB. Brave was used on the iPad during this session; browser version,
+iPad model, and iPadOS version were not recorded. The running application was commit
+`bd575c3de2ce531942cb8fc556ed747df32a6ce8`; the subsequent PR changes only document these results.
+
+| Step | Evidence | Result |
+|---|---|---|
+| Factory activation from iPad | User reported “Read-only factory library detected”; host inventory independently showed the Strike's 7.9 GB factory card mounted read-only | Factory access available through the Mac |
+| Full editor over LAN | Unpaired API returned 401; paired editor loaded; host listed 117 factory kits; iPad WebKit check had no page errors or horizontal overflow | Pairing and host library access verified |
+| Both cards available after USB reconnect | Mac disk/USB inventory showed the 7.9 GB read-only factory card and 15.9 GB writable user card; editor reported both mounted, with 117 factory kits and 13 user kits | User-card deployment destination available |
+| Edit and Save on physical iPad | User changed SEVENzREC's snare Layer A and pressed Save; server reported `dirty: false`; an independent read parsed the saved `.skt` | Mac library contained `Snares/BJ DWBallad Center.sin`; user-card copy still contained `Snares/BJ DWMaple Center.sin` |
+| Deploy from physical iPad | User pressed Deploy to Module; independent reads compared the library and user-card `.skt` files | Files were byte-for-byte identical; user card now referenced `Snares/BJ DWBallad Center.sin` |
+| Listen on the module | After being instructed to switch kits and reload SEVENzREC, the user reported “it worked!” | User-confirmed audible result; no independent audio recording was made |
+
+Snare Layer B remained `Snares/NAC14inMaple Center.sin` in both copies throughout the
+save/deploy checks. These checks read the kit files without modifying them; the user
+initiated Save and Deploy from the iPad. This verifies **iPad edit → Mac library save →
+user-card deployment → module playback** for this setup. Save alone did not update the
+user card. This is file-based deployment, not live parameter streaming over MIDI.
+
+All 29 automated browser tests and the repository's Python/format/parity checks also
+passed for the implementation. Those tests use isolated synthetic files. Hardware
+observations above are a separate user-assisted run, not inferred from simulated tests.
+This run does not validate Windows/Linux hardware, direct iPad USB, every editor feature,
+other firmware versions, or prolonged USB-storage reliability. Factory files were not
+written and SIP/firmware settings were not changed.
+
+## Mac sees the factory card but not the user card
+
+In this run the module could read its inserted user card, but macOS exposed only the
+factory disk. The Strike's second USB storage unit existed with no media attached in
+the Mac's registry. A normal editor refresh or mount request could not recover an
+already-ejected disk.
+
+The Mac logs at **14:48:02 PDT on October 12, 2026** identified `loginwindow` as the
+process that rejected the user-card mount and requested its eject:
+
+```text
+CopySLMountApprovalCallback | DiskArb - Allow = NO
+CopySLMountApprovalCallback | DiskArb - wholeDisk != nil, calling DADiskEject
+CopySLMountApprovalCallback | DiskArb - Allow = NO, set return value to kDAReturnNotPermitted
+disk mount approval, disk = /dev/disk2s1, dissented, status = 0xF8DA0008
+ejected disk, id = /dev/disk2, success.
+```
+
+This occurred before the full Wi-Fi editor started. **Why loginwindow denied the mount
+was not established.** A locked-session restriction was considered, but is not proven;
+do not generalize this as a Monterey rule or change security settings on that basis.
+
+Recovery used in this session:
+
+1. Save any editor changes and wait for card operations to finish.
+2. Unlock the Mac to its desktop and safely eject the visible Strike factory volume.
+3. Disconnect and reconnect the Strike's USB cable, leaving the module powered on and
+   its user SD card inserted.
+4. Confirm both cards in the host's disk inventory, then refresh the iPad editor.
+
+The user reported completing that sequence. At **16:18:14–15 PDT**, the logs recorded
+both mounts approved and successful; the editor then reported both cards present.
+No module power cycle or additional activation send was needed for this recovery.
+Disk numbers changed during reconnect: identify each card by its device, contents,
+and read-only status rather than copying the historical `disk2` identifier above.
+If the same problem recurs, inspect the host mount/eject logs before blaming the card
+or changing the activation protocol.

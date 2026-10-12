@@ -109,6 +109,10 @@ with Python 3.10+. Open the printed private pairing link on your iPad, on the sa
 Wi-Fi network. Use **HTTP**, including in Brave. Open kits, edit pads and instruments,
 audition sounds, and save to the computer's library. Deploy remains an explicit action.
 **Activate factory card** uses the computer's MIDI connection in this mode.
+**Hardware verified October 12, 2026:** an iPad user changed SEVENzREC's snare sound,
+saved it to an Intel MacBook's library, deployed it to the Strike's user card, and
+confirmed the changed sound on the module. The deployed kit matched the saved library
+copy byte-for-byte. See the [verification record and Mac card-recovery notes](docs/WIFI_EDITOR.md#hardware-verification-october-12-2026).
 See [full-editor setup and limitations](docs/WIFI_EDITOR.md). The separate
 [activation-only controller](docs/IPAD_FACTORY_CONTROLLER.md) remains available.
 The native app for a USB cable connected directly to an iPad is paused.

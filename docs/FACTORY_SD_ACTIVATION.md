@@ -73,13 +73,14 @@ Sending MIDI and accessing the resulting mass-storage volume are separate concer
 | macOS | Native CoreMIDI; supported browsers can also offer Web MIDI with SysEx permission | Native CoreMIDI confirmed on the tested Intel Mac |
 | Windows | Native MIDI SysEx output or a supported Web MIDI browser | Expected; not tested |
 | Linux / Raspberry Pi | ALSA MIDI, including a headless sender | Expected; not tested; disk mounting depends on the host setup |
-| iPad | Native CoreMIDI app, or browser UI controlling a USB-connected Pi/Mac backend | Not tested; Safari currently lacks Web MIDI, and direct access to the Strike's exposed storage also needs validation |
+| iPad | Browser UI controlling a USB-connected Mac backend | Physical iPad → Mac activation and full edit/save/deploy verified October 12; direct iPad USB remains unverified and native app work is paused |
 
 A browser's Web MIDI endpoints belong to the **browser's machine**. If the Strike is
 plugged into a Pi but the browser runs on an iPad, MIDI activation must happen on the
-Pi through a backend, and the Pi must also handle card access. This bridge is a proposed
-architecture for full editor access. A separate paired, activation-only host controller
-is now implemented; see [iPad Wi-Fi setup](IPAD_FACTORY_CONTROLLER.md). Direct Web MIDI requires a supported secure
+Pi through a backend, and the Pi must also handle card access. The paired host controller
+and separate [full Wi-Fi editor](WIFI_EDITOR.md) now implement this architecture, with
+the physical iPad-to-Mac workflow verified. See [activation-only setup](IPAD_FACTORY_CONTROLLER.md).
+Direct Web MIDI requires a supported secure
 context and explicit SysEx permission.
 
 ### Current browser implementation
@@ -102,6 +103,8 @@ Remote hostnames and the read-only viewer are blocked. This ensures the supporte
 uses the same computer for Web MIDI and disk discovery; do not use a forwarded localhost
 port for this local Web MIDI feature. The separate Wi-Fi controller provides native host
 MIDI for iPad activation; it does not expose the full editor. A direct-USB iPad app is paused.
+The separate full Wi-Fi editor supplies paired access to editing, saving, and deployment;
+see its [hardware verification record](WIFI_EDITOR.md#hardware-verification-october-12-2026).
 The browser workflow is covered by simulated MIDI/card tests, **not a new hardware run**.
 The native macOS protocol experiments above remain the hardware evidence.
 
