@@ -2,8 +2,8 @@
 
 Verified October 11–12, 2026. **One exact MIDI SysEx message exposed the factory SD
 with the official editor closed, including after a user-confirmed module power cycle.**
-This is a protocol discovery and evidence record; automatic activation is not yet an
-application feature.
+The app now offers an explicit **Activate factory card** action using this message;
+it does not activate automatically.
 
 ```text
 F0 00 00 0E 48 0E 33 03 01 F7
@@ -81,9 +81,29 @@ Pi through a backend, and the Pi must also handle card access. This bridge is a 
 architecture, not an existing feature. Direct Web MIDI requires a supported secure
 context and explicit SysEx permission.
 
-Any integration should require an explicit connection action, identify the selected
-Strike destination, send the exact packet once, and wait for real card discovery with
-a bounded timeout. A successful send alone does not prove card availability. Continue
+### Current browser implementation
+
+Connect USB to the computer running both the Python app and the browser. Open the app
+at `http://localhost:8765` (loopback addresses are also accepted) in a browser offering
+Web MIDI with SysEx permission, such as Chrome or Edge. Choose **Activate factory card**
+from Start, Tools, or Deploy, then **Connect MIDI**, allow SysEx, choose the connected
+Strike output, and activate. Only outputs with Strike in their name are offered; if
+there are several, selection is required.
+
+The app first checks `/api/status`, sends the exact packet once if the factory card is
+absent, and polls existing card discovery with a 15-second deadline. It reports success
+only after that discovery reports the factory card mounted. Failure, disconnect, and
+timeout do not trigger another transmission. Closing the dialog cancels observation;
+it cannot undo a message already sent. Copy and inventory capture are separate actions.
+Factory write protection is unchanged; activation makes no card-file write requests.
+
+Remote hostnames and the read-only viewer are blocked. This ensures the supported setup
+uses the same computer for Web MIDI and disk discovery; do not use a forwarded localhost
+port for this feature. There is no server MIDI bridge or iPad activation implementation.
+The browser workflow is covered by simulated MIDI/card tests, **not a new hardware run**.
+The native macOS protocol experiments above remain the hardware evidence.
+
+A successful send alone does not prove card availability. Continue
 to enforce factory write protection and existing card-read retry behavior; do not
 identify cards by mount name, disk number, or capacity alone. Those capacities describe
 this test setup, and device numbers changed after the power cycle.
@@ -107,8 +127,8 @@ The [evidence directory](evidence/factory-sd-2026-10-12/) contains:
 
 Hostnames, LAN addresses, local user paths, USB serials, and volume UUIDs are omitted
 from the published disk evidence. The complete original capture bundle remains with
-the investigation. The application was not changed, and no extra hardware tests were
-run merely to publish this documentation.
+the investigation. These captures predate the browser implementation; no extra hardware
+tests were run merely to publish this documentation or validate its browser UI.
 
 ## Sources
 

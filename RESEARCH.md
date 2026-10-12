@@ -217,7 +217,9 @@ the media and volume were read-only. No raw USB capture or SIP changes were need
 
 This establishes factory-card activation on the tested module, not live kit/parameter
 sync, an off command, or compatibility with all host platforms and firmware versions.
-The application does not yet send this message. See
+The application's explicit **Activate factory card** dialog now sends this message
+using Web MIDI on the USB-connected computer, then checks for the mounted card. Browser
+tests use simulated hardware; native macOS replay remains the hardware evidence. See
 [the full findings, platform limits, and evidence](docs/FACTORY_SD_ACTIVATION.md).
 
 ### USB / Hardware Access
