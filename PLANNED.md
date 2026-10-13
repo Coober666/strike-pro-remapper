@@ -26,6 +26,10 @@ It is the measurement foundation for #30, not Trigger Coach advice. Physical cap
 and module-specific recommendations remain unverified or deferred. The follow-on Wi-Fi
 toolkit branch adds paired host input capture, host timestamps and retained-take recovery;
 its native driver and real mobile/device acceptance still need physical testing.
+The setup/profile follow-on adds read-only host diagnostics, confirmed MIDI Learn,
+portable user-named profiles and capture snapshots of pad names. No factory maps are
+assumed. Diagnostics and learning have simulated coverage; real input access and
+physical Strike/Command/Nitro mapping remain acceptance work.
 
 1. Physically test the launcher on Windows and the existing Intel Mac, including its
    Python/Tk installation, QR scanning, correct library choice and normal Stop/recovery.

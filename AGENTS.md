@@ -115,6 +115,21 @@ and show partial copies after network/driver failure. Recover retained events ex
 never automatically start a new take or reacquire after host restart. Native driver
 behavior remains hardware-unverified. Tests inject drivers: `test_midi_capture.py`,
 `test_wifi_editor.py`, and `tests/browser/wifi-midi.spec.js`.
+`midi_setup.py` checks optional package metadata and input enumeration without opening
+a port or installing anything. The paired `/wifi/midi/setup` route and optional CLI
+`python -m strike_remapper.midi_setup` distinguish missing package, driver error, no
+inputs and visible inputs; enumeration never proves input-open success. Driver access
+can still fail when Record is used. The report omits the Python executable/user path
+and pairing information, but includes input names and bounded driver error text.
+`profiles.js` validates user-named pad maps; `profile-ui.js` handles explicit apply/save,
+portable JSON and MIDI Learn candidates. No preset manufacturer maps or MIDI writes.
+Learn consumes only new received positive Note Ons during recording, requires Apply,
+and never replays old events into learning. Wi-Fi can deliver a queued hit: confirm
+the candidate. Session v1 optionally embeds a validated `padMap` snapshot, independent
+of the profile store and retained across host polling; names do not affect statistics.
+`drum-midi-profiles-v1` localStorage is bounded to 25 profiles / 128 KB, with 128 unique
+channel/note pairs per profile. Invalid imports/storage cannot replace current data;
+failed saves leave export available. Profile names/labels render only as text.
 Note On velocity zero is Note Off; always separate channel/note. Never infer missed
 physical hits or trigger faults from MIDI alone. Pause time is excluded and timing
 is not calibrated. Bound captures/imports (20 active minutes, 50k events, 8 MB JSON),

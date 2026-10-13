@@ -22,6 +22,33 @@ test.afterEach(async ({context}) => {
   await context.request.post(origin+'/wifi/logout',{headers:{Origin:origin}});
 });
 
+test('host setup reports missing dependency and visible inputs without starting capture',async ({page,context}) => {
+  await open(page,context);
+  const mutations=[]; page.on('request',r => { if (r.method() === 'POST') mutations.push(r.url()); });
+  await page.locator('#setup-panel summary').click();
+  await page.route('**/wifi/midi/setup',route => route.fulfill({json:{status:'missing',system:'Test OS',python:'3.12',package:null,inputs:[],message:'Install the optional MIDI package on the host.',detail:''}}));
+  await page.locator('#setup-check').click(); await expect(page.locator('#setup-result')).toContainText('not installed');
+  await page.unroute('**/wifi/midi/setup');
+  await page.route('**/wifi/midi/setup',route => route.fulfill({json:{status:'ready',system:'Test OS',python:'3.12',package:'test',inputs:[{id:'test',name:'Test drums'}],message:'Select one and Record to check access.',detail:''}}));
+  await page.locator('#setup-check').click(); await expect(page.locator('#setup-result')).toContainText('Test drums');
+  const event=page.waitForEvent('download'); await page.locator('#setup-export').click();
+  const report=JSON.parse(await readFile(await (await event).path(),'utf8')); expect(report.status).toBe('ready');
+  expect(mutations).toEqual([]);
+});
+
+test('Wi-Fi MIDI Learn confirms a new received hit and keeps the map across polling and recovery',async ({page,context}) => {
+  await open(page,context); await record(page); await page.locator('#pad-profiles summary').click();
+  await page.locator('#profile-name').fill('Strike downstairs'); await page.locator('#map-label').fill('Snare head');
+  await page.locator('#learn').click(); await expect(page.locator('#profile-status')).toContainText('Received channel 10, note 38');
+  await page.locator('#map-apply').click(); await expect(page.locator('#map-rows')).toContainText('Snare head');
+  await expect(page.locator('#note-rows')).toContainText('10 / 38 · Snare head');
+  await page.locator('#pause').click(); await expect(page.locator('#learn')).toBeDisabled();
+  await page.locator('#pause').click(); await page.locator('#stop').click();
+  await page.locator('#host-recover').click();
+  const session=await download(page); expect(session.padMap.name).toBe('Strike downstairs');
+  expect(session.padMap.mappings).toEqual([{channel:10,note:38,label:'Snare head'}]);
+});
+
 test('paired host captures without browser MIDI, pauses, exports, and releases independently of kit control',async ({page,context}) => {
   await open(page,context); await record(page);
   await page.locator('#pause').click(); await expect(page.locator('#state')).toHaveText('Paused');

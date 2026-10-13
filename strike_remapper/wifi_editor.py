@@ -11,6 +11,7 @@ import time
 
 from strike_remapper.factory_bridge import Controller, WEB as FACTORY_WEB
 from strike_remapper.midi_capture import MidiCapture, CaptureError
+from strike_remapper.midi_setup import check_setup
 
 WEB = Path(__file__).resolve().parent.parent / 'web' / 'wifi-editor'
 
@@ -137,6 +138,8 @@ def make_handler(app, pairing, controller=None, midi=None):
             if self.path == '/wifi/editor':
                 with edit_lock:
                     self.send_json(self.editor_access())
+            elif self.path == '/wifi/midi/setup':
+                self.send_json(check_setup(midi.backend))
             elif self.path == '/wifi/midi/inputs':
                 try:
                     self.send_json({'inputs': midi.inputs()})
