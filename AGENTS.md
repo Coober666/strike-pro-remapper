@@ -73,6 +73,16 @@ CSS: `.main { grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px
 At ≤900px the rail remains beside the map and the contextual panel moves below it; at
 ≤620px the rail becomes a sticky horizontal strip and the shell stacks vertically.
 
+The Sounds panel keeps its assignment target and filters outside the independently
+scrolling `#inst-list`. `renderInstruments()` restores a visible row by section/path
+and offset when the search/tag/sort key is unchanged, including when recents insert
+rows. Assignment never silently advances Layer A to B. Sound names are explicit
+assignment buttons; preview and surrounding row space do not assign. Inline path
+arguments use `inlinePathArg()`, including names with apostrophes. Preview callbacks
+must match the current audio instance before clearing it or reporting failure.
+Touch/coarse-pointer sound and layer controls have 44px minimum targets. Browser
+regressions live in `tests/browser/workflow-polish.spec.js` and use synthetic media.
+
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
 

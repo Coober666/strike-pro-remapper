@@ -235,6 +235,11 @@ double-click.
   preflights can tell "missing" from "not visible right now".
 - Instrument browser: search, tag filtering, favorites, recents, waveform thumbnails,
   audio preview at any velocity, A+B layer blend preview
+- **Touch-friendly sound selection** — a persistent pad/zone and Layer A/B selector,
+  larger touch controls, and separate assigned/previewing labels. Tap a sound's name
+  to assign it to the displayed target, or its play button to audition without editing.
+  Assigning Layer A keeps Layer A selected. Search and your position in the list stay
+  in place when switching targets or adding a sound to recents.
 - **"More like this" similarity search** — instead of scrolling 168 snares, click the
   **≈** on any instrument (or a pad layer) to get the ~10 closest-*sounding* alternatives,
   ranked. Cheap audio fingerprints (spectral centroid, spectral rolloff, zero-crossing

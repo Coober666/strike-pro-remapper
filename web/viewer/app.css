@@ -1169,6 +1169,43 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .app-topbar, .wifi-session, .connection-bar { flex-shrink:0; }
 }
 
+/* Keep assignment controls visible while the sound list scrolls independently. */
+body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: column; overflow: hidden; }
+.sound-browser-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+#inst-list { overflow-y: auto; overflow-anchor: none; min-height: 160px; flex: 1; padding-bottom: 10px; }
+.assign-target { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.assign-target-label { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.assign-target-label small { color: var(--text-3); }
+.assign-layer-switch { display: flex; gap: 6px; grid-row: 2; }
+.assign-layer-switch button, .assign-target .clr { background: #171c19; color: #bac4bc; border: 1px solid #475048; border-radius: 4px; cursor: pointer; }
+.assign-layer-switch button { min-height: 36px; padding: 6px 12px; }
+.assign-layer-switch button[aria-pressed="true"] { background: #3c321c; color: #f1d48c; border-color: #a98b48; }
+.assign-target .clr { grid-column: 2; grid-row: 1 / 3; min-width: 36px; min-height: 36px; }
+.inst-item { display: grid; grid-template-columns: 30px 30px minmax(0,1fr); gap: 5px; padding: 8px 5px; border-bottom: 1px solid #303731; cursor: default; }
+.inst-item.is-assigned { background: #1e2b24; border-left: 2px solid #78a68a; }
+.inst-item .play-btn, .inst-item .star-btn { width: 30px; height: 32px; margin: 0; }
+.inst-assign { min-width: 0; text-align: left; padding: 4px; background: transparent; border: 1px solid transparent; display: flex; flex-direction: column; gap: 4px; }
+.inst-assign .iname { white-space: normal; overflow-wrap: anywhere; color: var(--text); }
+.inst-assign small { color: #b5bcaf; font-size: .65rem; }
+.inst-assign:hover:not(:disabled) { border-color: #a98b48; }
+.inst-meta, .inst-actions, .inst-tags { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.inst-meta:has(.preview-state:empty):not(:has(.in-use-badge)) { display: none; }
+.preview-state { color: #e9bb74; font-size: .66rem; }
+.inst-meta .in-use-badge { white-space: normal; overflow-wrap: anywhere; margin: 0; }
+.inst-actions .ab-btns { margin-left: auto; }
+.inst-actions button, .inst-tags button { min-height: 30px; padding: 4px 7px; }
+@media (pointer: coarse), (max-width: 620px) {
+  .inst-item { grid-template-columns: 44px 44px minmax(0,1fr); }
+  .inst-item button, .assign-target button, .rack-action, .rack-layer-key, .det-layer .layer-btn { min-height: 44px; min-width: 44px; }
+  .inst-actions { gap: 6px; }
+  .inst-actions .ab-btns { gap: 6px; }
+  #inst-search, #inst-sort { min-height: 44px; }
+  .rack-actions, .det-layer { flex-wrap: wrap; gap: 6px; }
+}
+@media (max-width: 900px) {
+  #inst-list { flex: none; max-height: 55vh; }
+}
+
 /* ── viewer-mode overrides (added, not extracted) ── */
 /* Web Viewer v1 is a pure-browser, READ-ONLY kit explorer. engine.js adds the
    `viewer-mode` class to <body>; these rules hide every mutating affordance while

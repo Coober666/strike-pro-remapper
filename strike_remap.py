@@ -4491,6 +4491,43 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   body:not(.viewer-mode) > .main { flex:1; min-height:0; height:auto; }
   .app-topbar, .wifi-session, .connection-bar { flex-shrink:0; }
 }
+
+/* Keep assignment controls visible while the sound list scrolls independently. */
+body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: column; overflow: hidden; }
+.sound-browser-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+#inst-list { overflow-y: auto; overflow-anchor: none; min-height: 160px; flex: 1; padding-bottom: 10px; }
+.assign-target { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.assign-target-label { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.assign-target-label small { color: var(--text-3); }
+.assign-layer-switch { display: flex; gap: 6px; grid-row: 2; }
+.assign-layer-switch button, .assign-target .clr { background: #171c19; color: #bac4bc; border: 1px solid #475048; border-radius: 4px; cursor: pointer; }
+.assign-layer-switch button { min-height: 36px; padding: 6px 12px; }
+.assign-layer-switch button[aria-pressed="true"] { background: #3c321c; color: #f1d48c; border-color: #a98b48; }
+.assign-target .clr { grid-column: 2; grid-row: 1 / 3; min-width: 36px; min-height: 36px; }
+.inst-item { display: grid; grid-template-columns: 30px 30px minmax(0,1fr); gap: 5px; padding: 8px 5px; border-bottom: 1px solid #303731; cursor: default; }
+.inst-item.is-assigned { background: #1e2b24; border-left: 2px solid #78a68a; }
+.inst-item .play-btn, .inst-item .star-btn { width: 30px; height: 32px; margin: 0; }
+.inst-assign { min-width: 0; text-align: left; padding: 4px; background: transparent; border: 1px solid transparent; display: flex; flex-direction: column; gap: 4px; }
+.inst-assign .iname { white-space: normal; overflow-wrap: anywhere; color: var(--text); }
+.inst-assign small { color: #b5bcaf; font-size: .65rem; }
+.inst-assign:hover:not(:disabled) { border-color: #a98b48; }
+.inst-meta, .inst-actions, .inst-tags { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.inst-meta:has(.preview-state:empty):not(:has(.in-use-badge)) { display: none; }
+.preview-state { color: #e9bb74; font-size: .66rem; }
+.inst-meta .in-use-badge { white-space: normal; overflow-wrap: anywhere; margin: 0; }
+.inst-actions .ab-btns { margin-left: auto; }
+.inst-actions button, .inst-tags button { min-height: 30px; padding: 4px 7px; }
+@media (pointer: coarse), (max-width: 620px) {
+  .inst-item { grid-template-columns: 44px 44px minmax(0,1fr); }
+  .inst-item button, .assign-target button, .rack-action, .rack-layer-key, .det-layer .layer-btn { min-height: 44px; min-width: 44px; }
+  .inst-actions { gap: 6px; }
+  .inst-actions .ab-btns { gap: 6px; }
+  #inst-search, #inst-sort { min-height: 44px; }
+  .rack-actions, .det-layer { flex-wrap: wrap; gap: 6px; }
+}
+@media (max-width: 900px) {
+  #inst-list { flex: none; max-height: 55vh; }
+}
 </style>
 </head>
 <body data-workspace="pad">
@@ -4827,7 +4864,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
       <div><span class="context-eyebrow">Sounds workspace</span><strong>Instrument library</strong></div>
       <button type="button" onclick="setWorkspaceMode('pad')">Pad settings</button>
     </div>
-    <div style="padding:6px 12px 0;">
+    <div class="sound-browser-body" style="padding:6px 12px 0;">
     <div id="assign-target" class="assign-target empty">Click a pad or jack to assign instruments</div>
     <!-- Import WAV form -->
     <div id="import-wav-form">
@@ -5960,44 +5997,46 @@ function renderTrigModal() {
 }
 
 function updatePlayButtons() {
-  // Update all play buttons in-place without re-rendering the list (preserves scroll)
   document.querySelectorAll('.play-btn[data-rel]').forEach(btn => {
-    const r = btn.getAttribute('data-rel');
-    const playing = r === previewRel;
-    btn.className   = 'play-btn' + (playing ? ' playing' : '');
-    btn.title       = playing ? 'Stop preview' : 'Preview sound';
-    btn.innerHTML   = playing ? '&#9632;' : '&#9654;';
+    const playing = btn.dataset.rel === previewRel;
+    btn.classList.toggle('playing', playing);
+    btn.title = playing ? 'Stop preview' : 'Preview sound';
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(playing));
+    btn.innerHTML = playing ? '&#9632;' : '&#9654;';
+  });
+  document.querySelectorAll('.inst-item[data-rel]').forEach(row => {
+    row.querySelector('.preview-state').textContent = row.dataset.rel === previewRel ? 'Previewing' : '';
   });
 }
 
 function previewInstrument(rel) {
-  // Toggle: clicking the currently-playing instrument stops it
-  if (previewAudio) {
-    previewAudio.pause();
-    previewAudio.src = '';
-    previewAudio = null;
-    const wasRel = previewRel;
-    previewRel = null;
-    updatePlayButtons();
-    if (wasRel === rel) return;  // same item → just stop
-  }
-  previewRel   = rel;
-  previewAudio = new Audio('/api/preview?sin=' + encodeURIComponent(rel));
-  previewAudio.volume = previewVol * previewVelGain;
-  previewAudio.onended = () => {
-    previewAudio = null; previewRel = null; updatePlayButtons();
+  const wasRel = previewRel;
+  stopPreview();
+  if (wasRel === rel) return;
+  const audio = new Audio('/api/preview?sin=' + encodeURIComponent(rel));
+  previewRel = rel;
+  previewAudio = audio;
+  audio.volume = previewVol * previewVelGain;
+  audio.onended = () => {
+    if (previewAudio === audio) stopPreview();
   };
-  previewAudio.onerror = () => {
-    setMsg('Preview unavailable — mount the preset SD card to enable audio', true);
-    previewAudio = null; previewRel = null; updatePlayButtons();
+  const failed = () => {
+    if (previewAudio !== audio) return;
+    stopPreview();
+    setMsg('Could not preview this sound. Check the computer connection and that its sample files are available, then try again.', true);
   };
-  updatePlayButtons();  // flip button to ■ immediately
-  previewAudio.play().catch(() => {});
+  audio.onerror = failed;
+  updatePlayButtons();
+  audio.play().catch(failed);
 }
 
 function stopPreview() {
-  if (previewAudio) { previewAudio.pause(); previewAudio.src = ''; previewAudio = null; }
-  if (previewRel) { previewRel = null; updatePlayButtons(); }
+  const audio = previewAudio;
+  previewAudio = null;
+  previewRel = null;
+  if (audio) { audio.onended = null; audio.onerror = null; audio.pause(); audio.src = ''; }
+  updatePlayButtons();
 }
 
 // Patch panel collapse state (persisted in localStorage)
@@ -7695,7 +7734,7 @@ function renderLayerRack() {
       <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Choose sound</button>`;
     return `<article class="rack-layer${active ? ' active' : ''}${path ? '' : ' empty'}${broken ? ' broken' : ''}">
       <div class="rack-layer-head">
-        <button class="rack-layer-key" title="Target Layer ${upper}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
+        <button class="rack-layer-key" title="Target Layer ${upper}" aria-label="Target Layer ${upper}" aria-pressed="${active}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
         <div class="rack-layer-title"><small>Layer ${upper}</small><strong title="${escHtml(path || '')}">${escHtml(name)}</strong></div>
         <span class="rack-layer-status">${status}</span>
       </div>
@@ -8088,6 +8127,7 @@ function clearSelection() {
   renderPatchPanel();
   renderDrumMap();
   renderPadDetail();
+  renderInstruments();
 }
 
 function updateAssignBanner() {
@@ -8098,9 +8138,10 @@ function updateAssignBanner() {
     const p     = pads.find(p => p.id === selectedPad.id);
     const label = p ? p.label : selectedPad.id;
     el.className = 'assign-target';
-    el.innerHTML = `<strong>${escHtml(selectedPad.id)}</strong> ${escHtml(label)}`
-      + ` &ndash; Layer ${selectedPad.layer.toUpperCase()}`
-      + ` <span class="clr" onclick="clearSelection()" title="Cancel">&#xD7;</span>`;
+    el.innerHTML = `<div class="assign-target-label"><small>Assigning sounds to</small><strong>${escHtml(selectedPad.id)} · ${escHtml(label)}</strong></div>
+      <div class="assign-layer-switch" role="group" aria-label="Assignment layer">
+        ${['a', 'b'].map(layer => `<button aria-pressed="${selectedPad.layer === layer}" onclick="selectPadLayer('${selectedPad.id}','${layer}')">Layer ${layer.toUpperCase()}</button>`).join('')}
+      </div><button class="clr" onclick="clearSelection()" aria-label="Clear assignment target">&#xD7;</button>`;
   } else {
     el.className = 'assign-target empty';
     el.textContent = 'Click a pad or jack above to assign instruments';
@@ -8116,6 +8157,7 @@ async function clearLayer(padId, layer) {
   renderPadDetail();
   setMsg(data.message);
   refreshKitSize();
+  renderInstruments();
 }
 
 // Gate time (off 53): 0–99 = Free ms, 100–109 = sync divisions, 255 = OFF
@@ -8206,53 +8248,55 @@ function toggleCat(cat) {
   renderInstruments();
 }
 
-function renderInstItem(rel, inUse, currentPath) {
-  const name      = rel.split('/').slice(1).join('/').replace(/\.sin$/i, '');
-  const users     = inUse[rel] || [];
-  const isCurr    = rel === currentPath;
+function renderInstItem(rel, inUse, currentPath, section = 'category') {
+  const name = rel.split('/').slice(1).join('/').replace(/\.sin$/i, '') || rel;
+  const encoded = inlinePathArg(rel);
+  const arg = `decodeURIComponent('${encoded}')`;
+  const users = inUse[rel] || [];
+  const isCurr = rel === currentPath;
   const isPlaying = previewRel === rel;
-  const isStar    = favorites.has(rel);
-  const tags      = instTags[rel] || [];
-
-  let badge = '';
-  if (users.length) {
-    const isMine = users.some(u => selectedPad && u.id === selectedPad.id);
-    const tip    = 'Used by: ' + users.map(u => `${u.id} Lyr ${u.layer}`).join(', ');
-    const cls    = isMine ? 'in-use-badge mine' : 'in-use-badge';
-    const lbl    = users.length === 1 ? users[0].id : `\xD7${users.length}`;
-    badge = `<span class="${cls}" title="${escHtml(tip)}">${escHtml(lbl)}</span>`;
-  }
-  const waveId  = 'wv-' + rel.replace(/[^a-zA-Z0-9]/g, '_');
-  const waveCanvas = `<canvas class="waveform-canvas" id="${escHtml(waveId)}" width="60" height="18"
-    data-sin="${escHtml(rel)}" title="Waveform"></canvas>`;
-  const playBtn = `<button class="play-btn${isPlaying ? ' playing' : ''}" `
-    + `data-rel="${escHtml(rel)}" `
-    + `onclick="event.stopPropagation();previewInstrument('${rel}')" `
-    + `title="${isPlaying ? 'Stop' : 'Preview'}">${isPlaying ? '&#9632;' : '&#9654;'}</button>`;
-  const starBtn = `<button class="star-btn${isStar ? ' starred' : ''}" `
-    + `onclick="event.stopPropagation();toggleFavorite('${rel}')" `
-    + `title="${isStar ? 'Unstar' : 'Star'}">&#9733;</button>`;
-  const abBtns = `<span class="ab-btns">
-    <button class="ab-btn" onclick="event.stopPropagation();directAssign('${rel}','a')" title="Layer A">A</button>
-    <button class="ab-btn" onclick="event.stopPropagation();directAssign('${rel}','b')" title="Layer B">B</button>
-  </span>`;
-  const tagHtml = tags.length
-    ? tags.map(t => `<span class="inst-tag" onclick="event.stopPropagation();setTagFilter('${escHtml(t)}')" title="Filter by: ${escHtml(t)}">${escHtml(t)}</span>`).join('')
-    : '';
-  const editTagBtn = `<span class="inst-tag" style="opacity:.4;" title="Edit tags" onclick="event.stopPropagation();editTagsInline('${rel}',this)">&#9998;</span>`;
-  const sinEditBtn = `<span class="inst-tag" style="opacity:.4;" title="Edit instrument parameters" onclick="event.stopPropagation();openSinEditor('${rel}')">&#9881;</span>`;
-  const simBtn = `<span class="inst-tag" style="opacity:.4;" title="Find similar-sounding instruments" onclick="event.stopPropagation();openSimilar('${rel}')">&#8776;</span>`;
-  const currStyle = isCurr ? ' style="background:#0a2218;border-left:2px solid #3a9060;"' : '';
-  const hoverEvt  = hoverPreview
-    ? ` onmouseenter="previewInstrument('${rel}')" onmouseleave="if(previewRel==='${rel}')stopPreview()"` : '';
-  return `<div class="inst-item" onclick="assignInstrument('${rel}')" title="${escHtml(rel)}"${currStyle}${hoverEvt}>
-    ${playBtn}${starBtn}<span class="iname">${escHtml(name)}</span>${badge}${waveCanvas}${tagHtml}${editTagBtn}${sinEditBtn}${simBtn}${abBtns}
+  const isStar = favorites.has(rel);
+  const target = selectedPad ? `${selectedPad.id} Layer ${selectedPad.layer.toUpperCase()}` : '';
+  const assignment = isCurr ? `Assigned · Layer ${selectedPad.layer.toUpperCase()}` : target ? `Assign to ${target}` : 'Select a pad to assign';
+  const used = users.map(u => `${u.id} Layer ${u.layer}`).join(', ');
+  const tags = (instTags[rel] || []).map(t => `<button class="inst-tag" data-tag="${escHtml(t)}" onclick="setTagFilter(this.dataset.tag)">${escHtml(t)}</button>`).join('');
+  return `<div class="inst-item${isCurr ? ' is-assigned' : ''}" data-rel="${escHtml(rel)}" data-browser-key="${escHtml(section + ':' + rel)}"
+    ${hoverPreview ? `onpointerenter="if(event.pointerType==='mouse')previewInstrument(${arg})" onpointerleave="if(event.pointerType==='mouse' && previewRel===${arg})stopPreview()"` : ''}>
+    <button class="play-btn${isPlaying ? ' playing' : ''}" data-rel="${escHtml(rel)}" onclick="previewInstrument(${arg})"
+      aria-label="${isPlaying ? 'Stop preview' : 'Preview sound'}" aria-pressed="${isPlaying}" title="Preview sound">${isPlaying ? '&#9632;' : '&#9654;'}</button>
+    <button class="star-btn${isStar ? ' starred' : ''}" onclick="toggleFavorite(${arg})" aria-label="${isStar ? 'Unstar' : 'Star'} sound" aria-pressed="${isStar}">&#9733;</button>
+    <button class="inst-assign" onclick="assignInstrument(${arg})" title="${escHtml(rel)}" ${target ? '' : 'disabled'}>
+      <span class="iname">${escHtml(name)}</span><small>${escHtml(assignment)}</small>
+    </button>
+    <div class="inst-meta"><span class="preview-state">${isPlaying ? 'Previewing' : ''}</span>
+      ${used ? `<span class="in-use-badge" title="${escHtml(used)}">Used: ${escHtml(used)}</span>` : ''}
+      <canvas class="waveform-canvas" width="60" height="18" data-sin="${escHtml(rel)}" title="Waveform"></canvas>
+    </div>
+    <div class="inst-actions">
+      <button class="inst-tag" title="Edit tags" onclick="editTagsInline(${arg},this)">Tags</button>
+      <button class="inst-tag" title="Edit instrument parameters" onclick="openSinEditor(${arg})">Edit</button>
+      <button class="inst-tag" title="Find similar sounds" onclick="openSimilar(${arg})">Similar</button>
+      <span class="ab-btns"><button class="ab-btn" ${target ? '' : 'disabled'} onclick="directAssign(${arg},'a')" title="Assign to Layer A">A</button>
+      <button class="ab-btn" ${target ? '' : 'disabled'} onclick="directAssign(${arg},'b')" title="Assign to Layer B">B</button></span>
+    </div>${tags ? `<div class="inst-tags">${tags}</div>` : ''}
   </div>`;
 }
 
+let browserFilterKey = '';
 function renderInstruments() {
   const query     = document.getElementById('inst-search').value.toLowerCase();
   const el        = document.getElementById('inst-list');
+  const filterKey = JSON.stringify([query, activeTagFilter, instSort]);
+  const keepPlace = filterKey === browserFilterKey;
+  browserFilterKey = filterKey;
+  const listTop = el.getBoundingClientRect().top;
+  const anchor = keepPlace ? [...el.querySelectorAll('.inst-item')].find(row => {
+    const rect = row.getBoundingClientRect();
+    return rect.height > 0 && rect.bottom > listTop;
+  }) : null;
+  const anchorKey = anchor?.dataset.browserKey;
+  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - listTop : 0;
+  const scrollTop = keepPlace ? el.scrollTop : 0;
   const searching = query.length > 0;
   const inUse     = buildInUseMap();
 
@@ -8273,7 +8317,7 @@ function renderInstruments() {
   let starredHtml = '';
   if (starredRels.length) {
     starredHtml = `<div class="sect-hdr" style="border-left:2px solid #e8b820;">&#9733; Starred</div>`
-      + starredRels.map(r => renderInstItem(r, inUse, currentPath)).join('');
+      + starredRels.map(r => renderInstItem(r, inUse, currentPath, 'starred')).join('');
   }
 
   // Recent section (hidden while searching/filtering)
@@ -8282,7 +8326,7 @@ function renderInstruments() {
   if (recentRels.length && !searching) {
     recentHtml = `<div class="sect-hdr" style="border-left:2px solid #5a9aaa;">&#x23F0; Recent`
       + `<button class="layer-btn" style="margin-left:auto;font-size:.6rem;padding:1px 5px;" onclick="clearRecent()">Clear</button></div>`
-      + recentRels.map(r => renderInstItem(r, inUse, currentPath)).join('');
+      + recentRels.map(r => renderInstItem(r, inUse, currentPath, 'recent')).join('');
   }
 
   // Categories
@@ -8318,7 +8362,7 @@ function renderInstruments() {
     const collapsed = !searching && !expandedCats.has(cat);
     const arrow     = collapsed ? '&#9654;' : '&#9660;';
     const color     = catColor(cat);
-    return `<div class="cat-header" style="border-left:2px solid ${color}" onclick="toggleCat('${escHtml(cat)}')">
+    return `<div class="cat-header" style="border-left:2px solid ${color}" data-cat="${escHtml(cat)}" onclick="toggleCat(this.dataset.cat)">
         <span class="cat-arrow">${arrow}</span>${escHtml(cat)}
         <span class="cat-count">${items.length}</span>
       </div>
@@ -8326,6 +8370,11 @@ function renderInstruments() {
   }).join('');
 
   el.innerHTML = starredHtml + recentHtml + catsHtml;
+  el.scrollTop = scrollTop;
+  const restored = anchorKey && [...el.querySelectorAll('.inst-item')].find(row => row.dataset.browserKey === anchorKey);
+  if (restored && restored.getBoundingClientRect().height) {
+    el.scrollTop += restored.getBoundingClientRect().top - el.getBoundingClientRect().top - anchorOffset;
+  }
   attachWaveObservers();
 }
 
@@ -8348,14 +8397,8 @@ async function assignInstrument(sinRel, forcePadId, forceLayer) {
   pads = data.pads;
   addToRecent(sinRel);
   if (autoPreview) previewInstrument(sinRel);
-  // Advance to Layer B if A was just filled and B is empty
-  if (!forcePadId && target.layer === 'a') {
-    const updated = pads.find(p => p.id === target.id);
-    if (updated && !updated.layer_b_path) {
-      selectedPad = {id: target.id, layer: 'b'};
-      updateAssignBanner();
-    }
-  }
+  updateAssignBanner();
+  renderInstruments();
   setDirtyState(data.dirty, data.undo_count, data.history_labels);
   renderDrumMap();
   renderPadDetail();
