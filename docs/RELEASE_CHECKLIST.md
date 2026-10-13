@@ -15,6 +15,10 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 - [ ] Host lifecycle, occupied port, pairing and expired previous-run tokens pass.
 - [ ] Windows Tk controls start/stop the real host using a disposable library; failed
   final recovery can be retried and blocks closing/library changes. Controls fit short windows.
+- [ ] Lost Save responses never replay writes; reconnect/suspended-page flows reload
+  current host state, and old sessions/tokens fail after a host restart on the same port.
+- [ ] Copied external libraries survive fresh-process upgrade, backup and rollback
+  rehearsal; backup file hashes remain unchanged. Record the previous release tested.
 
 ## Hands-on gates still required
 

@@ -3,6 +3,65 @@ import {expect, test} from '@playwright/test';
 
 const host = 'http://127.0.0.1:8768';
 
+test.afterEach(async ({page}) => {
+  await page.unrouteAll({behavior:'ignoreErrors'});
+  await page.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
+});
+
+test('lost save response is uncertain until reconnect reloads the host state', async ({page}) => {
+  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async p => { await openKit(p); closeStartScreen(); }, path.resolve('.build/browser-library/kits', "John's Test Kit.skt"));
+  await page.evaluate(async () => { await api('/set_param', {pad_id:'S1H', param:'la_level', value:47}); setDirtyState(true, 1); });
+  await page.route('**/wifi/editor', route => route.abort());
+  let saves = 0;
+  await page.route('**/api/save', async route => { saves++; await route.fetch(); await route.abort(); });
+  await page.evaluate(() => saveToLibrary());
+  await expect(page.locator('#save-state')).toContainText('Changes not saved');
+  await expect(page.locator('#save-lib-btn')).toBeDisabled();
+  expect(await page.evaluate(() => kitDirty)).toBe(true);
+  expect(saves).toBe(1);
+  // The host did save. The browser must reconcile rather than replay the POST.
+  await page.unroute('**/wifi/editor');
+  await page.evaluate(() => checkWifiAccess()).catch(() => {});
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await expect(page.locator('#save-lib-btn')).toBeEnabled();
+  expect(await page.evaluate(() => kitDirty)).toBe(false);
+  expect(saves).toBe(1);
+});
+
+test('returning from a suspended page refreshes changed host state before editing', async ({page}) => {
+  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async p => { await openKit(p); closeStartScreen(); }, path.resolve('.build/browser-library/kits', "John's Test Kit.skt"));
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', {configurable:true, get:() => true});
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.locator('#save-lib-btn')).toBeDisabled();
+  await page.evaluate(async () => {
+    await fetch('/api/set_param', {method:'POST', headers:{'Content-Type':'application/json', 'X-Strike-Editor':wifiEditorToken}, body:JSON.stringify({pad_id:'S1H', param:'la_level', value:82})});
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.locator('#save-lib-btn')).toBeEnabled();
+  expect(await page.evaluate(() => pads.find(p => p.id === 'S1H').la_level)).toBe(82);
+});
+
+test('expired browser pairing returns to pairing and rejects an old link', async ({page, context}) => {
+  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  const cookies = await context.cookies();
+  await context.clearCookies();
+  await page.evaluate(() => checkWifiAccess()).catch(() => {});
+  await expect(page.getByRole('heading', {name:'Your kit. On your iPad.'})).toBeVisible();
+  await page.locator('#pair-link').fill('expired-previous-host-token');
+  await page.locator('#pair-submit').click();
+  await expect(page.locator('#status')).toContainText('incorrect or expired');
+  await expect(page.locator('#pair-submit')).toBeEnabled();
+  await context.addCookies(cookies); // let afterEach revoke the original owner
+});
+
 test('paired Wi-Fi editor loads, edits, saves and revokes its session', async ({page, context}) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

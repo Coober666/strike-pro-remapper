@@ -18,7 +18,7 @@ def main():
         import tkinter as tk
         from tkinter import filedialog, messagebox, ttk
     except ImportError:
-        raise SystemExit('The launcher needs Python with Tk. You can still run python strike_remap.py, or the Wi-Fi command in docs/WIFI_EDITOR.md.')
+        raise SystemExit('The host window needs Tk for this Python installation. See docs/HOST_LAUNCHER.md for setup help. You can run the editor without Tk: python strike_remap.py (python3 on Mac/Linux).')
 
     config_dir = Path(os.environ.get('APPDATA') or Path.home() / '.config') / 'StrikeRemapper'
     config_path = config_dir / 'launcher.json'
@@ -28,7 +28,10 @@ def main():
             config = {}
     except (OSError, ValueError):
         config = {}
-    window = tk.Tk()
+    try:
+        window = tk.Tk()
+    except tk.TclError as exc:
+        raise SystemExit('The host window could not open a graphical desktop. Run it from your desktop session, or use the terminal Wi-Fi command in docs/WIFI_EDITOR.md. Details: ' + str(exc)) from exc
     window.title('Strike Remapper · Host')
     window.geometry('720x760')
     window.minsize(600, 440)

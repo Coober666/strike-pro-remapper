@@ -1,5 +1,6 @@
 """Desktop host lifecycle, independent of the optional Tk launcher UI."""
 import ipaddress
+import errno
 from pathlib import Path
 import secrets
 import socket
@@ -53,6 +54,13 @@ class Host:
         root = Path(library).expanduser().resolve()
         if not str(library).strip():
             raise ValueError('Choose a library folder.')
+        if root.name.lower() in ('kits', 'instruments', 'samples', 'snapshots') and any(
+                (root.parent / name).is_dir() for name in ('kits', 'instruments', 'samples') if name != root.name.lower()):
+            raise ValueError(f'Choose the library folder containing kits, instruments and samples: {root.parent}')
+        if (root / 'strike_remap.py').is_file() and (root / 'library').is_dir():
+            raise ValueError(f'This is the application folder. Your existing library is in: {root / "library"}')
+        if root.exists() and not root.is_dir():
+            raise ValueError('Choose a folder, not a kit file. Open the kit after starting the editor.')
         root.mkdir(parents=True, exist_ok=True)
         # Check writability before binding; do not overwrite any existing library files.
         probe = root / ('.write-check-' + secrets.token_hex(8))
@@ -63,7 +71,14 @@ class Host:
             probe.unlink(missing_ok=True)
         pairing = Pairing(secrets.token_urlsafe(32), f'{address}:{port}') if bind else None
         handler = make_handler(app, pairing) if pairing else app.Handler
-        server = app._Server((str(address), port), handler)
+        try:
+            server = app._Server((str(address), port), handler)
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE or getattr(exc, 'winerror', None) == 10048:
+                raise OSError(f'Port {port} is already in use. Stop the other editor before starting this host. No other process was stopped.') from exc
+            if exc.errno == errno.EADDRNOTAVAIL or getattr(exc, 'winerror', None) == 10049:
+                raise OSError('That Wi-Fi address is not on this computer. Check its current IPv4 address, or turn Wi-Fi off for computer-only use.') from exc
+            raise
         if pairing:
             pairing.authority = f'{address}:{server.server_port}'
         try:

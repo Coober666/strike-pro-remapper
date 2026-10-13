@@ -62,10 +62,12 @@ class HostTests(unittest.TestCase):
         matrix = pairing_matrix(url)
         self.assertTrue(all(len(row) == len(matrix) for row in matrix))
         self.assertEqual(matrix[0][:7], [True] * 7)
+        port = self.host.server.server_port
         self.host.stop()
-        self.host.start(self.tmp.name, bind='127.0.0.1', port=0)
+        self.host.start(self.tmp.name, bind='127.0.0.1', port=port)
         self.assertNotEqual(self.host.pair_url, url)
         self.assertEqual(self.request('/api/session', headers={'Cookie':cookie})[0], 401)
+        self.assertEqual(self.request('/wifi/pair', {'token':token}, {'Origin':self.host.url, 'Content-Type':'application/json'})[0], 401)
 
     def test_final_recovery_failure_can_be_retried_before_changing_library(self):
         self.host.start(self.tmp.name, port=0)
@@ -108,10 +110,23 @@ class HostTests(unittest.TestCase):
             self.host.start(self.tmp.name, bind='0.0.0.0', port=0)
         self.host.start(self.tmp.name, port=0)
         other = Host()
-        with self.assertRaises(OSError):
+        with self.assertRaisesRegex(OSError, 'already in use'):
             other.start(self.tmp.name, port=self.host.server.server_port)
         self.assertFalse(other.running)
         self.assertTrue(self.host.running)
+
+    def test_wrong_library_selection_suggests_parent_without_creating_nested_files(self):
+        root = Path(self.tmp.name)
+        (root / 'kits').mkdir()
+        (root / 'instruments').mkdir()
+        with self.assertRaisesRegex(ValueError, 'containing kits'):
+            self.host.start(root / 'kits', port=0)
+        self.assertEqual(list((root / 'kits').iterdir()), [])
+        kit = root / 'example.skt'
+        kit.write_bytes(b'not a directory')
+        with self.assertRaisesRegex(ValueError, 'not a kit file'):
+            self.host.start(kit, port=0)
+        self.assertFalse(self.host.running)
 
 
 if __name__ == '__main__':

@@ -50,6 +50,11 @@ disk-space problem. Host controls stay visible in shorter windows; setup and pai
 Existing command-line
 launchers remain available; see [host setup and upgrades](docs/HOST_LAUNCHER.md).
 
+The host window explains missing Tk, unavailable Wi-Fi addresses and occupied ports,
+and catches common wrong-library selections. See [first-run help](docs/HOST_LAUNCHER.md#first-run-help).
+Wi-Fi pages pause editing after a connection loss or suspended tab and reload host state
+before resuming. A lost Save response remains unconfirmed and is never automatically retried.
+
 > **First-run notes:**
 > - **macOS:** expect a one-time "access files in your Documents folder" / removable-volume
 >   permission prompt — the app needs it to read the SD card and your library. If

@@ -31,6 +31,26 @@ stop the other editor yourself or use the command-line `--port` option for Wi-Fi
 Wi-Fi starts disabled on each launcher run. Pairing links are new after each start;
 old browser sessions must pair again. The library choice and address are remembered.
 
+## First-run help
+
+- **Python not found:** install Python 3.10+ with its Tcl/Tk component. On Windows,
+  include the Python launcher (`py`); if only `python` is available, run
+  `python launch_editor.py` from the application folder. On Mac/Linux use `python3`.
+- **Tk missing:** use the same Python command followed by `-m tkinter` to check its
+  Tk installation. The editor can run without the host window: `python strike_remap.py`
+  (`python3` on Mac/Linux). Wi-Fi without Tk is documented in [Wi-Fi setup](WIFI_EDITOR.md).
+- **No graphical desktop:** launch the window from the computer's desktop session.
+  For an SSH-only host, use the terminal Wi-Fi entry point instead.
+- **Port already in use:** an editor or another service owns port 8765. Stop that
+  service deliberately or use the Wi-Fi command's `--port` option. The launcher
+  does not kill another process or silently attach to a different library.
+- **Wrong library folder:** select the parent containing `kits`, `instruments`, and
+  `samples`, not an individual kit, the `kits` subfolder, or the application folder.
+  For an older installation this is often its `library` subfolder. Keep a backup
+  before moving it. A new empty library is also valid.
+- **Wi-Fi address changed:** use this computer's current private IPv4 address, or
+  turn Wi-Fi off to work locally. A remembered address may belong to an old network.
+
 ## Diagnostics
 
 **Copy diagnostics** includes host status, address, and library path; it excludes
@@ -52,6 +72,24 @@ snapshots and sidecars. Replace the application files, then select the same exte
 library folder. Do not replace or delete the library with the application. No automatic
 migration or updater is installed. To roll back, stop and launch the previous application
 against a backup copy of the library. Never test a rollback against your only copy.
+
+To rehearse this yourself with a copied library:
+
+1. Stop the host. Copy the whole library to a dated backup folder; compare file counts
+   and sizes, and keep the backup untouched.
+2. Extract the new application into a separate folder. Start it and select your working
+   library. Confirm kits, tags, snapshots and any recovery entry are present.
+3. Recover a disposable kit, check the edited value, and save it to the working library.
+4. Stop. Copy the pre-upgrade backup into another working folder. Start the previous
+   application against that copy and confirm the original kit and recovery files load.
+5. Keep the real library and backup separate from application folders you remove.
+
+The automated rehearsal hashes every backup file, including snapshots and sidecars,
+and verifies recovered kit bytes in fresh processes. On October 13, 2026 it passed
+from merged commit `afdca93` to this polish branch, then back to `afdca93` using a
+restored backup copy. It used a synthetic kit and sample sentinel, not a real card.
+`tools/test_library_portability.py` repeats the relocation/backup checks in CI;
+set `STRIKE_PREVIOUS_APP` to an extracted older release to repeat a version boundary.
 
 ## Verification limits
 

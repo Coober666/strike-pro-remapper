@@ -104,6 +104,13 @@ runs `tools/test_host_window.py` against real Tk widgets and a disposable loopba
 If the post-drain recovery flush fails, `Host.recovery_pending` retains the worker and
 active kit. Retry Stop flushes again; start cannot switch libraries until this succeeds.
 The window offers Retry recovery save and keeps closing blocked while recovery fails.
+Host startup catches common wrong-library selections before creating files. Setup failures
+are covered by `test_launcher_setup.py`. `test_library_portability.py` uses copied apps,
+fresh processes and external synthetic libraries to verify backup/restore and relocation;
+`STRIKE_PREVIOUS_APP` optionally selects an older extracted application for version testing.
+Wi-Fi connection loss, unconfirmed save responses and suspended tabs pause editing.
+On reconnect, reload the host kit before allowing writes; never replay a failed POST.
+`wifiNeedsReload` tracks that requirement and visibility/online events check ownership.
 
 All editor POST handlers run under `STATE_LOCK`. The host-owned `RecoveryWorker` uses
 the same lock, writes atomic local autosaves every 60 seconds, and flushes after pending

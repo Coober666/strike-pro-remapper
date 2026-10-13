@@ -15,6 +15,8 @@ research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a r
 - Optional Python/Tk host window with Start/Stop, persistent library choice, Open editor,
   offline pairing QR, and diagnostics without the pairing token. This is not an installer.
 - Upgrade/rollback instructions and a [beta acceptance checklist](docs/RELEASE_CHECKLIST.md).
+- Reconnect/suspended-tab state refresh, unconfirmed-save handling, first-run guidance,
+  and automated backup/relocation rehearsal (real version boundary tested from `afdca93`).
 
 ## Next gates
 

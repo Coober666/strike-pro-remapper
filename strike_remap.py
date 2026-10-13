@@ -6905,6 +6905,7 @@ const wifiMode = document.documentElement.dataset.wifiEditor === 'true';
 let wifiEditorToken = '';
 let wifiEditing = !wifiMode;
 let wifiAccessChecking = false;
+let wifiNeedsReload = false;
 let connectionInfo = null;
 let kitDirty = false;
 let saveFeedback = '';
@@ -6945,7 +6946,7 @@ async function wifiTakeControl() {
 }
 
 async function checkWifiAccess() {
-  if (!wifiMode || wifiAccessChecking || deployBusy) return;
+  if (!wifiMode || wifiAccessChecking || deployBusy || document.hidden) return;
   wifiAccessChecking = true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6000);
@@ -6953,11 +6954,25 @@ async function checkWifiAccess() {
     const response = await fetch('/wifi/editor', {signal:controller.signal, headers:{'X-Strike-Editor':wifiEditorToken}});
     if (response.status === 401) { location.replace('/wifi/pair'); return; }
     if (!response.ok) throw new Error('Editor connection unavailable');
-    updateWifiAccess(await response.json());
+    const access = await response.json();
+    if (document.hidden) return;
+    if (access.editing && wifiNeedsReload) { location.reload(); return; }
+    updateWifiAccess(access);
+  } catch {
+    pauseWifiEditing();
   } finally {
     clearTimeout(timeout);
     wifiAccessChecking = false;
   }
+}
+
+function pauseWifiEditing() {
+  if (!wifiMode) return;
+  wifiNeedsReload = true;
+  updateWifiAccess({editing:false});
+  document.getElementById('wifi-access-status').textContent = 'Connection needs checking. Reconnect to refresh the kit before editing.';
+  connectionInfo = null;
+  renderConnectionStatus();
 }
 
 function updateSaveState() {
@@ -10290,6 +10305,7 @@ async function _doSave(path) {
   let data;
   try { data = await api('/save', {path}); }
   catch {
+    pauseWifiEditing();
     setMsg('Save could not be confirmed. Check the computer connection before trying again.', true);
     return;
   }
@@ -10814,11 +10830,16 @@ async function openConnectionDetails() {
 
   // Poll ownership cheaply; card discovery is explicit to avoid repeatedly
   // probing the Strike's intermittently slow storage.
-  if (wifiMode) setInterval(() => checkWifiAccess().catch(() => {
-    updateWifiAccess({editing:false});
-    connectionInfo = null;
-    renderConnectionStatus();
-  }), 3000);
+  if (wifiMode) {
+    setInterval(checkWifiAccess, 3000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) pauseWifiEditing();
+      else void checkWifiAccess();
+    });
+    window.addEventListener('online', () => { void checkWifiAccess(); });
+    window.addEventListener('offline', pauseWifiEditing);
+    if (document.hidden) pauseWifiEditing();
+  }
 
   // Auto-save every 60 s while there are unsaved changes
   setInterval(async () => {
