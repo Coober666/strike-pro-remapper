@@ -176,7 +176,7 @@ function renderComparison() {
 }
 function renderPlayhead() {
   $('seek').value=String(playhead); $('cursor-time').textContent=(playhead/1000).toFixed(2)+' s';
-  const line=$('play-line'); if (line) { const x=40+840*playhead/Math.max(1,current.durationMs); line.setAttribute('x1',x); line.setAttribute('x2',x); }
+  const line=$('play-line'); if (line) { const x=40+($('timeline').viewBox.baseVal.width-60)*playhead/Math.max(1,current.durationMs); line.setAttribute('x1',x); line.setAttribute('x2',x); }
   const events=current.events.filter(e => e.t <= playhead).slice(-6);
   $('replay-events').textContent=events.length ? events.map(e => {
     const m=message(e.data); return `${(e.t/1000).toFixed(3)} s   Ch ${m.channel}   ${m.type}   ${e.data.slice(1).join(' / ')}`;
@@ -188,16 +188,18 @@ function render() {
   $('notes').textContent=String(stats.notes.length); $('duration').textContent=(current.durationMs/1000).toFixed(2)+' s';
   $('origin').textContent=current.events.length ? `${current.synthetic ? 'Synthetic demo · ' : ''}${current.source} · ${current.createdAt}` : 'No events yet. Record an input, import a JSON session, or try the demo.';
   const svg=$('timeline'); svg.replaceChildren(); const ns='http://www.w3.org/2000/svg';
+  const width=Math.max(260,svg.clientWidth), right=width-20;
+  svg.setAttribute('viewBox',`0 0 ${width} 180`);
   const add=(tag,attrs) => { const e=document.createElementNS(ns,tag); for (const [k,v] of Object.entries(attrs)) e.setAttribute(k,String(v)); svg.append(e); return e; };
   for (const v of [1,32,64,96,127]) {
-    add('line',{x1:40,x2:880,y1:160-v,y2:160-v,stroke:'#29352b','stroke-width':1});
+    add('line',{x1:40,x2:right,y1:160-v,y2:160-v,stroke:'#29352b','stroke-width':1});
     add('text',{x:5,y:164-v,fill:'#aab3a8','font-size':11}).textContent=v;
   }
   add('text',{x:40,y:176,fill:'#aab3a8','font-size':11}).textContent='0 s';
-  add('text',{x:880,y:176,fill:'#aab3a8','font-size':11,'text-anchor':'end'}).textContent=(current.durationMs/1000).toFixed(2)+' s';
+  add('text',{x:right,y:176,fill:'#aab3a8','font-size':11,'text-anchor':'end'}).textContent=(current.durationMs/1000).toFixed(2)+' s';
   const hits=current.events.filter(e => message(e.data)?.type === 'Note on'), stride=Math.max(1,Math.ceil(hits.length/1000));
   for (let i=0;i<hits.length;i+=stride) {
-    const dot=add('circle',{cx:40+hits[i].t/Math.max(1,current.durationMs)*840,cy:160-hits[i].data[2],r:2.8,fill:'#d8b567',opacity:.8});
+    const dot=add('circle',{cx:40+hits[i].t/Math.max(1,current.durationMs)*(right-40),cy:160-hits[i].data[2],r:2.8,fill:'#d8b567',opacity:.8});
     const title=document.createElementNS(ns,'title'); title.textContent=`Ch ${(hits[i].data[0]&15)+1}, note ${hits[i].data[1]}, velocity ${hits[i].data[2]} at ${(hits[i].t/1000).toFixed(3)} s`; dot.append(title);
   }
   add('line',{id:'play-line',x1:40,x2:40,y1:10,y2:160,stroke:'#87bc96','stroke-width':2});
@@ -217,6 +219,7 @@ setInterval(() => {
   if (playing) { playhead=Math.min(current.durationMs,playFrom+(now-playStart)*Number($('speed').value)); renderPlayhead(); if (playhead >= current.durationMs) stopReplay(); }
   if (drawNeeded && now-lastDraw >= 500) { lastDraw=now; render(); }
 },100);
+window.addEventListener('resize',() => { drawNeeded=true; });
 window.addEventListener('beforeunload',e => { if (dirty || active()) { e.preventDefault(); e.returnValue=''; } });
 const liveAvailable=!!navigator.requestMIDIAccess && window.isSecureContext;
 $('support').textContent=liveAvailable ? 'Connect a MIDI input on this computer. No kit needs to be loaded.' : 'Live MIDI is unavailable in this browser/context. Capture on the USB computer using a supporting browser at localhost; import JSON here to inspect it. Wi-Fi does not forward host MIDI.';
