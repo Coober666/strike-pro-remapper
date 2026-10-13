@@ -31,7 +31,7 @@ def main():
     window = tk.Tk()
     window.title('Strike Remapper · Host')
     window.geometry('720x760')
-    window.minsize(600, 650)
+    window.minsize(600, 440)
     window.configure(bg='#151916')
     style = ttk.Style(window)
     style.theme_use('clam')
@@ -46,8 +46,41 @@ def main():
     address = tk.StringVar(value=str(config.get('address') or ''))
     wifi = tk.BooleanVar(value=False)
     status = tk.StringVar(value='Stopped · Your library stays on this computer')
-    frame = ttk.Frame(window, padding=24)
-    frame.pack(fill='both', expand=True)
+    footer = ttk.Frame(window, padding=(24, 12, 24, 16))
+    footer.pack(side='bottom', fill='x')
+    viewport = ttk.Frame(window)
+    viewport.pack(fill='both', expand=True)
+    scroll = ttk.Scrollbar(viewport, orient='vertical')
+    scroll.pack(side='right', fill='y')
+    canvas = tk.Canvas(viewport, bg='#151916', highlightthickness=0, yscrollcommand=scroll.set)
+    canvas.pack(side='left', fill='both', expand=True)
+    scroll.configure(command=canvas.yview)
+    frame = ttk.Frame(canvas, padding=24)
+    content = canvas.create_window(0, 0, window=frame, anchor='nw')
+    frame.bind('<Configure>', lambda event: canvas.configure(scrollregion=canvas.bbox('all')))
+    def resize_content(event):
+        canvas.itemconfigure(content, width=event.width)
+        for child in frame.winfo_children():
+            if child.winfo_class() == 'TLabel' and str(child.cget('wraplength')) not in ('', '0'):
+                child.configure(wraplength=max(200, event.width - 48))
+    canvas.bind('<Configure>', resize_content)
+    def scroll_wheel(event):
+        if event.widget.winfo_class() == 'TCombobox':
+            return
+        units = (-1 if event.num == 4 else 1) if event.num in (4, 5) else (-1 if event.delta > 0 else 1)
+        canvas.yview_scroll(units * 3, 'units')
+    window.bind('<MouseWheel>', scroll_wheel)
+    window.bind('<Button-4>', scroll_wheel)
+    window.bind('<Button-5>', scroll_wheel)
+    def reveal_focus(event):
+        if not str(event.widget).startswith(str(frame) + '.'):
+            return
+        top = event.widget.winfo_rooty() - canvas.winfo_rooty()
+        bottom = top + event.widget.winfo_height()
+        if top < 0 or bottom > canvas.winfo_height():
+            offset = top if top < 0 else bottom - canvas.winfo_height()
+            canvas.yview_moveto((canvas.canvasy(0) + offset) / max(1, frame.winfo_height()))
+    window.bind('<FocusIn>', reveal_focus)
     ttk.Label(frame, text='STRIKE REMAPPER', font=('TkDefaultFont', 22, 'bold'), foreground='#d8b567').pack(anchor='w')
     ttk.Label(frame, text='Open here. Pair your iPad. Keep your library.', padding=(0, 8, 0, 20)).pack(anchor='w')
     ttk.Label(frame, text='Library folder').pack(anchor='w')
@@ -71,7 +104,7 @@ def main():
     address_entry = ttk.Combobox(frame, textvariable=address, values=addresses)
     address_entry.pack(fill='x', pady=6)
     ttk.Label(frame, textvariable=status, wraplength=650, foreground='#d8b567').pack(anchor='w', pady=12)
-    actions = ttk.Frame(frame)
+    actions = ttk.Frame(footer)
     actions.pack(fill='x')
     qr = tk.Canvas(frame, width=260, height=260, bg='#151916', highlightthickness=0)
     qr.pack(pady=(14, 0))
@@ -79,10 +112,12 @@ def main():
     pairing_note.pack()
 
     def refresh():
-        start.configure(state='disabled' if busy or host.running else 'normal')
-        stop.configure(state='normal' if host.running and not busy else 'disabled')
+        held = host.running or host.recovery_pending
+        start.configure(state='disabled' if busy or held else 'normal')
+        stop.configure(state='normal' if held and not busy else 'disabled',
+                       text='Retry recovery save' if host.recovery_pending else 'Stop')
         for control in (entry, browse, wifi_check, address_entry):
-            control.configure(state='disabled' if busy or host.running else 'normal')
+            control.configure(state='disabled' if busy or held else 'normal')
         for control in (open_editor, copy_link):
             control.configure(state='normal' if host.running and not busy else 'disabled')
         qr.delete('all')
@@ -151,7 +186,7 @@ def main():
     open_editor.pack(side='left')
     copy_link = ttk.Button(actions, text='Copy link', command=lambda: copy_text(host.pair_url or host.url))
     copy_link.pack(side='left', padx=6)
-    ttk.Button(frame, text='Copy diagnostics (no pairing token)', command=lambda: copy_text(host.diagnostics())).pack(anchor='w', pady=10)
+    ttk.Button(footer, text='Copy diagnostics (no pairing token)', command=lambda: copy_text(host.diagnostics())).pack(anchor='w', pady=(10, 0))
 
     def poll():
         nonlocal busy
@@ -162,8 +197,16 @@ def main():
         else:
             busy = False
             if error:
-                status.set('Action failed · ' + error)
-                messagebox.showerror('Editor host', error + '\nIf the port is occupied, stop the other editor first. No other process was stopped.')
+                if host.recovery_pending:
+                    status.set('Stopped · Recovery save failed. Keep this window open and retry.')
+                    help_text = 'Your latest edits are still in this window’s memory. Free disk space or restore folder access, then choose Retry recovery save before closing.'
+                elif host.running:
+                    status.set('Still running · Recovery save failed')
+                    help_text = 'Keep the host running. Save from the editor, or fix the library folder problem and try Stop again.'
+                else:
+                    status.set('Could not start · ' + error)
+                    help_text = 'Check the library folder and Wi-Fi address. If the port is occupied, stop the other editor first. No other process was stopped.'
+                messagebox.showerror('Editor host', error + '\n' + help_text)
             else:
                 done()
             try:
@@ -178,7 +221,7 @@ def main():
     def close():
         if busy:
             return
-        if host.running:
+        if host.running or host.recovery_pending:
             stop_host(closing=True)
         else:
             window.destroy()

@@ -19,6 +19,12 @@ continues to work without Tk. This is a source launcher, not a signed installer.
    HTTP is required; if Brave upgrades it, permit HTTP for that local address.
 6. Keep the computer awake. **Stop** writes a local recovery copy and closes this
    service. A failed initial recovery save leaves the editor running so you can save.
+   If the final save fails after the service stops, keep the window open. Its latest
+   edits remain in memory. Free disk space or restore folder access, then choose
+   **Retry recovery save**. Changing libraries and closing are held until it succeeds.
+
+Start/Stop and diagnostics remain visible in short windows. Scroll the setup/pairing
+area to reach its contents; keyboard focus brings setup fields back into view.
 
 The launcher uses port 8765 and never stops an existing process to free it. If occupied,
 stop the other editor yourself or use the command-line `--port` option for Wi-Fi.
@@ -49,9 +55,13 @@ against a backup copy of the library. Never test a rollback against your only co
 
 ## Verification limits
 
-Automated loopback tests cover start/stop, failed recovery on stop, occupied ports,
-pairing, token renewal and diagnostics. The launcher window and QR scanning still need
-hands-on Windows and Mac/iPad acceptance. The older Intel Mac remains the only physically
+Automated loopback tests cover start/stop, initial and final recovery failures on stop,
+occupied ports, pairing, token renewal and diagnostics. Real Tk control tests on Windows
+exercise Start/Stop, saved library selection, QR rendering, short-window scrolling and
+recovery retries, including a blocked close. They use disposable libraries with card
+discovery disabled. CI has a Windows job where missing Tk/display fails instead of skipping.
+These are programmatic checks, not a new-user install or a camera scan. The launcher
+still needs hands-on Windows and Mac/iPad acceptance. The older Intel Mac remains the only physically
 verified Strike host; the launcher does not extend module compatibility claims.
 Linux can use the existing command-line host; optional Tk availability depends on its
 Python installation. Native iPhone/iPad apps and direct mobile USB remain paused.

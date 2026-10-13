@@ -98,6 +98,12 @@ when Wi-Fi is selected. It never takes over an occupied port or moves existing l
 Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
 encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
 No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.
+The scrollable setup/pairing area keeps host controls in a fixed footer. Windows CI
+runs `tools/test_host_window.py` against real Tk widgets and a disposable loopback host;
+`STRIKE_REQUIRE_TK=1` makes unavailable Tk/display fail that job (other headless runs skip).
+If the post-drain recovery flush fails, `Host.recovery_pending` retains the worker and
+active kit. Retry Stop flushes again; start cannot switch libraries until this succeeds.
+The window offers Retry recovery save and keeps closing blocked while recovery fails.
 
 All editor POST handlers run under `STATE_LOCK`. The host-owned `RecoveryWorker` uses
 the same lock, writes atomic local autosaves every 60 seconds, and flushes after pending

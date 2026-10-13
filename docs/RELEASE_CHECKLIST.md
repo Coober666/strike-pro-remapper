@@ -13,6 +13,8 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 - [ ] Wi-Fi handover rejects stale writers, and failed recovery never claims success.
 - [ ] Pointer cancellation restores layout; keyboard Cancel cancels; narrow layouts fit.
 - [ ] Host lifecycle, occupied port, pairing and expired previous-run tokens pass.
+- [ ] Windows Tk controls start/stop the real host using a disposable library; failed
+  final recovery can be retried and blocks closing/library changes. Controls fit short windows.
 
 ## Hands-on gates still required
 

@@ -37,9 +37,16 @@ class Host:
     def running(self):
         return self.server is not None
 
+    @property
+    def recovery_pending(self):
+        return not self.running and self.recovery is not None
+
     def start(self, library, bind=None, port=8765):
         if self.running:
             raise ValueError('The editor is already running. Stop it before changing settings.')
+        # Do not reset active-kit state or switch libraries after a failed final save.
+        if self.recovery_pending:
+            self.stop()
         address = ipaddress.ip_address(bind or '127.0.0.1')
         if address.version != 4 or not address.is_private or address.is_unspecified or address.is_multicast:
             raise ValueError('Choose a specific private IPv4 address from this computer.')
@@ -80,16 +87,19 @@ class Host:
         return self.pair_url or self.url
 
     def stop(self):
-        if not self.running:
-            return
-        # A failed initial flush leaves the service available so the user can save.
-        self.recovery.flush()
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join()
-        self.server = None
-        self.url = self.pair_url = ''
-        self.recovery.close()
+        if self.running:
+            # A failed initial flush leaves the service available so the user can save.
+            self.recovery.flush()
+            self.server.shutdown()
+            self.server.server_close()
+            self.thread.join()
+            self.server = None
+            self.url = self.pair_url = ''
+        if self.recovery is not None:
+            # Retain the worker and active kit if the post-drain flush fails. Stop
+            # can retry it even though the HTTP service is already shut down.
+            self.recovery.close()
+            self.recovery = None
 
     def diagnostics(self):
         return '\n'.join([
@@ -98,6 +108,7 @@ class Host:
             f'Address: {self.url or "—"}',
             f'Library: {self.library or "Not selected"}',
             f'Wi-Fi: {"Enabled" if self.pair_url else "Off"}',
+            f'Recovery save needs retry: {"Yes" if self.recovery_pending else "No"}',
             'Recovery: every 60 seconds while running, and on a normal stop.',
             'If iPad cannot connect: same Wi-Fi, host awake, allow local-network access, use http://.',
         ])

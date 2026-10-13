@@ -67,6 +67,42 @@ class HostTests(unittest.TestCase):
         self.assertNotEqual(self.host.pair_url, url)
         self.assertEqual(self.request('/api/session', headers={'Cookie':cookie})[0], 401)
 
+    def test_final_recovery_failure_can_be_retried_before_changing_library(self):
+        self.host.start(self.tmp.name, port=0)
+        app.create_new_kit('Last edit')
+        app.set_pad_param('S1H', 'la_level', 66)
+        original_close = self.host.server.server_close
+
+        def drain_last_request():
+            original_close()
+            # Model an already accepted edit finishing after the initial flush.
+            app.set_pad_param('S1H', 'la_level', 29)
+
+        original_save = app.autosave_kit
+        saved_once = False
+        def fail_final_save():
+            nonlocal saved_once
+            if saved_once:
+                raise OSError('Disk full')
+            saved_once = True
+            return original_save()
+        with patch.object(self.host.server, 'server_close', side_effect=drain_last_request), \
+                patch.object(app, 'autosave_kit', side_effect=fail_final_save):
+            with self.assertRaises(OSError):
+                self.host.stop()
+        self.assertFalse(self.host.running)
+        self.assertTrue(self.host.recovery_pending)
+        self.assertIn('Recovery save needs retry: Yes', self.host.diagnostics())
+        with patch.object(app, 'autosave_kit', side_effect=OSError('Disk full')):
+            with self.assertRaises(OSError):
+                self.host.start(Path(self.tmp.name) / 'other', port=0)
+        self.assertEqual(self.host.library, Path(self.tmp.name))
+        self.assertFalse((Path(self.tmp.name) / 'other').exists())
+        self.host.stop()
+        self.assertFalse(self.host.recovery_pending)
+        expected = app.build_skt(app.state['kit_raw'], app.state['pads'], app.state['instruments'], app.state['tail'])
+        self.assertEqual((Path(self.tmp.name) / 'kits/Last edit.autosave.skt').read_bytes(), expected)
+
     def test_unsafe_bind_and_occupied_port_are_not_reused(self):
         with self.assertRaises(ValueError):
             self.host.start(self.tmp.name, bind='0.0.0.0', port=0)

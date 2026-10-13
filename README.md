@@ -44,7 +44,10 @@ Choose your existing library folder, then **Start** and **Open editor**. The fol
 remembered across launches and can live outside the downloaded application folder.
 For iPad/iPhone, enable Wi-Fi, select this computer's private IPv4 address, start,
 and scan the pairing QR code. The code is generated locally. **Stop** saves a recovery
-copy of unsaved kit edits before shutting down this host. Existing command-line
+copy of unsaved kit edits before shutting down this host. If the final recovery write
+fails, keep the window open and use **Retry recovery save** after fixing the folder or
+disk-space problem. Host controls stay visible in shorter windows; setup and pairing scroll.
+Existing command-line
 launchers remain available; see [host setup and upgrades](docs/HOST_LAUNCHER.md).
 
 > **First-run notes:**

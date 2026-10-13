@@ -5,6 +5,20 @@ on:
   pull_request:
 
 jobs:
+  windows-host:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Host lifecycle and recovery
+        run: python tools/test_host_launcher.py
+      - name: Real Tk controls with a disposable library
+        env:
+          STRIKE_REQUIRE_TK: '1'
+        run: python tools/test_host_window.py
+
   test:
     runs-on: ubuntu-latest
     steps:
