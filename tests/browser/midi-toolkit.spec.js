@@ -77,9 +77,9 @@ test('paired Wi-Fi can analyze imports without MIDI or editor ownership',async (
   const response=await context.request.post(host+'/wifi/pair',{data:{token:'browser-wifi-pairing'},headers:{Origin:host}});
   expect(response.ok()).toBe(true);
   await page.addInitScript(() => Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined}));
-  await page.goto(host+'/midi'); await expect(page.locator('#support')).toContainText('Wi-Fi does not forward host MIDI');
+  await page.goto(host+'/midi'); await expect(page.locator('#support')).toContainText('Plug the module into the host');
   await page.locator('#demo').click(); await expect(page.locator('#hits')).toHaveText('96');
-  await expect(page.locator('#connect')).toBeHidden();
+  await expect(page.locator('#connect')).toHaveText('Refresh host inputs');
   await context.request.post(host+'/wifi/logout',{headers:{Origin:host}});
 });
 

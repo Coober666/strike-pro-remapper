@@ -1,6 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {newSession, validateSession, summarize, compare, message, demoSession, exportCSV, report, MAX_EVENTS, MAX_DURATION} from '../web/midi-toolkit/core.js';
+test('partial host captures retain their status across import and exports', () => {
+  const value=demoSession(); value.captureStatus='partial';
+  assert.equal(validateSession(value).captureStatus,'partial');
+  assert.match(exportCSV(value),/"partial"/);
+  assert.match(report(value),/Capture status: partial/);
+  delete value.captureStatus; assert.equal(validateSession(value).captureStatus,'complete');
+  value.captureStatus='unknown'; assert.throws(() => validateSession(value));
+});
 function fixture() {
   const s=newSession('Test', 'Drum input'); s.durationMs=1000;
   s.events=[{t:0,data:[0x99,38,20]},{t:10,data:[0x99,38,0]},{t:100,data:[0x99,38,100]},

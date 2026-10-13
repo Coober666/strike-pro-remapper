@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import strike_remap as app
 from strike_remapper.wifi_editor import Pairing, make_handler
 from strike_remapper.factory_bridge import Controller
+from strike_remapper.midi_capture import MidiCapture
+from tools.test_midi_capture import FakeBackend
 
 
 class WifiEditorTests(unittest.TestCase):
@@ -23,7 +25,8 @@ class WifiEditorTests(unittest.TestCase):
         self.cards.start()
         self.access = Pairing('test-editor-pairing', '127.0.0.1:0')
         self.controller = Controller(lambda selected=None: {'outputs': []}, lambda: False)
-        self.server = app._Server(('127.0.0.1', 0), make_handler(app, self.access, self.controller))
+        self.midi = MidiCapture(FakeBackend())
+        self.server = app._Server(('127.0.0.1', 0), make_handler(app, self.access, self.controller, self.midi))
         self.authority = f'127.0.0.1:{self.server.server_port}'
         self.access.authority = self.authority
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -71,9 +74,9 @@ class WifiEditorTests(unittest.TestCase):
         self.assertIn(b'Pairing link', page)
         self.assertNotIn(b'boot-screen', page)
         self.assertNotIn(b'test-editor-pairing', page)
-        for path in ('/api/kits', '/api/status', '/api/session', '/api/export_bundle', '/factory', '/api/outputs', '/midi', '/midi/core.js'):
+        for path in ('/api/kits', '/api/status', '/api/session', '/api/export_bundle', '/factory', '/api/outputs', '/midi', '/midi/core.js', '/wifi/midi/inputs'):
             self.assertEqual(self.request(path)[0], 401, path)
-        for path in ('/api/select', '/api/save', '/api/run_tool', '/api/deploy', '/api/activate'):
+        for path in ('/api/select', '/api/save', '/api/run_tool', '/api/deploy', '/api/activate', '/wifi/midi'):
             self.assertEqual(self.request(path, {})[0], 401, path)
         self.assertEqual(self.request('/wifi/pair', {'token': 'wrong'})[0], 401)
         self.assertEqual(self.request('/wifi/pair', ['bad'])[0], 401)
@@ -96,6 +99,34 @@ class WifiEditorTests(unittest.TestCase):
         self.assertEqual(self.request('/api/select', {'pad_id': 'SNARE'})[0], 200)
         self.assertEqual(self.request('/api/outputs')[0], 200)
         self.assertIn(b'data-host-session="true"', self.request('/factory')[2])
+
+    def test_midi_is_paired_input_only_and_independent_of_editor_ownership(self):
+        self.pair()
+        self.assertIn(b'data-host-midi="true"', self.request('/midi')[2])
+        ports = json.loads(self.request('/wifi/midi/inputs')[2])['inputs']
+        start = {'action':'start', 'id':'a'*32, 'input':ports[0]['id']}
+        self.assertEqual(self.request('/wifi/midi', start, {'Origin':'http://evil.test'})[0], 403)
+        self.assertEqual(self.midi.backend.opens, 0)
+        self.assertEqual(self.request('/wifi/midi', start)[0], 200)
+        first = self.cookie
+        self.pair()
+        self.assertEqual(self.request('/wifi/midi', {'action':'poll','id':'a'*32})[0], 403)
+        self.assertEqual(self.request('/wifi/midi', {'action':'start','id':'b'*32,'input':ports[0]['id']})[0], 409)
+        self.cookie = first
+        self.assertEqual(self.request('/wifi/midi', {'action':'stop','id':'a'*32})[0], 200)
+        self.assertEqual(self.request('/wifi/logout', {})[0], 200)
+        self.assertIsNone(self.midi.take)
+        self.assertEqual(self.midi.backend.closes, 1)
+
+    def test_server_close_releases_midi_and_bad_json_cannot_start(self):
+        self.pair()
+        self.assertEqual(self.request('/wifi/midi', [1])[0], 400)
+        ports = self.midi.inputs()
+        self.request('/wifi/midi', {'action':'start','id':'a'*32,'input':ports[0]['id']})
+        self.server.shutdown()
+        self.server.server_close()
+        self.assertEqual(self.midi.backend.closes, 1)
+        self.assertTrue(self.midi.closed.is_set())
 
     def test_origin_host_and_cross_site_checks_also_apply_after_pairing(self):
         self.pair()

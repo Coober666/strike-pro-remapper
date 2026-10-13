@@ -94,12 +94,27 @@ covered by `tests/browser/zz-recovery-touch.spec.js`.
 
 `web/midi-toolkit/` is a separate ES-module page, exposed by an exact asset allowlist
 at `/midi` and `/midi/{app,core,storage}.js` plus `styles.css`. Normal host guards and
-Wi-Fi pairing apply. It never uses editor APIs/state and needs no active Strike kit.
+Wi-Fi pairing apply. It never uses kit editor APIs/state and needs no active Strike kit.
 Start/Tools links are hidden in the generated read-only viewer.
 `core.js` provides versioned session validation and pure analysis; `storage.js` stores
 sessions/metadata atomically in browser IndexedDB; `app.js` captures one explicitly
 selected Web MIDI input with `sysex:false`. Do not open/read MIDI outputs or send data.
-Visual replay is a playhead/event review only. No MIDI-over-Wi-Fi bridge is included.
+Visual replay is a playhead/event review only. Paired pages also offer host capture:
+`host.js` calls `/wifi/midi/inputs` and POST `/wifi/midi`, independent of kit ownership.
+`midi_capture.py` owns one bounded take per host, tied to the paired cookie and a
+per-tab capture ID. Start is idempotent while retained; commands never auto-retry.
+Poll by event offset (1024/event batch); 15 seconds without polling stops the input,
+and the stopped take remains in memory for 10 minutes. Logout revokes it and server
+close shuts the worker down. Page hiding requests Stop best-effort; lease is fallback.
+`midi_input.py` isolates optional python-rtmidi in a subprocess, constructs only MidiIn,
+filters to complete channel messages, bounds its callback queue, and timestamps on
+the host monotonic clock. Close/join outside the recorder lock. The Python application
+remains stdlib-only unless the user installs `requirements-midi.txt` for this feature.
+Session v1 has optional `captureStatus` (complete/partial); preserve it in saves/exports
+and show partial copies after network/driver failure. Recover retained events explicitly;
+never automatically start a new take or reacquire after host restart. Native driver
+behavior remains hardware-unverified. Tests inject drivers: `test_midi_capture.py`,
+`test_wifi_editor.py`, and `tests/browser/wifi-midi.spec.js`.
 Note On velocity zero is Note Off; always separate channel/note. Never infer missed
 physical hits or trigger faults from MIDI alone. Pause time is excluded and timing
 is not calibrated. Bound captures/imports (20 active minutes, 50k events, 8 MB JSON),

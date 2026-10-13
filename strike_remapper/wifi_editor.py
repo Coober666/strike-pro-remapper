@@ -10,6 +10,7 @@ import threading
 import time
 
 from strike_remapper.factory_bridge import Controller, WEB as FACTORY_WEB
+from strike_remapper.midi_capture import MidiCapture, CaptureError
 
 WEB = Path(__file__).resolve().parent.parent / 'web' / 'wifi-editor'
 
@@ -67,15 +68,19 @@ class Pairing:
         return self.cookie('', 0)
 
 
-def make_handler(app, pairing, controller=None):
+def make_handler(app, pairing, controller=None, midi=None):
     controller = controller or Controller()
+    midi = midi or MidiCapture()
     # Serialize ownership changes with complete editor writes (including deploy).
     # A page gets a fresh token on reload; in-flight writes from its old page lose
     # authority. No timeout silently transfers an unsaved kit to another browser.
     edit_lock = threading.RLock()
+    midi_access = threading.RLock()
     owner = {'session': '', 'token': ''}
 
     class Handler(app.Handler):
+        close_midi = staticmethod(midi.close)
+
         def editor_access(self):
             with pairing.lock:
                 alive = pairing.sessions.get(owner['session'], 0) > time.time()
@@ -132,6 +137,14 @@ def make_handler(app, pairing, controller=None):
             if self.path == '/wifi/editor':
                 with edit_lock:
                     self.send_json(self.editor_access())
+            elif self.path == '/wifi/midi/inputs':
+                try:
+                    self.send_json({'inputs': midi.inputs()})
+                except Exception as exc:
+                    self.send_json({'error': str(exc)}, 503)
+            elif self.path in ('/midi', '/midi/'):
+                page = (Path(__file__).resolve().parent.parent / 'web' / 'midi-toolkit' / 'index.html').read_text(encoding='utf-8')
+                self.document(page.replace('<html lang="en">', '<html lang="en" data-host-midi="true">', 1))
             elif self.path in ('/', '/index.html'):
                 self.document(app.HTML.replace('<html lang="en">', '<html lang="en" data-wifi-editor="true">', 1))
             elif self.path == '/factory':
@@ -175,9 +188,25 @@ def make_handler(app, pairing, controller=None):
             if not self._guard():
                 return
             if self.path == '/wifi/logout':
-                with edit_lock:
-                    self.document('{"disconnected":true}', 'application/json', pairing.logout(self.headers))
-                    self.editor_access()
+                with midi_access:
+                    midi.revoke(pairing.session_id(self.headers))
+                    with edit_lock:
+                        self.document('{"disconnected":true}', 'application/json', pairing.logout(self.headers))
+                        self.editor_access()
+            elif self.path == '/wifi/midi':
+                try:
+                    data = self.small_json()
+                    with midi_access:
+                        # A Start queued behind Logout must recheck the cookie;
+                        # it cannot resurrect that browser's input after revocation.
+                        if self._guard():
+                            self.send_json(midi.request(pairing.session_id(self.headers), data))
+                except CaptureError as exc:
+                    self.send_json({'error': str(exc)}, exc.status)
+                except (ValueError, TypeError):
+                    self.send_json({'error': 'Invalid MIDI capture request.'}, 400)
+                except Exception as exc:
+                    self.send_json({'error': str(exc)}, 503)
             elif self.path == '/wifi/editor':
                 try:
                     data = self.small_json()
