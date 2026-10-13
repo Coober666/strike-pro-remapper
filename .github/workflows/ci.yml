@@ -101,6 +101,9 @@ jobs:
       - name: Portable Python resolver contracts
         run: npm run test:python
 
+      - name: MIDI session analysis contracts
+        run: npm run test:midi
+
       - name: Lint embedded editor JavaScript
         run: npm run lint:js
 

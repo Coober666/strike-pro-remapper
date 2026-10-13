@@ -90,6 +90,23 @@ the original overrides. Velocity dragging also captures its pointer and converts
 screen coordinates to SVG coordinates. Keyboard pads and confirmation focus are
 covered by `tests/browser/zz-recovery-touch.spec.js`.
 
+## General MIDI toolkit
+
+`web/midi-toolkit/` is a separate ES-module page, exposed by an exact asset allowlist
+at `/midi` and `/midi/{app,core,storage}.js` plus `styles.css`. Normal host guards and
+Wi-Fi pairing apply. It never uses editor APIs/state and needs no active Strike kit.
+Start/Tools links are hidden in the generated read-only viewer.
+`core.js` provides versioned session validation and pure analysis; `storage.js` stores
+sessions/metadata atomically in browser IndexedDB; `app.js` captures one explicitly
+selected Web MIDI input with `sysex:false`. Do not open/read MIDI outputs or send data.
+Visual replay is a playhead/event review only. No MIDI-over-Wi-Fi bridge is included.
+Note On velocity zero is Note Off; always separate channel/note. Never infer missed
+physical hits or trigger faults from MIDI alone. Pause time is excluded and timing
+is not calibrated. Bound captures/imports (20 active minutes, 50k events, 8 MB JSON),
+reject invalid imports without replacing current work, and retain export after storage
+failure. Tests: `npm run test:midi` and `tests/browser/midi-toolkit.spec.js`; injected
+WebKit MIDI is simulated and does not establish physical mobile compatibility.
+
 ## Host lifecycle and recovery
 
 `launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.

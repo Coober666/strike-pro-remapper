@@ -2,7 +2,7 @@ import globals from 'globals';
 
 export default [
   {
-    files: ['.build/embedded.js', 'web/factory-controller/app.js', 'web/wifi-editor/pair.js'],
+    files: ['.build/embedded.js', 'web/factory-controller/app.js', 'web/wifi-editor/pair.js', 'web/midi-toolkit/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
@@ -49,5 +49,6 @@ export default [
       'use-isnan': 'error',
       'valid-typeof': 'error'
     }
-  }
+  },
+  {files:['web/midi-toolkit/*.js'], languageOptions:{sourceType:'module'}}
 ];
