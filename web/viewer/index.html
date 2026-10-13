@@ -286,6 +286,12 @@
       </div>
       <button class="btn-secondary" style="font-size:.65rem;padding:2px 7px;margin-left:auto;" onclick="batchToggle()">&#x2715; Done</button>
     </div>
+    <div class="map-touch-tools" role="group" aria-label="Map controls">
+      <button id="layout-edit-btn" onclick="toggleLayoutEditing()" aria-pressed="false">Arrange pads</button>
+      <button onclick="zoomMap(.85)" aria-label="Zoom in">+</button>
+      <button onclick="zoomMap(1/.85)" aria-label="Zoom out">−</button>
+      <button onclick="svgView={x:0,y:0,w:SVG_DEF_W,h:SVG_DEF_H};applySvgView()">Fit map</button>
+    </div>
     <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
       <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
     </div>

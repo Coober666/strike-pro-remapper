@@ -50,13 +50,13 @@ test('paired Wi-Fi editor loads, edits, saves and revokes its session', async ({
   expect(errors).toEqual([]);
 });
 
-test('another device is view-only until an explicit handover reloads the current kit', async ({page, browser}) => {
+test('another device is view-only until an explicit handover reloads the current kit', async ({page, browser}, testInfo) => {
   const secondContext = await browser.newContext();
   const second = await secondContext.newPage();
   try {
     await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
     await expect(page.locator('#boot-screen')).toBeHidden();
-    await page.evaluate(async () => { await api('/new_kit', {name:'Handover Kit'}); });
+    await page.evaluate(async name => { await api('/new_kit', {name}); }, 'Handover Kit ' + testInfo.project.name + ' ' + testInfo.retry);
     await page.reload();
     await expect(page.locator('#kit-name')).toContainText('Handover Kit');
     await second.goto(host + '/wifi/pair#pair=browser-wifi-pairing');

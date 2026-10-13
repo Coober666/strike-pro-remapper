@@ -1207,6 +1207,23 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
   #inst-list { flex: none; max-height: 55vh; }
 }
 
+:where(button, input, select, a, [tabindex]):focus-visible { outline: 2px solid #dfbd72; outline-offset: 3px; }
+.map-pad:focus-visible { outline: none; filter: drop-shadow(0 0 4px #dfbd72); }
+.map-touch-tools { display: flex; gap: 6px; padding: 6px 10px; flex-wrap: wrap; flex-shrink: 0; }
+.map-touch-tools button { min-height: 36px; min-width: 36px; color: #c7cdbf; background: #1c231e; border: 1px solid #475048; border-radius: 4px; }
+.map-touch-tools button[aria-pressed="true"] { color: #f1d48c; border-color: #a98b48; }
+#drum-svg-wrap { touch-action: pan-y pinch-zoom; }
+#drum-svg-wrap.layout-editing, .vel-xfade-svg { touch-action: none; }
+@media (min-width: 901px) {
+  #center-panel { overflow-y: auto; }
+  #drum-svg-wrap { min-height: 240px; flex-shrink: 0; }
+}
+@media (pointer: coarse) {
+  #drum-svg-wrap:not(.layout-editing) .pad-handle { display: none; }
+  .map-touch-tools button { min-width: 44px; min-height: 44px; }
+  .pad-handle circle { r: 12; }
+}
+
 /* ── viewer-mode overrides (added, not extracted) ── */
 /* Web Viewer v1 is a pure-browser, READ-ONLY kit explorer. engine.js adds the
    `viewer-mode` class to <body>; these rules hide every mutating affordance while

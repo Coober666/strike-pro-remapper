@@ -786,6 +786,8 @@ def _find_wav_in_roots(wav_rel: str) -> 'Path | None':
 
 # ── Global mutable state ───────────────────────────────────────────────────────
 
+STATE_LOCK = threading.RLock()
+
 state = {
     'kit_path':    None,
     'kit_display': '',   # display name for the loaded kit (used to key the time machine)
@@ -861,15 +863,17 @@ def record_recent_kit(path, opened_at=None):
     return True
 
 
-def load_kit(path_str: str):
+def load_kit(path_str: str, data=None):
     p = Path(path_str)
-    data = read_card_bytes(p)
+    if data is None:
+        data = read_card_bytes(p)
     kit_raw, pads, instruments, tail = parse_skt(data)
     rebuilt  = build_skt(kit_raw, pads, instruments, tail)
     lossless = (rebuilt == data)
     if not lossless:
         print(f'[warn] {p.name}: round-trip check FAILED ({len(data)}B → {len(rebuilt)}B)', flush=True)
-    state['kit_path']     = str(p)
+    recovering = p.name.lower().endswith('.autosave.skt')
+    state['kit_path']     = str(p.with_name(p.name[:-len('.autosave.skt')] + '.skt')) if recovering else str(p)
     # Autosaves display (and key the time machine) under the ORIGINAL kit
     # name — the header showing "X.autosave.skt" after a Recover confused
     # users (finding A4-1).
@@ -879,7 +883,7 @@ def load_kit(path_str: str):
     state['instruments']  = instruments
     state['tail']         = tail
     state['skt_lossless'] = lossless
-    state['dirty']        = False
+    state['dirty']        = recovering
     state['history']      = []
     state['message']      = f"Loaded {p.name}"
     if not p.name.lower().endswith('.autosave.skt'):
@@ -2753,7 +2757,9 @@ def create_new_kit(name: str):
         })
     out = LIBRARY_DIR / 'kits' / f'{safe}.skt'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(build_skt(_KIT_BLOCK_TEMPLATE, pads, []))
+    if out.exists():
+        raise ValueError('A kit with that name already exists. Choose a different name.')
+    _atomic_write(out, build_skt(_KIT_BLOCK_TEMPLATE, pads, []))
     state.update({
         'kit_path':    str(out),
         'kit_display': out.name,
@@ -3185,14 +3191,39 @@ def autosave_kit() -> 'str | None':
     Autosaves always land in the LOCAL working area (library/kits), never on a
     removable card — an unprompted write to the card root violated the app's
     'only writes you asked for' contract (finding B4-3)."""
-    if not state['kit_path'] or not state['dirty'] or state.get('kit_raw') is None:
+    if not state['dirty'] or state.get('kit_raw') is None:
         return None
-    src = Path(state['kit_path'])
+    src = Path(state['kit_path'] or state.get('kit_display') or 'Imported Kit.skt')
     dst_dir = LIBRARY_DIR / 'kits'
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / (src.stem + '.autosave.skt')
-    dst.write_bytes(build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail']))
+    _atomic_write(dst, build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail']))
     return str(dst)
+
+
+class RecoveryWorker:
+    """Host-owned recovery; survives closed browsers, serialized with editor writes."""
+    def __init__(self, interval=60):
+        self.stop_event = threading.Event()
+        self.interval = interval
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def flush(self):
+        with STATE_LOCK:
+            return autosave_kit()
+
+    def run(self):
+        while not self.stop_event.wait(self.interval):
+            try:
+                self.flush()
+            except Exception as exc:
+                print(f'Recovery copy could not be saved: {_friendly_error(exc)}', flush=True)
+
+    def close(self):
+        self.stop_event.set()
+        self.thread.join()
+        self.flush()
 
 
 def find_autosaves() -> list:
@@ -4529,6 +4560,23 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 @media (max-width: 900px) {
   #inst-list { flex: none; max-height: 55vh; }
 }
+
+:where(button, input, select, a, [tabindex]):focus-visible { outline: 2px solid #dfbd72; outline-offset: 3px; }
+.map-pad:focus-visible { outline: none; filter: drop-shadow(0 0 4px #dfbd72); }
+.map-touch-tools { display: flex; gap: 6px; padding: 6px 10px; flex-wrap: wrap; flex-shrink: 0; }
+.map-touch-tools button { min-height: 36px; min-width: 36px; color: #c7cdbf; background: #1c231e; border: 1px solid #475048; border-radius: 4px; }
+.map-touch-tools button[aria-pressed="true"] { color: #f1d48c; border-color: #a98b48; }
+#drum-svg-wrap { touch-action: pan-y pinch-zoom; }
+#drum-svg-wrap.layout-editing, .vel-xfade-svg { touch-action: none; }
+@media (min-width: 901px) {
+  #center-panel { overflow-y: auto; }
+  #drum-svg-wrap { min-height: 240px; flex-shrink: 0; }
+}
+@media (pointer: coarse) {
+  #drum-svg-wrap:not(.layout-editing) .pad-handle { display: none; }
+  .map-touch-tools button { min-width: 44px; min-height: 44px; }
+  .pad-handle circle { r: 12; }
+}
 </style>
 </head>
 <body data-workspace="pad">
@@ -4806,6 +4854,12 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
         <button class="btn-primary" style="font-size:.68rem;padding:3px 10px;" onclick="batchApply()">Apply</button>
       </div>
       <button class="btn-secondary" style="font-size:.65rem;padding:2px 7px;margin-left:auto;" onclick="batchToggle()">&#x2715; Done</button>
+    </div>
+    <div class="map-touch-tools" role="group" aria-label="Map controls">
+      <button id="layout-edit-btn" onclick="toggleLayoutEditing()" aria-pressed="false">Arrange pads</button>
+      <button onclick="zoomMap(.85)" aria-label="Zoom in">+</button>
+      <button onclick="zoomMap(1/.85)" aria-label="Zoom out">−</button>
+      <button onclick="svgView={x:0,y:0,w:SVG_DEF_W,h:SVG_DEF_H};applySvgView()">Fit map</button>
     </div>
     <div id="drum-svg-wrap" title="Scroll to zoom · Double-click empty area to reset">
       <svg id="drum-svg" viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -6706,14 +6760,56 @@ function svgPt(svgEl, clientX, clientY) {
   return pt.matrixTransform(svgEl.getScreenCTM().inverse());
 }
 
+let layoutEditing = false;
+let mapTouchTapId = null;
+function toggleLayoutEditing() {
+  cancelMapDrag();
+  layoutEditing = !layoutEditing;
+  document.getElementById('drum-svg-wrap').classList.toggle('layout-editing', layoutEditing);
+  const btn = document.getElementById('layout-edit-btn');
+  btn.setAttribute('aria-pressed', String(layoutEditing));
+  btn.textContent = layoutEditing ? 'Done arranging' : 'Arrange pads';
+  setMsg(layoutEditing ? 'Drag pads or their resize/rotate handles. Done arranging restores touch scrolling.' : 'Tap a pad to select; swipe to scroll.');
+}
+function cancelMapDrag() {
+  if (!dragState) { mapTouchTapId = null; return; }
+  if (dragState?.original) padOverrides = dragState.original;
+  dragState = null;
+  mapTouchTapId = null;
+  renderDrumMap();
+  renderPadDetail();
+}
+function tapMapPad(id) {
+  if (mapTouchTapId !== id) return;
+  mapTouchTapId = null;
+  clickPad(id);
+}
+function keySelectMapPad(e, id) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  e.stopPropagation();
+  clickPad(id);
+  document.querySelector(`#drum-svg .map-pad[data-pid="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
+}
+function zoomMap(factor) {
+  const w = Math.min(SVG_DEF_W * 3, Math.max(SVG_DEF_W * .2, svgView.w * factor));
+  const h = w * SVG_DEF_H / SVG_DEF_W;
+  svgView = {x:svgView.x + (svgView.w-w)/2, y:svgView.y + (svgView.h-h)/2, w, h};
+  applySvgView();
+}
+
 function startDrag(e, id, isMirror) {
+  if (e.button !== 0 || dragState) return;
+  if (e.pointerType !== 'mouse' && !layoutEditing) { mapTouchTapId = id; return; }
+
   e.preventDefault();
   const svgEl = document.getElementById('drum-svg');
   const pt    = svgPt(svgEl, e.clientX, e.clientY);
   const def   = effectivePadDef(id);
   if (!def) return;
   const mir = isMirror ? ((padOverrides[id] || {}).mirror || {dx: 0, dy: 0}) : null;
-  dragState = {id, isMirror: !!isMirror,
+  svgEl.setPointerCapture(e.pointerId);
+  dragState = {id, pointerId:e.pointerId, original:JSON.parse(JSON.stringify(padOverrides)), isMirror: !!isMirror,
                origCx: def[2] + (mir ? mir.dx : 0), origCy: def[3] + (mir ? mir.dy : 0),
                baseCx: def[2], baseCy: def[3],
                startX: pt.x, startY: pt.y, moved: false};
@@ -6721,6 +6817,7 @@ function startDrag(e, id, isMirror) {
 
 // Resize / rotate handle drag — edits the pad's rx/ry or rot in padOverrides live.
 function startHandle(e, id, kind) {
+  if (e.button !== 0 || dragState || (e.pointerType !== 'mouse' && !layoutEditing)) return;
   e.preventDefault();
   e.stopPropagation();
   const svgEl = document.getElementById('drum-svg');
@@ -6728,8 +6825,9 @@ function startHandle(e, id, kind) {
   const def   = effectivePadDef(id);
   if (!def) return;
   const cx = def[2], cy = def[3];
+  svgEl.setPointerCapture(e.pointerId);
   dragState = {
-    id, handle: kind, cx, cy,
+    id, pointerId:e.pointerId, original:JSON.parse(JSON.stringify(padOverrides)), handle: kind, cx, cy,
     origRx: def[4], origRy: def[5], origRot: +((padOverrides[id] || {}).rot) || 0,
     startDist: Math.max(2, Math.hypot(pt.x - cx, pt.y - cy)),
     startAng:  Math.atan2(pt.y - cy, pt.x - cx) * 180 / Math.PI,
@@ -6738,7 +6836,7 @@ function startHandle(e, id, kind) {
 }
 
 function svgMouseMove(e) {
-  if (!dragState) return;
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
   const svgEl = document.getElementById('drum-svg');
   const pt    = svgPt(svgEl, e.clientX, e.clientY);
 
@@ -6786,7 +6884,7 @@ function svgMouseMove(e) {
 }
 
 function svgMouseUp(e) {
-  if (!dragState) return;
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
   const wasMoved = dragState.moved;
   const isHandle = !!dragState.handle;
   const id = dragState.id;
@@ -6899,11 +6997,15 @@ async function wifiDisconnect() {
 // native confirm() blocks the event loop and is auto-dismissed as "cancel"
 // by headless browsers, which made restore/delete undriveable in tests.
 let _confirmResolve = null;
+let _confirmReturnFocus = null;
 function appConfirm(message, okLabel = 'OK') {
   let m = document.getElementById('confirm-modal');
   if (!m) {
     m = document.createElement('div');
     m.id = 'confirm-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.setAttribute('aria-labelledby', 'confirm-msg');
     m.innerHTML = '<div class="confirm-box"><p id="confirm-msg"></p>'
       + '<div class="confirm-actions">'
       + '<button id="confirm-cancel">Cancel</button>'
@@ -6917,10 +7019,20 @@ function appConfirm(message, okLabel = 'OK') {
     document.addEventListener('keydown', e => {
       if (!m.classList.contains('open')) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _confirmDone(false); }
-      if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); _confirmDone(true); }
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+        if (e.target.tagName !== 'BUTTON') { e.preventDefault(); _confirmDone(true); }
+      }
+      if (e.key === 'Tab') {
+        const first = document.getElementById('confirm-cancel');
+        const last = document.getElementById('confirm-ok');
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
     }, true);
   }
   document.getElementById('confirm-msg').textContent = message;
+  _confirmReturnFocus = document.activeElement;
   document.getElementById('confirm-ok').textContent  = okLabel;
   m.classList.add('open');
   document.getElementById('confirm-ok').focus();
@@ -6929,6 +7041,8 @@ function appConfirm(message, okLabel = 'OK') {
 function _confirmDone(ok) {
   document.getElementById('confirm-modal').classList.remove('open');
   const r = _confirmResolve; _confirmResolve = null;
+  if (_confirmReturnFocus?.isConnected) _confirmReturnFocus.focus({preventScroll:true});
+  _confirmReturnFocus = null;
   if (r) r(ok);
 }
 
@@ -7203,7 +7317,7 @@ async function loadKitList() {
 // and boot-time rehydration from /api/session.
 function applyKitData(data, path, opts) {
   saveFeedback = '';
-  const {dirty = false, undoCount = 0, historyLabels = []} = opts || {};
+  const {dirty = !!data.dirty, undoCount = 0, historyLabels = []} = opts || {};
   kitName       = data.name;
   pads          = data.pads;
   libSavePath   = data.lib_save_path || '';
@@ -7238,11 +7352,14 @@ function applyKitData(data, path, opts) {
 async function openKit(idx) {
   stopPreview();
   const path = typeof idx === 'number' ? kits[idx].path : idx;
-  const data = await api('/load', {path});
-  if (data.error) { setMsg(data.error, true); return; }
+  let data;
+  try { data = await api('/load', {path}); }
+  catch { setMsg('Kit load could not be confirmed. Reconnect and reload the editor before editing.', true); return false; }
+  if (data.error) { setMsg(data.error, true); return false; }
   applyKitData(data, path);
   closeAllPopovers();
   setMsg(data.message);
+  return true;
 }
 
 // ── Drum map ──────────────────────────────────────────────────────────────────
@@ -7520,7 +7637,7 @@ function renderDrumMap() {
 
     const inner = titleEl + sprite + ring + textEl + warnEl;
     (isOverlay ? overlays : parts).push(
-      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
+      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" role="button" tabindex="0" aria-label="Select ${id}" onclick="tapMapPad('${id}')" onkeydown="keySelectMapPad(event,'${id}')" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onpointerdown="startDrag(event,'${id}')">`
       + inner + `</g>`);
 
     // Mirror pad: same zone drawn a second time (e.g. dual hi-hats on a Y-splitter)
@@ -7529,8 +7646,8 @@ function renderDrumMap() {
       const link = `<text x="${(scx + srx - 6).toFixed(1)}" y="${(scy - sry + 8).toFixed(1)}" font-size="9" `
         + `fill="#7f8a9c" pointer-events="none" font-family="system-ui,sans-serif">&#x29C9;</text>`;
       (isOverlay ? overlays : parts).push(
-        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
-        + `style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}',true)">`
+        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" role="button" tabindex="0" aria-label="Select ${id}" onclick="tapMapPad('${id}')" onkeydown="keySelectMapPad(event,'${id}')" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
+        + `style="opacity:${opacity};${glow}" onpointerdown="startDrag(event,'${id}',true)">`
         + `<title>${escHtml((padMap[id]?.label || id) + ' (mirror — same zone, shared settings)')}</title>`
         + sprite + ring + textEl + warnEl + link + `</g>`);
     }
@@ -7550,12 +7667,12 @@ function renderDrumMap() {
       const rex = hcx + (hrx + 7) * Math.cos(rad), rey = hcy + (hrx + 7) * Math.sin(rad);
       const rotHandleX = hcx + (hry + 22) * Math.sin(rad), rotHandleY = hcy - (hry + 22) * Math.cos(rad);
       handles =
-        `<g class="pad-handle" data-h="rotate" onmousedown="startHandle(event,'${et}','rotate')">`
+        `<g class="pad-handle" data-h="rotate" onpointerdown="startHandle(event,'${et}','rotate')">`
         + `<line x1="${hcx.toFixed(1)}" y1="${hcy.toFixed(1)}" x2="${rotHandleX.toFixed(1)}" y2="${rotHandleY.toFixed(1)}" stroke="#f0b32e" stroke-width="1.2" opacity=".8"/>`
         + `<circle cx="${rotHandleX.toFixed(1)}" cy="${rotHandleY.toFixed(1)}" r="5" fill="#141519" stroke="#f0b32e" stroke-width="1.6"/>`
         + `<path d="M ${(rotHandleX-2.4).toFixed(1)} ${rotHandleY.toFixed(1)} a 2.4 2.4 0 1 1 1.4 2.1" fill="none" stroke="#f0b32e" stroke-width="1"/>`
         + `</g>`
-        + `<g class="pad-handle" data-h="resize" onmousedown="startHandle(event,'${et}','resize')">`
+        + `<g class="pad-handle" data-h="resize" onpointerdown="startHandle(event,'${et}','resize')">`
         + `<circle cx="${rex.toFixed(1)}" cy="${rey.toFixed(1)}" r="5" fill="#f0b32e" stroke="#141519" stroke-width="1.4"/>`
         + `<path d="M ${(rex-2.2).toFixed(1)} ${(rey-2.2).toFixed(1)} L ${(rex+2.2).toFixed(1)} ${(rey+2.2).toFixed(1)} M ${(rex+2.2).toFixed(1)} ${(rey-2.2).toFixed(1)} L ${(rex-2.2).toFixed(1)} ${(rey+2.2).toFixed(1)}" stroke="#141519" stroke-width="1.1"/>`
         + `</g>`;
@@ -7630,7 +7747,7 @@ function velXfadeControl(padId, xfade, laLevel, lbLevel) {
     <text id="${eid}_lbl" x="${W/2}" y="${H-3}" text-anchor="middle" font-size="8" fill="#445">A only (drag to enable B)</text>`;
 
   return `<svg id="${eid}" class="vel-xfade-svg" width="${W}" height="${H}"
-      data-pid="${escHtml(padId)}" onmousedown="startVelDrag(event)"
+      data-pid="${escHtml(padId)}" onpointerdown="startVelDrag(event)"
       style="display:block;flex-shrink:0;cursor:ew-resize;user-select:none;" xmlns="http://www.w3.org/2000/svg">
     <rect x="${pad}" y="0" width="${W - pad*2}" height="${H-14}" fill="#0a1520" rx="2"/>
     <rect id="${eid}_abar" x="${pad}" y="${aY}" width="${Math.max(0, splitX - pad)}" height="${aH}" fill="${aCol}" opacity="0.75" rx="1"/>
@@ -7642,9 +7759,11 @@ function velXfadeControl(padId, xfade, laLevel, lbLevel) {
 }
 
 function startVelDrag(e) {
+  if (e.button !== 0 || _velDrag) return;
   e.preventDefault();
   const svg = e.currentTarget;
-  _velDrag = {padId: svg.dataset.pid, svg, rect: svg.getBoundingClientRect(), lastVel: null};
+  svg.setPointerCapture(e.pointerId);
+  _velDrag = {pointerId:e.pointerId, padId: svg.dataset.pid, svg, rect: svg.getBoundingClientRect(), lastVel: null};
   _applyVelDrag(e.clientX);
 }
 
@@ -7653,7 +7772,7 @@ function _applyVelDrag(clientX) {
   const {svg, rect, padId} = _velDrag;
   const W = svg.viewBox?.baseVal?.width || svg.getBoundingClientRect().width;
   const pad = 4;
-  const x = Math.max(pad, Math.min(W - pad, clientX - rect.left));
+  const x = Math.max(pad, Math.min(W - pad, (clientX - rect.left) * W / rect.width));
   const vel = Math.round((x - pad) / (W - pad * 2) * 127);
   const eid = 'vx_' + padId.replace(/\W/g,'_');
   const aCol = '#4a90d9', bCol = '#e06040';
@@ -10437,16 +10556,25 @@ async function openConnectionDetails() {
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
-  svgEl.addEventListener('mousemove', svgMouseMove);
-  window.addEventListener('mouseup', e => {
+  svgEl.addEventListener('pointermove', svgMouseMove);
+  window.addEventListener('pointerup', e => {
     svgMouseUp(e);
-    if (_velDrag?.lastVel != null) {
-      setParam(_velDrag.padId, 'xfade_vel', _velDrag.lastVel);
+    if (_velDrag && e.pointerId === _velDrag.pointerId) {
+      if (_velDrag.lastVel != null) setParam(_velDrag.padId, 'xfade_vel', _velDrag.lastVel);
+      _velDrag = null;
     }
-    _velDrag = null;
   });
-  window.addEventListener('mousemove', e => {
-    if (_velDrag) _applyVelDrag(e.clientX);
+  window.addEventListener('pointercancel', e => {
+    if (dragState?.pointerId === e.pointerId) cancelMapDrag();
+    mapTouchTapId = null;
+    if (_velDrag?.pointerId === e.pointerId) { _velDrag = null; renderPadDetail(); }
+  });
+  window.addEventListener('pointermove', e => {
+    if (_velDrag?.pointerId === e.pointerId) _applyVelDrag(e.clientX);
+  });
+  window.addEventListener('blur', () => {
+    cancelMapDrag();
+    if (_velDrag) { _velDrag = null; renderPadDetail(); }
   });
 
   // Scroll-to-zoom on drum map; double-click resets
@@ -10694,7 +10822,11 @@ async function openConnectionDetails() {
 
   // Auto-save every 60 s while there are unsaved changes
   setInterval(async () => {
-    if (wifiEditing && undoCount > 0) await api('/autosave', {});
+    if (!wifiEditing || !kitDirty) return;
+    try {
+      const data = await api('/autosave', {});
+      if (data.error) setMsg('Recovery copy could not be saved: ' + data.error, true);
+    } catch { setMsg('Recovery could not be confirmed. Check the computer connection.', true); }
   }, 60000);
 
   // Check for crash-recovery autosaves from previous sessions
@@ -10732,14 +10864,14 @@ async function openConnectionDetails() {
 });
 
 async function recoverAutosave(autosavePath, kitPath) {
-  await openKit(autosavePath);
-  if (kitPath) {
-    document.getElementById('save-path').value = kitPath;
-    libSavePath = kitPath;
+  if (!await openKit(autosavePath)) return false;
+  if (kitPath && !kitPath.includes('.autosave.')) {
+    document.getElementById('save-path').value = libSavePath;
     document.getElementById('save-lib-btn').disabled = false;
   }
   document.getElementById('autosave-banner')?.remove();
   setMsg('Recovered from autosave — review changes and save to keep them');
+  return true;
 }
 
 async function dismissAutosave(autosavePath, el) {
@@ -11464,6 +11596,10 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def do_POST(self):
+        with STATE_LOCK:
+            self._do_POST()
+
+    def _do_POST(self):
         if not self._guard():
             return
         path = urlparse(self.path).path
@@ -11471,12 +11607,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/new_kit':
             try:
+                recovery = autosave_kit()
                 create_new_kit(body.get('name', 'New Kit'))
                 user, _ = get_volumes()
                 kit_name = Path(state['kit_path']).name
                 self.send_json({
                     'name':          kit_name,
-                    'message':       state['message'],
+                    'message':       state['message'] + (' · Previous edits kept in Recovery' if recovery else ''),
                     'pads':          self._pad_view(state['pads'], state['instruments']),
                     'sd_save_path':  _sd_save_path(user, state['kit_path']),
                     'lib_save_path': str(LIBRARY_DIR / 'kits' / kit_name),
@@ -11488,12 +11625,18 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/load':
             try:
-                load_kit(body['path'])
+                incoming = read_card_bytes(Path(body['path']))
+                parse_skt(incoming)
+                if state['dirty'] and str(body['path']).lower().endswith('.autosave.skt'):
+                    create_snapshot('Before recovering another version', 'manual')
+                recovery = autosave_kit()
+                load_kit(body['path'], incoming)
                 user, _ = get_volumes()
                 kit_name = Path(state['kit_path']).name
                 self.send_json({
                     'name':         kit_name,
-                    'message':      state['message'],
+                    'dirty':        state['dirty'],
+                    'message':      state['message'] + (' · Previous edits kept in Recovery' if recovery else ''),
                     'pads':         self._pad_view(state['pads'], state['instruments']),
                     'sd_save_path':  _sd_save_path(user, state['kit_path']),
                     'lib_save_path': str(LIBRARY_DIR / 'kits' / kit_name),
@@ -11905,6 +12048,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/load_bytes':
             try:
+                recovery = autosave_kit()
                 data_b64  = body.get('data', '')
                 filename  = body.get('filename', 'kit.skt')
                 raw_bytes = base64.b64decode(data_b64)
@@ -11913,7 +12057,7 @@ class Handler(BaseHTTPRequestHandler):
                 lib_path = str(LIBRARY_DIR / 'kits' / Path(filename).name)
                 self.send_json({
                     'name':          filename,
-                    'message':       state['message'],
+                    'message':       state['message'] + (' · Previous edits kept in Recovery' if recovery else ''),
                     'pads':          self._pad_view(state['pads'], state['instruments']),
                     'lib_save_path': lib_path,
                     'sd_save_path':  _sd_save_path(user, lib_path) if user else '',
@@ -12053,10 +12197,16 @@ def main():
     print("Make sure SD card volumes are mounted before browsing instruments.")
     print("Press Ctrl-C to quit.\n")
     threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    recovery = RecoveryWorker()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nBye.")
+    finally:
+        try:
+            server.server_close()
+        finally:
+            recovery.close()
 
 
 if __name__ == '__main__':

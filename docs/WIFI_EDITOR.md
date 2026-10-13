@@ -7,6 +7,11 @@ and deployment actions. It is separate from the activation-only controller on po
 
 ## Start and pair
 
+The optional [host window](HOST_LAUNCHER.md) provides Start/Stop, a remembered library
+folder, **Open editor**, and a locally generated pairing QR code. Wi-Fi is opt-in.
+Its launcher and QR scanning still need physical acceptance; the command below remains
+available without a graphical desktop or Tk.
+
 With Python 3.10 or newer, run from the repository folder:
 
 ```sh

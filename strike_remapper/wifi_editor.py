@@ -238,12 +238,16 @@ def main():
     print('Pairing grants full editor access, including library edits and deliberate Deploy actions.')
     print(f'http://{pairing.authority}/wifi/pair#pair={pairing.token}', flush=True)
     print('Files and USB stay on this host. One page controls editing; other pages open view-only.')
+    recovery = app.RecoveryWorker()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        try:
+            server.server_close()
+        finally:
+            recovery.close()
 
 
 if __name__ == '__main__':

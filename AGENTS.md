@@ -83,6 +83,32 @@ must match the current audio instance before clearing it or reporting failure.
 Touch/coarse-pointer sound and layer controls have 44px minimum targets. Browser
 regressions live in `tests/browser/workflow-polish.spec.js` and use synthetic media.
 
+Map interactions use Pointer Events captured on the stable root SVG, since pad
+children are replaced during dragging. Touch scrolls/selects normally; Arrange pads
+enables drag/resize/rotate with `touch-action:none`. Pointer cancellation restores
+the original overrides. Velocity dragging also captures its pointer and converts
+screen coordinates to SVG coordinates. Keyboard pads and confirmation focus are
+covered by `tests/browser/zz-recovery-touch.spec.js`.
+
+## Host lifecycle and recovery
+
+`launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
+It starts only one service, defaults to localhost, and uses the existing paired handler
+when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
+Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
+encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
+No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.
+
+All editor POST handlers run under `STATE_LOCK`. The host-owned `RecoveryWorker` uses
+the same lock, writes atomic local autosaves every 60 seconds, and flushes after pending
+requests finish on normal shutdown. Imported kits use their display name before a first
+save. Load/new/import preserve dirty state before replacement; failed preservation blocks
+the switch. Recovery loads remain dirty, normalize the original kit name/save target, and
+snapshot current work before recovering another version. Never restore a recovery target
+to a removable-card save path automatically. Browser autosave is supplemental, uses
+`kitDirty`, and reports failures. Tests: `test_recovery_interruptions.py` and
+`test_host_launcher.py`, always with temporary libraries and loopback networking.
+
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
 
