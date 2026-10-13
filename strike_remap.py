@@ -4513,7 +4513,6 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 .inst-assign small { color: #b5bcaf; font-size: .65rem; }
 .inst-assign:hover:not(:disabled) { border-color: #a98b48; }
 .inst-meta, .inst-actions, .inst-tags { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
-.inst-meta:has(.preview-state:empty):not(:has(.in-use-badge)) { display: none; }
 .preview-state { color: #e9bb74; font-size: .66rem; }
 .inst-meta .in-use-badge { white-space: normal; overflow-wrap: anywhere; margin: 0; }
 .inst-actions .ab-btns { margin-left: auto; }
