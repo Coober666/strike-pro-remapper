@@ -28,6 +28,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
+from strike_remapper.setlists import Store as SetlistStore, Conflict as SetlistConflict, MAX_BYTES as SETLIST_MAX_BYTES
 
 from strike_remapper.audio import (
     _FP_BRIGHT_HZ,
@@ -4577,6 +4578,35 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
   .map-touch-tools button { min-width: 44px; min-height: 44px; }
   .pad-handle circle { r: 12; }
 }
+/* Setlists borrow the editor's graphite/brass palette; song numbers encode show order. */
+#setlist-dialog { margin:auto; width:min(1100px,96vw); max-height:92vh; padding:0; color:var(--text); background:#171c19; border:1px solid #586052; border-radius:8px; overflow:auto; }
+#setlist-dialog::backdrop { background:#050706c9; }
+#setlist-dialog button, #setlist-dialog select, #setlist-dialog input:not([type=checkbox]) { min-height:44px; }
+#setlist-dialog button { padding:8px 12px; color:#e5e7de; background:#252e27; border:1px solid #596052; border-radius:4px; cursor:pointer; }
+#setlist-dialog button.btn-primary { background:#d8b567; color:#1a1d17; border-color:#d8b567; }
+#setlist-dialog button:disabled { opacity:.45; cursor:default; }
+#setlist-dialog [hidden] { display:none !important; }
+.sl-head { display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap:16px; padding:22px 24px; border-bottom:1px solid #424a40; }
+.sl-head h2 { font-size:1.5rem; font-weight:600; }.sl-head p { margin-top:6px; color:#bec6ba; font-size:.85rem; }
+.sl-layout { display:grid; grid-template-columns:220px minmax(0,1fr); }
+.sl-shelf { padding:22px 18px; background:#111611; border-right:1px solid #424a40; }.sl-shelf summary { min-height:44px; cursor:pointer; font-size:.95rem; font-weight:600; }
+.sl-shelf #sl-saved { display:flex; flex-direction:column; gap:8px; margin:18px 0; }.sl-shelf #sl-saved button { text-align:left; overflow-wrap:anywhere; }
+.sl-shelf button[aria-current=true] { border-color:#d8b567 !important; color:#f1d48c !important; }
+.sl-main { min-width:0; padding:22px 24px; }.sl-field { display:flex; flex-direction:column; gap:6px; font-size:.8rem; margin-bottom:12px; }
+.sl-field input, .sl-field textarea, .sl-field select { box-sizing:border-box; width:100%; min-width:0; background:#0e140f; color:#e5e7de; border:1px solid #596052; border-radius:4px; padding:9px; font:inherit; color-scheme:dark; }
+#sl-name { font-size:1.15rem; }.sl-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }.sl-actions button { font-size:.8rem; }
+.sl-add { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin:24px 0 14px; }.sl-add label { flex:1 1 240px; margin:0; }.sl-add button { font-size:.8rem; }
+.sl-number { display:flex; align-items:center; gap:10px; font-size:.85rem; line-height:1.5; }.sl-number input { width:20px; height:20px; accent-color:#d8b567; }
+.sl-hint { color:#b5beae; font-size:.78rem; line-height:1.6; margin:10px 0; max-width:75ch; }
+#sl-rows { padding:0; list-style:none; margin:18px 0; }.sl-row { padding:18px 0; border-top:1px solid #424a40; display:grid; grid-template-columns:48px minmax(0,1fr); gap:12px; }
+.sl-order { font-size:1.2rem; color:#e2bf76; font-variant-numeric:tabular-nums; cursor:grab; align-self:start; text-align:center; padding-top:9px; }.sl-order small { display:block; font-size:.65rem; color:#b5beae; }
+.sl-row-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 12px; }.sl-row-fields .sl-song-notes { grid-column:1 / -1; }.sl-source { overflow-wrap:anywhere; color:#bac3b6; font-size:.8rem; margin:2px 0 12px; }
+.sl-result { padding:10px 12px; background:#20281f; border-left:3px solid #809676; font-size:.8rem; overflow-wrap:anywhere; }.sl-result[data-status=blocked] { border-color:#e99c89; }.sl-result[data-status=review] { border-color:#d8b567; }.sl-result p { margin:5px 0; line-height:1.5; }.sl-result code { color:#ead098; }
+#sl-status { position:sticky; bottom:0; background:#111611; padding:14px 24px; border-top:1px solid #424a40; font-size:.85rem; line-height:1.5; }
+#sl-copy-form, #sl-confirm { position:sticky; bottom:50px; z-index:1; background:#293125; border:2px solid #d8b567; margin:14px 24px; padding:20px; box-shadow:0 8px 40px #0009; }#sl-copy-form p, #sl-confirm p { margin:10px 0; font-size:.85rem; line-height:1.6; }
+@media(max-width:700px) { .sl-layout { grid-template-columns:minmax(0,1fr); }.sl-shelf { border-right:0; border-bottom:1px solid #424a40; }.sl-shelf #sl-saved { flex-direction:row; flex-wrap:wrap; margin:8px 0; }.sl-main,.sl-head { padding:18px 14px; }.sl-row-fields { grid-template-columns:minmax(0,1fr); }.sl-row { grid-template-columns:34px minmax(0,1fr); gap:8px; }#sl-status { padding:12px 14px; } }
+body.viewer-mode .setlist-link { display:none !important; }
+
 </style>
 </head>
 <body data-workspace="pad">
@@ -4613,6 +4643,7 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
     <div id="kit-menu" class="tb-popover" style="display:none;width:290px;max-height:70vh;overflow-y:auto;">
+      <button class="btn-secondary setlist-link" onclick="openSetlists()" style="width:100%;margin-bottom:8px;">Setlist Builder…</button>
       <div id="new-kit-form" style="display:none;margin-bottom:6px;">
         <input type="text" id="new-kit-name" placeholder="Kit name&#x2026;" autocomplete="off"
                style="width:100%;padding:6px 8px;background:#0b0e15;border:1px solid #242c3d;color:#e8ebf2;border-radius:4px;font-size:.85rem;margin-bottom:4px;"
@@ -4990,6 +5021,27 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
   </section>
 
 </div>
+<dialog id="setlist-dialog" aria-labelledby="sl-title">
+  <header class="sl-head"><div><h2 id="sl-title">Setlist Builder</h2><p>Plan the show using saved library kits.</p></div><button type="button" onclick="slClose()" aria-label="Close Setlist Builder">Close</button></header>
+  <div class="sl-layout">
+    <aside class="sl-shelf"><details id="sl-shelf" open><summary>Your setlists</summary><div class="sl-actions"><button onclick="slNew()">New setlist</button><button onclick="document.getElementById('sl-import').click()">Import JSON</button><input id="sl-import" type="file" accept=".json,application/json" hidden onchange="slImport(this)"></div><div id="sl-saved"></div><p class="sl-hint">Saved in this computer’s library. Export JSON to move a list to another library; kit files travel separately.</p></details></aside>
+    <section class="sl-main" aria-label="Show order">
+      <label class="sl-field">Setlist name<input id="sl-name" maxlength="80" oninput="slEditHeader()"></label>
+      <label class="sl-field">Show notes<textarea id="sl-notes" maxlength="2000" rows="2" oninput="slEditHeader()" placeholder="Venue, tuning reminders, changeover notes…"></textarea></label>
+      <div class="sl-actions"><button class="btn-primary" id="sl-save" onclick="slSave()">Save setlist</button><button id="sl-duplicate" onclick="slDuplicate()">Duplicate setlist</button><button id="sl-delete" onclick="slDelete()">Delete setlist</button><button onclick="slExport()">Export JSON</button></div>
+      <div class="sl-add"><label class="sl-field">Add a saved kit<select id="sl-kit"></select></label><button onclick="slAdd()">Add to setlist</button><button onclick="slRefresh()" aria-label="Refresh saved library kits">Refresh kits</button></div>
+      <label class="sl-number"><input id="sl-numbered" type="checkbox" onchange="slEditHeader()"> Number planned filenames in show order (001, 002…)</label>
+      <p class="sl-hint">Move songs with the arrows or drag the order handle. Output names are a plan; source kits keep their names.</p>
+      <ol id="sl-rows" aria-label="Songs in show order"></ol>
+      <div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
+      <p class="sl-hint">Local checks cover saved kit structure, instrument references and planned names. Samples, card space and existing card files still need Deploy to Module preflight. Batch deployment is not available yet.</p>
+    </section>
+  </div>
+  <form id="sl-copy-form" hidden onsubmit="event.preventDefault();slCopySubmit()"><h3>Make a song-specific kit copy</h3><label class="sl-field">New kit name<input id="sl-copy-name" maxlength="22" required></label><p>The saved kit is copied exactly into the library. Unsaved editor changes are not included. Your setlist draft will use the new copy.</p><div class="sl-actions"><button type="submit" class="btn-primary">Create kit copy</button><button type="button" onclick="slCopyCancel()">Cancel</button></div></form>
+  <div id="sl-confirm" hidden role="alertdialog" aria-label="Confirm setlist action"><p id="sl-confirm-text"></p><div class="sl-actions"><button id="sl-confirm-no" onclick="slConfirmDone(false)">Cancel</button><button id="sl-confirm-yes" onclick="slConfirmDone(true)" class="btn-primary">Continue</button></div></div>
+  <p id="sl-status" role="status" aria-live="polite"></p>
+</dialog>
+
 <script>
 // ── Live loop constants ───────────────────────────────────────────────────────
 const LOOP_ROWS = [
@@ -6919,6 +6971,7 @@ function updateWifiAccess(data) {
     : 'View only. Take editing control to refresh the kit and make changes.';
   document.getElementById('wifi-take-control').hidden = wifiEditing;
   updateSaveState();
+  if (document.getElementById('setlist-dialog')?.open) slControls();
 }
 
 async function initWifiEditor() {
@@ -7135,6 +7188,134 @@ function escHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+// Setlist drafts are independent of active-kit state. Only explicit saves persist them.
+const sl = {items:[],kits:[],document:null,id:null,revision:null,dirty:false,busy:false,report:null,confirm:null,copyIndex:null};
+const slEl = id => document.getElementById('sl-'+id);
+function slStatus(message) { slEl('status').textContent=message; }
+function slMark() { sl.dirty=true; sl.report=null; slStatus('Setlist draft changed. Save setlist to keep it on the host. Local checks need refreshing.'); slResults(); }
+function slBlank() { return {format:'strike-setlist',version:1,name:'New setlist',notes:'',numbered:true,entries:[]}; }
+function slControls() {
+  document.querySelectorAll('#setlist-dialog button, #setlist-dialog input, #setlist-dialog textarea, #setlist-dialog select').forEach(el => { el.disabled=sl.busy; });
+  slEl('delete').disabled=sl.busy || !sl.id;
+  slEl('save').disabled=sl.busy || !wifiEditing;
+  slEl('check').disabled=sl.busy || !wifiEditing || !sl.document?.entries.length;
+  slEl('print').disabled=sl.busy || !sl.report;
+  document.querySelectorAll('#sl-rows [data-move]').forEach(el => { const target=Number(el.dataset.row)+Number(el.dataset.move); el.disabled=sl.busy || target<0 || target>=sl.document.entries.length; });
+}
+async function slRequest(action, values={}) {
+  const result=await api('/setlists',{action,...values});
+  if (result.error) throw new Error(result.error);
+  return result;
+}
+async function slRun(work) {
+  if (sl.busy || sl.confirm) return;
+  sl.busy=true; slControls();
+  try { await work(); }
+  catch(e) { slStatus(e.message+' Your draft is kept. If a save or copy response was lost, refresh the saved lists before trying again.'); }
+  finally { sl.busy=false; slControls(); }
+}
+async function slRefreshData() {
+  const result=await api('/setlists');
+  if (result.error) throw new Error(result.error);
+  sl.items=result.setlists; sl.kits=result.kits; slShelf();
+  if (result.kits_truncated) slStatus('Showing the first 2,000 saved kits. Use JSON import to reference other kits by their library-relative path.');
+}
+function slShelf() {
+  slEl('saved').innerHTML=sl.items.length ? sl.items.map((item,i) => item.error
+    ? `<p class="sl-hint">Unreadable setlist: ${escHtml(item.error)}</p>`
+    : `<button data-saved="${i}" aria-current="${item.id===sl.id}">${escHtml(item.document.name)} (${item.document.entries.length})</button>`).join('') : '<p class="sl-hint">No saved setlists yet. Add a kit to start your first show.</p>';
+  slEl('kit').innerHTML=sl.kits.length ? sl.kits.map((kit,i) => `<option value="${i}">${escHtml(kit.kit)}</option>`).join('') : '<option value="">No saved library kits — save or import a kit first</option>';
+}
+function slRender() {
+  slEl('name').value=sl.document.name; slEl('notes').value=sl.document.notes; slEl('numbered').checked=sl.document.numbered;
+  slShelf(); slRows(); slControls();
+}
+function slRows() {
+  slEl('rows').innerHTML=sl.document.entries.length ? sl.document.entries.map((row,i) => `<li class="sl-row" data-index="${i}">
+    <div class="sl-order" draggable="true" data-drag="${i}" title="Drag to reorder">${String(i+1).padStart(2,'0')}<small>move</small></div><div>
+    <div class="sl-row-fields"><label class="sl-field">Song ${i+1}<input maxlength="100" data-field="song" data-row="${i}" value="${escHtml(row.song)}" placeholder="Song title"></label>
+    <label class="sl-field">Output name<input maxlength="100" data-field="output" data-row="${i}" value="${escHtml(row.output)}" placeholder="Use kit name"></label>
+    <label class="sl-field sl-song-notes">Song notes<input maxlength="500" data-field="notes" data-row="${i}" value="${escHtml(row.notes)}" placeholder="Count-in, alternate ending…"></label></div>
+    <p class="sl-source">Saved kit: ${escHtml(row.kit)}</p><div class="sl-actions">
+    <button data-row="${i}" data-move="-1" aria-label="Move song ${i+1} up">Up</button><button data-row="${i}" data-move="1" aria-label="Move song ${i+1} down">Down</button>
+    <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
+  slResults(); slControls();
+}
+function slResults() {
+  document.querySelectorAll('#sl-rows [data-result]').forEach(el => {
+    const row=sl.report?.rows[Number(el.dataset.result)]; el.dataset.status=row?.status || '';
+    el.innerHTML=row ? `<strong>${{blocked:'Needs fixing',review:'Review references',checked:'Local check passed'}[row.status]}</strong><p>Planned file: <code>${escHtml(row.filename)}</code></p>${row.issues.map(v=>`<p>${escHtml(v.message)}</p>`).join('')}` : 'Not checked. Run Check saved kits to preview filenames and readiness.';
+  });
+  slControls();
+}
+function slEditHeader() { sl.document.name=slEl('name').value; sl.document.notes=slEl('notes').value; sl.document.numbered=slEl('numbered').checked; slMark(); }
+function slConfirm(message, label='Discard draft') {
+  if(sl.confirm) return Promise.resolve(false);
+  slEl('confirm-text').textContent=message; slEl('confirm-yes').textContent=label; slEl('confirm').hidden=false;
+  document.querySelector('.sl-layout').inert=true; slEl('confirm-no').focus();
+  return new Promise(resolve=>{sl.confirm=resolve;});
+}
+function slConfirmDone(yes) { const resolve=sl.confirm; sl.confirm=null; slEl('confirm').hidden=true; document.querySelector('.sl-layout').inert=false; slEl('name').focus(); if(resolve) resolve(yes); }
+async function slDiscard() { return !sl.dirty || await slConfirm('Discard unsaved setlist changes? Export JSON or Save setlist first to keep them.'); }
+async function openSetlists() {
+  if(window.VIEWER) return;
+  closeAllPopovers(); closeStartScreen();
+  if(!sl.document) sl.document=slBlank();
+  const dialog=document.getElementById('setlist-dialog'); if(!dialog.open) dialog.showModal();
+  slRender(); slStatus(sl.dirty ? 'Unsaved setlist draft restored in this page.' : 'Setlists use saved kits. Current unsaved kit edits are separate.');
+  await slRun(slRefreshData);
+}
+async function slClose() { if(sl.busy || sl.confirm || sl.copyIndex!==null) return; if(await slDiscard()) { sl.document=null; sl.id=null; sl.dirty=false; sl.report=null; document.getElementById('setlist-dialog').close(); } }
+async function slNew() { if(sl.busy || !await slDiscard()) return; sl.id=null; sl.revision=null; sl.document=slBlank(); sl.dirty=false; sl.report=null; slRender(); slStatus('New setlist. Add saved kits, then save it to the host library.'); }
+async function slLoad(i) { if(sl.busy || !await slDiscard()) return; const item=sl.items[i]; sl.id=item.id; sl.revision=item.revision; sl.document=structuredClone(item.document); sl.dirty=false; sl.report=null; slRender(); slStatus('Opened saved setlist. Run local checks again before printing.'); }
+async function slSave() { await slRun(async()=>{ const saved=await slRequest('save',{id:sl.id,revision:sl.revision,document:sl.document}); sl.id=saved.id; sl.revision=saved.revision; sl.document=saved.document; sl.dirty=false; await slRefreshData(); slRender(); slStatus('Setlist saved to the host library. Kit files were not changed.'); }); }
+function slDuplicate() { if(sl.busy) return; sl.id=null; sl.revision=null; sl.document=structuredClone(sl.document); sl.document.name=(sl.document.name+' copy').slice(0,80); sl.dirty=true; sl.report=null; slRender(); slStatus('New copy is a draft. Rename it, then Save setlist.'); }
+async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete this saved setlist? Kit files stay in the library. Any unsaved list changes will also be discarded.','Delete setlist')) return; await slRun(async()=>{await slRequest('delete',{id:sl.id,revision:sl.revision}); sl.id=null; sl.revision=null; sl.document=slBlank(); sl.dirty=false; sl.report=null; await slRefreshData(); slRender(); slStatus('Setlist deleted. Kit files were kept.');}); }
+async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
+function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
+function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
+async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. No card or sample check. Nothing deployed.`);}); }
+function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
+async function slImport(input) {
+  const file=input.files[0]; input.value=''; if(!file || sl.busy) return;
+  if(file.size>1024*1024) {slStatus('Choose a setlist JSON file smaller than 1 MB. Current draft kept.');return;}
+  if(!await slDiscard()) return;
+  await slRun(async()=>{const value=JSON.parse(await file.text()); const report=await slRequest('check',{document:value});
+    sl.document={format:value.format,version:value.version,name:value.name,notes:value.notes || '',numbered:value.numbered,entries:value.entries.map(r=>({kit:r.kit,song:r.song || '',output:r.output || '',notes:r.notes || ''}))};
+    sl.id=null;sl.revision=null;sl.dirty=true;sl.report=report;slRender();slStatus('Imported as a new draft. Missing kits stay visible; copy them into this library, then refresh and check again. Save setlist to keep this copy.');});
+}
+function slCopy(i) { if(sl.busy || sl.copyIndex!==null) return; sl.copyIndex=i; slEl('copy-name').value=''; slEl('copy-form').hidden=false; document.querySelector('.sl-layout').inert=true; slEl('copy-name').focus(); }
+function slCopyCancel() { if(sl.busy) return; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; }
+async function slCopySubmit() { await slRun(async()=>{const row=sl.document.entries[sl.copyIndex];const result=await slRequest('copy_kit',{kit:row.kit,name:slEl('copy-name').value}); row.kit=result.kit; row.output=''; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slMark(); await slRefreshData(); slRows(); slStatus('Kit copy created. Save the setlist to keep its new reference, then use Edit kit for song-specific changes.');}); }
+async function slEditKit(i) { if(sl.busy) return; const row=sl.document.entries[i]; const found=sl.kits.find(k=>k.kit===row.kit); if(!found) {slStatus('Kit is missing from this library. Copy it into library/kits, then Refresh kits.');return;} if(sl.dirty) {slStatus('Save or export your setlist before opening a kit.');return;} await slRun(async()=>{if(await openKit(found.path)) {document.getElementById('setlist-dialog').close(); sl.report=null;} else slStatus('Kit could not be opened. Check editing control and the library.');}); }
+function slPrint() {
+  if(!sl.report) return;
+  const win=window.open('','_blank'); if(!win) {slStatus('Allow a new tab to open the printable show sheet.');return;}
+  win.opener=null;
+  const rows=sl.document.entries.map((entry,i)=>{const result=sl.report.rows[i];return `<tr><td>${i+1}</td><td><strong>${escHtml(entry.song || entry.kit)}</strong><br>${escHtml(entry.notes)}</td><td>${escHtml(entry.kit)}</td><td>${escHtml(result.filename)}</td><td>${escHtml(result.status)}<br>${result.issues.map(v=>escHtml(v.message)).join('<br>')}</td></tr>`;}).join('');
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escHtml(sl.document.name)}</title><style type="text/css">body{font:14px system-ui,sans-serif;color:#171c19;margin:32px}h1{font-size:30px}p{white-space:pre-wrap;line-height:1.5}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #aaa;padding:10px 6px;overflow-wrap:anywhere}th:first-child{width:30px}tr{break-inside:avoid}button{padding:12px}@media print{button{display:none}body{margin:0}}@page{size:landscape;margin:12mm}</style></head><body><button onclick="window.print()">Print / save PDF</button><h1>${escHtml(sl.document.name)}</h1><p>${escHtml(sl.document.notes)}</p><p>${sl.dirty?'Unsaved draft. ':''}Local check snapshot: ${escHtml(new Date().toLocaleString())}. Saved files can change after this check. Nothing has been deployed.</p><table><thead><tr><th>#</th><th>Song / notes</th><th>Saved kit</th><th>Planned filename</th><th>Local validation</th></tr></thead><tbody>${rows}</tbody></table><p>${escHtml(sl.report.scope)}</p></body></html>`);win.document.close();
+}
+function slInit() {
+  const dialog=document.getElementById('setlist-dialog');
+  const narrow=matchMedia('(max-width:700px)');
+  slEl('shelf').open=!narrow.matches;
+  narrow.addEventListener('change',e=>{slEl('shelf').open=!e.matches;});
+  dialog.addEventListener('cancel',e=>{e.preventDefault();if(sl.confirm) slConfirmDone(false);else if(sl.copyIndex!==null) slCopyCancel();else void slClose();});
+  dialog.addEventListener('keydown',e=>{e.stopPropagation();if((e.ctrlKey || e.metaKey) && e.key==='s'){e.preventDefault();if(sl.copyIndex===null) void slSave();}});
+  slEl('saved').addEventListener('click',e=>{const button=e.target.closest('[data-saved]');if(button) void slLoad(Number(button.dataset.saved));});
+  slEl('rows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.field || sl.busy) return;sl.document.entries[Number(el.dataset.row)][el.dataset.field]=el.value;slMark();});
+  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove){sl.document.entries.splice(i,1);slMark();slRows();}});
+  let drag=null;
+  slEl('rows').addEventListener('dragstart',e=>{if(e.target.dataset.drag===undefined || sl.busy){e.preventDefault();return;}drag=Number(e.target.dataset.drag);e.dataTransfer.setData('text/plain',String(drag));e.dataTransfer.effectAllowed='move';});
+  slEl('rows').addEventListener('dragover',e=>{if(drag!==null){e.preventDefault();e.dataTransfer.dropEffect='move';}});
+  slEl('rows').addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();const row=e.target.closest('[data-index]');if(row && drag!==null) slMove(drag,Number(row.dataset.index));drag=null;});
+  slEl('rows').addEventListener('dragend',()=>{drag=null;});
+  window.addEventListener('beforeunload',e=>{if(sl.dirty){e.preventDefault();e.returnValue='';}});
+}
+
+slInit();
 
 // ── Toolbar popover helpers ───────────────────────────────────────────────────
 const POPOVERS = ['kit-menu', 'save-menu', 'tools-menu', 'dup-form'];
@@ -10659,7 +10840,7 @@ async function openConnectionDetails() {
   // Global keyboard shortcuts
   document.addEventListener('keydown', e => {
     // The native factory-card dialog owns focus and keyboard actions while open.
-    if (document.getElementById('factory-card-dialog').open) return;
+    if (document.getElementById('factory-card-dialog').open || document.getElementById('setlist-dialog').open) return;
     // Don't intercept when focus is inside a text input
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
@@ -11059,6 +11240,7 @@ async function dismissAllAutosaves() {
       </div>
     </div>
     <div class="start-dismiss">
+      <button class="btn-secondary setlist-link" onclick="openSetlists()">Setlist Builder…</button>
       <a class="midi-toolkit-link" href="/midi" target="_blank" rel="noopener" style="color:#d8b567;">Open drum MIDI toolkit — no kit needed</a>
       <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>
     </div>
@@ -11273,6 +11455,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if path == '/api/setlists':
+            try:
+                with STATE_LOCK:
+                    self.send_json(SetlistStore(LIBRARY_DIR).listing())
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)}, 400)
             return
 
         if path == '/api/kits':
@@ -11648,6 +11838,29 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         path = urlparse(self.path).path
+        if path == '/api/setlists':
+            try:
+                if not 0 < int(self.headers.get('Content-Length', 0)) <= SETLIST_MAX_BYTES:
+                    raise ValueError('Setlist request must be at most 1 MB.')
+                body = self.read_json()
+                if not isinstance(body, dict):
+                    raise ValueError('Invalid setlist request.')
+                store = SetlistStore(LIBRARY_DIR, Path(__file__).parent / 'factory_catalog.json')
+                action = body.get('action')
+                if action == 'save':
+                    result = store.save(body.get('document'), body.get('id'), body.get('revision'))
+                elif action == 'delete':
+                    result = store.delete(body.get('id'), body.get('revision'))
+                elif action == 'check':
+                    result = store.check(body.get('document'))
+                elif action == 'copy_kit':
+                    result = store.copy_kit(body.get('kit'), body.get('name'))
+                else:
+                    raise ValueError('Unknown setlist action.')
+                self.send_json(result)
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)}, 409 if isinstance(e, SetlistConflict) else 400)
+            return
         body = self.read_json()
 
         if path == '/api/new_kit':

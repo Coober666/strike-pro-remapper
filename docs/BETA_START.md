@@ -38,6 +38,9 @@ package. Native apps and direct mobile USB remain deferred.
 ## Know where your work lives
 
 - Kit saves, samples and recovery live in the host's selected library folder.
+- Saved setlists live in that library's `setlists/` folder and are shared with its paired
+  Wi-Fi clients. Export JSON to move a list; copy referenced kits separately. Unsaved
+  setlist drafts stay in the page and are not included in kit autosave/recovery.
 - MIDI sessions and saved pad profiles live in each browser and host address/port.
   Changing address, browser or device can show an empty shelf. Export session backups
   and profiles before clearing browser data or changing the host address.
