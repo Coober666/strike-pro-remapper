@@ -4,7 +4,11 @@ Current direction: ship a dependable Strike editor, then add general drum-MIDI u
 Native iPhone/iPad apps and direct mobile USB remain paused. Historical viewer-first
 research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a release gate.
 
-## Implemented in the current polish branch; physical acceptance pending
+## Integrated on main; physical acceptance pending
+
+PRs #60–64 merged October 13, 2026; CI passed on integrated commit `3cab90e`.
+The historical roadmap draft #24 was closed as superseded by this plan and the
+remaining feature issues. This records software integration, not new hardware evidence.
 
 - Connection/card/library status, explicit Save versus Deploy, and Wi-Fi editing ownership.
 - Persistent pad/zone and A/B target, touch sound controls, stable search/scroll and previews.
@@ -20,11 +24,11 @@ research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a r
 
 ## Next gates
 
-The separate MIDI toolkit branch adds local generic MIDI capture, saved browser sessions,
+The integrated MIDI toolkit adds local generic MIDI capture, saved browser sessions,
 visual replay, velocity/controller measurements, session comparison and portable exports.
 It is the measurement foundation for #30, not Trigger Coach advice. Physical capture
-and module-specific recommendations remain unverified or deferred. The follow-on Wi-Fi
-toolkit branch adds paired host input capture, host timestamps and retained-take recovery;
+and module-specific recommendations remain unverified or deferred. The Wi-Fi
+toolkit adds paired host input capture, host timestamps and retained-take recovery;
 its native driver and real mobile/device acceptance still need physical testing.
 The setup/profile follow-on adds read-only host diagnostics, confirmed MIDI Learn,
 portable user-named profiles and capture snapshots of pad names. No factory maps are
@@ -49,12 +53,17 @@ and physical module/mobile acceptance remain separate gates.
 
 ## Open issue mapping
 
+- #28: local Setlist Builder implemented in the follow-on PR: host-persisted lists, song
+  notes, touch/drag ordering, exact kit copies, portable JSON, local saved-kit checks,
+  deterministic filename plans and printable show sheets. Batch deployment through the
+  existing deploy pipeline, card collision/space checks and physical acceptance remain.
 - #54: factory activation implemented; broader host/module hardware verification remains.
 - #56: Wi-Fi editing and touch changes implemented; physical mobile acceptance remains.
 - #35: card resilience has automated coverage; disposable-media interruption testing remains.
 - #57: Raspberry Pi host spike remains hardware-unverified.
 - #55: direct iPad USB research remains paused with native mobile development.
-- #28–30: Setlist Builder, Kit Balance Assistant and Trigger Coach are future work.
+- #29: Kit Balance Assistant remains future work.
+- #30: MIDI measurement foundation is integrated; evidence-based Trigger Coach advice remains.
 
 The physical iPad → Intel Mac → Strike save/deploy/playback record is in
 [WIFI_EDITOR.md](docs/WIFI_EDITOR.md). No newer polish or launcher behavior inherits that

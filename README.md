@@ -22,6 +22,13 @@ everything it doesn't touch.
 
 ## Quick start
 
+**Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
+in show order, add song notes, make song-specific kit copies, preview numbered filenames,
+and print a show sheet. Lists save on the host and work through the paired Wi-Fi editor.
+Export/import human-readable JSON to move a list between libraries. Local checks catch
+missing or malformed kits and duplicate planned names; they do not certify samples or
+card contents. Batch deployment remains pending. See [the setlist guide](docs/SETLISTS.md).
+
 **Drum MIDI toolkit:** open it from the Start screen or Tools to record a generic
 MIDI input, save/import sessions, inspect velocity distributions, compare takes and
 export JSON, CSV or a report. Visual replay sends nothing to your module. Includes a

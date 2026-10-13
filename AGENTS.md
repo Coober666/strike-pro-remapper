@@ -90,6 +90,30 @@ the original overrides. Velocity dragging also captures its pointer and converts
 screen coordinates to SVG coordinates. Keyboard pads and confirmation focus are
 covered by `tests/browser/zz-recovery-touch.spec.js`.
 
+## Setlist Builder
+
+The embedded Setlist Builder dialog opens from Start/Kits; generated viewer links stay
+hidden. `strike_remapper/setlists.py` owns versioned human-readable local documents in
+`library/setlists/<uuid>.json`. GET `/api/setlists` lists saved documents and local kits;
+POST actions save/delete/check/copy_kit run under STATE_LOCK and the existing Wi-Fi editor
+ownership guard. There is no batch-deploy action. Lists hold at most 128 entries; the
+library holds 50 lists; imports/requests are bounded to 1 MB. SHA-256 revisions reject
+stale overwrites/deletes; saves use fsync and atomic replacement. A copied setlist/import
+gets a new ID. In-browser drafts need explicit Save or Export and are separate from kit
+recovery. Lost write responses are never retried automatically.
+
+Kit references are relative to library/kits; never accept absolute/traversal paths or
+follow links outside the library. Listing excludes autosaves; copies use exact saved
+bytes and exclusive creation, reject case-insensitive collisions, and never load/mutate
+the active kit. Local checks parse saved .skt files, require exact round trip, validate
+assigned references, and use local .sin / factory-catalog positive evidence only.
+Unknown references remain unverified. No SD discovery, sample reads or card-space checks
+occur; do not call a local pass deployment-ready. Filename plans use conservative ASCII,
+optional three-digit ordering, at most 26 characters including .skt, reserved-name guards
+and case-insensitive duplicate detection. Source names never change. Printing uses the
+last local-check snapshot, escaped text and an explicit limitation statement.
+Tests: tools/test_setlists.py and tests/browser/zz-setlists.spec.js (Chromium/iPad WebKit).
+
 ## General MIDI toolkit
 
 `web/midi-toolkit/` is a separate ES-module page, exposed by an exact asset allowlist

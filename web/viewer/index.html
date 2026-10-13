@@ -44,6 +44,7 @@
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('kit-menu')">&#128193; Kits &#9660;</button>
     <div id="kit-menu" class="tb-popover" style="display:none;width:290px;max-height:70vh;overflow-y:auto;">
+      <button class="btn-secondary setlist-link" onclick="openSetlists()" style="width:100%;margin-bottom:8px;">Setlist Builder…</button>
       <div id="new-kit-form" style="display:none;margin-bottom:6px;">
         <input type="text" id="new-kit-name" placeholder="Kit name&#x2026;" autocomplete="off"
                style="width:100%;padding:6px 8px;background:#0b0e15;border:1px solid #242c3d;color:#e8ebf2;border-radius:4px;font-size:.85rem;margin-bottom:4px;"
@@ -421,6 +422,27 @@
   </section>
 
 </div>
+<dialog id="setlist-dialog" aria-labelledby="sl-title">
+  <header class="sl-head"><div><h2 id="sl-title">Setlist Builder</h2><p>Plan the show using saved library kits.</p></div><button type="button" onclick="slClose()" aria-label="Close Setlist Builder">Close</button></header>
+  <div class="sl-layout">
+    <aside class="sl-shelf"><details id="sl-shelf" open><summary>Your setlists</summary><div class="sl-actions"><button onclick="slNew()">New setlist</button><button onclick="document.getElementById('sl-import').click()">Import JSON</button><input id="sl-import" type="file" accept=".json,application/json" hidden onchange="slImport(this)"></div><div id="sl-saved"></div><p class="sl-hint">Saved in this computer’s library. Export JSON to move a list to another library; kit files travel separately.</p></details></aside>
+    <section class="sl-main" aria-label="Show order">
+      <label class="sl-field">Setlist name<input id="sl-name" maxlength="80" oninput="slEditHeader()"></label>
+      <label class="sl-field">Show notes<textarea id="sl-notes" maxlength="2000" rows="2" oninput="slEditHeader()" placeholder="Venue, tuning reminders, changeover notes…"></textarea></label>
+      <div class="sl-actions"><button class="btn-primary" id="sl-save" onclick="slSave()">Save setlist</button><button id="sl-duplicate" onclick="slDuplicate()">Duplicate setlist</button><button id="sl-delete" onclick="slDelete()">Delete setlist</button><button onclick="slExport()">Export JSON</button></div>
+      <div class="sl-add"><label class="sl-field">Add a saved kit<select id="sl-kit"></select></label><button onclick="slAdd()">Add to setlist</button><button onclick="slRefresh()" aria-label="Refresh saved library kits">Refresh kits</button></div>
+      <label class="sl-number"><input id="sl-numbered" type="checkbox" onchange="slEditHeader()"> Number planned filenames in show order (001, 002…)</label>
+      <p class="sl-hint">Move songs with the arrows or drag the order handle. Output names are a plan; source kits keep their names.</p>
+      <ol id="sl-rows" aria-label="Songs in show order"></ol>
+      <div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
+      <p class="sl-hint">Local checks cover saved kit structure, instrument references and planned names. Samples, card space and existing card files still need Deploy to Module preflight. Batch deployment is not available yet.</p>
+    </section>
+  </div>
+  <form id="sl-copy-form" hidden onsubmit="event.preventDefault();slCopySubmit()"><h3>Make a song-specific kit copy</h3><label class="sl-field">New kit name<input id="sl-copy-name" maxlength="22" required></label><p>The saved kit is copied exactly into the library. Unsaved editor changes are not included. Your setlist draft will use the new copy.</p><div class="sl-actions"><button type="submit" class="btn-primary">Create kit copy</button><button type="button" onclick="slCopyCancel()">Cancel</button></div></form>
+  <div id="sl-confirm" hidden role="alertdialog" aria-label="Confirm setlist action"><p id="sl-confirm-text"></p><div class="sl-actions"><button id="sl-confirm-no" onclick="slConfirmDone(false)">Cancel</button><button id="sl-confirm-yes" onclick="slConfirmDone(true)" class="btn-primary">Continue</button></div></div>
+  <p id="sl-status" role="status" aria-live="polite"></p>
+</dialog>
+
 <!-- engine.js installs the /api fetch interceptor and sets window.VIEWER BEFORE
      app.js runs, then dynamically injects app.js as a classic script so the
      extracted frontend (global funcs + inline onclick) works unchanged. -->
@@ -568,6 +590,7 @@
       </div>
     </div>
     <div class="start-dismiss">
+      <button class="btn-secondary setlist-link" onclick="openSetlists()">Setlist Builder…</button>
       <a class="midi-toolkit-link" href="/midi" target="_blank" rel="noopener" style="color:#d8b567;">Open drum MIDI toolkit — no kit needed</a>
       <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>
     </div>

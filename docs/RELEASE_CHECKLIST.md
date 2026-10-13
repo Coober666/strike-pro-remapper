@@ -19,6 +19,8 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
   current host state, and old sessions/tokens fail after a host restart on the same port.
 - [ ] Copied external libraries survive fresh-process upgrade, backup and rollback
   rehearsal; backup file hashes remain unchanged. Record the previous release tested.
+- [ ] Setlist reorder/copy/check/print keeps source kits and active editor state intact;
+  stale saves, failed writes, malformed imports and duplicate planned names are handled.
 
 ## Hands-on gates still required
 
@@ -39,6 +41,8 @@ For each candidate, also run the packaged-source smoke test and follow the
 - [ ] On real iPad/iPhone, learn pad names, annotate a take, filter one pad and export it.
 - [ ] Transfer a session backup and reusable pad profile to another browser/device; verify
   notes, event counts and labels. Browser data and the host kit library are separate backups.
+- [ ] On real iPad/iPhone, arrange and save a setlist, reopen it from another paired page,
+  export/import it with copied kits, and print/save its show sheet. Batch deploy is deferred.
 
 Signed installers, automatic updates, and native mobile/direct-USB apps are not included
 in this beta. Do not describe simulated browser tests as device acceptance.
