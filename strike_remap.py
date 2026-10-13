@@ -3894,7 +3894,7 @@ html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; 
 .connection-row p { margin-top:5px; color:var(--text-2); font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
 .connection-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
 .connection-actions button, .wifi-session button { min-height:36px; }
-body.viewer-mode .connection-bar, body.viewer-mode #save-state { display:none; }
+body.viewer-mode .connection-bar, body.viewer-mode #save-state, body.viewer-mode .midi-toolkit-link { display:none; }
 @media(max-width:620px) { .wifi-session { flex-wrap:wrap; } .connection-bar { gap:6px 12px; padding:6px 10px; } #connection-details-btn { margin-left:0; } }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
@@ -4716,6 +4716,7 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
   <div class="tb-group">
     <button class="btn-secondary tb-btn" onclick="menuToggle('tools-menu');loadTools()">&#x1F527; Tools &#9660;</button>
     <div id="tools-menu" class="tb-popover" style="display:none;right:0;left:auto;min-width:260px;max-height:60vh;overflow-y:auto;">
+      <a class="midi-toolkit-link" href="/midi" target="_blank" rel="noopener" style="display:block;color:#d8b567;padding:10px 6px;">Drum MIDI toolkit…</a>
       <button class="btn-secondary" data-factory-card style="width:100%;font-size:.72rem;margin-bottom:6px;"
         onclick="showFactoryCard()">Activate factory card…</button>
       <button class="btn-secondary" style="width:100%;font-size:.72rem;margin-bottom:6px;"
@@ -11058,6 +11059,7 @@ async function dismissAllAutosaves() {
       </div>
     </div>
     <div class="start-dismiss">
+      <a class="midi-toolkit-link" href="/midi" target="_blank" rel="noopener" style="color:#d8b567;">Open drum MIDI toolkit — no kit needed</a>
       <button id="start-close-btn" class="btn-secondary" type="button" style="display:none;" onclick="closeStartScreen()">Back to the kit</button>
     </div>
   </div>
@@ -11240,6 +11242,23 @@ class Handler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         path   = parsed.path
+
+        midi_assets = {'/midi': ('index.html', 'text/html; charset=utf-8'),
+                       '/midi/': ('index.html', 'text/html; charset=utf-8'),
+                       '/midi/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                       '/midi/core.js': ('core.js', 'text/javascript; charset=utf-8'),
+                       '/midi/storage.js': ('storage.js', 'text/javascript; charset=utf-8'),
+                       '/midi/styles.css': ('styles.css', 'text/css; charset=utf-8')}
+        if path in midi_assets:
+            filename, content_type = midi_assets[path]
+            body = (Path(__file__).resolve().parent / 'web' / 'midi-toolkit' / filename).read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', len(body))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return
 
         if path == '/' or path == '/index.html':
             body = HTML.encode()

@@ -20,6 +20,11 @@ research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a r
 
 ## Next gates
 
+The separate MIDI toolkit branch adds local generic MIDI capture, saved browser sessions,
+visual replay, velocity/controller measurements, session comparison and portable exports.
+It is the measurement foundation for #30, not Trigger Coach advice. Physical capture,
+host-to-mobile MIDI forwarding and module-specific recommendations remain unverified or deferred.
+
 1. Physically test the launcher on Windows and the existing Intel Mac, including its
    Python/Tk installation, QR scanning, correct library choice and normal Stop/recovery.
 2. Test real iPad/iPhone touch, scrolling, audio gestures and reconnects. Automated

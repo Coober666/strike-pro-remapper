@@ -540,7 +540,7 @@ html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; 
 .connection-row p { margin-top:5px; color:var(--text-2); font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
 .connection-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
 .connection-actions button, .wifi-session button { min-height:36px; }
-body.viewer-mode .connection-bar, body.viewer-mode #save-state { display:none; }
+body.viewer-mode .connection-bar, body.viewer-mode #save-state, body.viewer-mode .midi-toolkit-link { display:none; }
 @media(max-width:620px) { .wifi-session { flex-wrap:wrap; } .connection-bar { gap:6px 12px; padding:6px 10px; } #connection-details-btn { margin-left:0; } }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
