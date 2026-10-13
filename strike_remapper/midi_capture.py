@@ -83,6 +83,8 @@ class MidiCapture:
         offset = data.get('offset', 0)
         if type(offset) is not int or not 0 <= offset <= MAX_EVENTS:
             raise CaptureError('Invalid event offset.', 400)
+        if action == 'start' and offset != 0:
+            raise CaptureError('A new capture must start at event zero.', 400)
         with self.commands:
             if self.closed.is_set():
                 raise CaptureError('Host MIDI is shutting down.', 503)

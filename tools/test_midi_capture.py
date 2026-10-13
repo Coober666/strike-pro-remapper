@@ -122,6 +122,9 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(self.backend.closes, 2)
 
     def test_stale_port_and_invalid_requests(self):
+        with self.assertRaises(CaptureError):
+            self.call('start', input=self.backend.inputs()[0]['id'], offset=1)
+        self.assertEqual(self.backend.opens, 0)
         old = self.backend.inputs()[0]['id']; self.backend.names.insert(0,'Other')
         with self.assertRaises(CaptureError): self.call('start', input=old)
         self.start()
