@@ -30,6 +30,10 @@ The setup/profile follow-on adds read-only host diagnostics, confirmed MIDI Lear
 portable user-named profiles and capture snapshots of pad names. No factory maps are
 assumed. Diagnostics and learning have simulated coverage; real input access and
 physical Strike/Command/Nitro mapping remain acceptance work.
+The session workflow pass adds searchable notes/tags, atomic batch backup restore,
+pad-focused analysis and optional unscored capture exercises. A portable source-beta
+builder and first-run guide support release rehearsal; Python installation, signing
+and physical module/mobile acceptance remain separate gates.
 
 1. Physically test the launcher on Windows and the existing Intel Mac, including its
    Python/Tk installation, QR scanning, correct library choice and normal Stop/recovery.

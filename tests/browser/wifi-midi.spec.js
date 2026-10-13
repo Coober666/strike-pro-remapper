@@ -49,6 +49,14 @@ test('Wi-Fi MIDI Learn confirms a new received hit and keeps the map across poll
   expect(session.padMap.mappings).toEqual([{channel:10,note:38,label:'Snare head'}]);
 });
 
+test('host polling and recovery preserve session annotations and exercise selection',async ({page,context}) => {
+  await open(page,context); await page.locator('#exercise').selectOption('rolls'); await record(page);
+  await page.getByText('Session notes & tags',{exact:true}).click();
+  await page.locator('#session-tags').fill('strike, before'); await page.locator('#session-notes').fill('Same sticks, snare head');
+  await page.locator('#stop').click(); await page.locator('#host-recover').click();
+  const session=await download(page); expect(session.tags).toEqual(['strike','before']); expect(session.notesText).toBe('Same sticks, snare head'); expect(session.exercise).toBe('rolls');
+});
+
 test('paired host captures without browser MIDI, pauses, exports, and releases independently of kit control',async ({page,context}) => {
   await open(page,context); await record(page);
   await page.locator('#pause').click(); await expect(page.locator('#state')).toHaveText('Paused');

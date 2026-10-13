@@ -1,5 +1,7 @@
-import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, summarize, compare, demoSession, exportCSV, report} from './core.js';
-import {listSessions, readSession, saveSession, deleteSession} from './storage.js';
+import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, matchesFocus, summarize, compare, demoSession, exportCSV, report} from './core.js';
+import {listSessions, readSession, saveSession, deleteSession, readSessions, restoreSessions} from './storage.js';
+import {sessionTags, matchesSearch, EXERCISES} from './metadata.js';
+import {validateArchive, archiveJSON, MAX_ARCHIVE_BYTES} from './organization.js';
 import {HostTake} from './host.js';
 import {PadProfiles} from './profile-ui.js';
 import {padLabel} from './profiles.js';
@@ -11,11 +13,12 @@ const setStatus = (text, error=false) => { $('status').textContent=text; $('stat
 const active = () => ['recording','paused','syncing'].includes(mode);
 const hostMode = () => $('capture-source').value === 'host';
 const hostAvailable = document.documentElement.dataset.hostMidi === 'true';
-let profiles=null;
+let profiles=null, focus='', focusSignature='', savedItems=[], savedGeneration=0;
+const backupSelection=new Set();
 const host = new HostTake((session, state) => {
   if (session) {
-    const name=current.name, padMap=current.padMap, offset=current.events.length;
-    current={...session, ...(padMap ? {padMap} : {})};
+    const {name,padMap,tags,notesText,exercise}=current, offset=current.events.length;
+    current={...session,tags,notesText,exercise, ...(padMap ? {padMap} : {})};
     if (state === 'recording' && mode === 'recording') profiles?.consume(current.events.slice(offset));
     savedId=null; dirty=true;
     if (name !== 'Untitled capture') current.name=name;
@@ -39,7 +42,15 @@ function controls() {
   for (const id of ['demo','import']) $(id).disabled = active() || busy || held;
   for (const id of ['save','json','csv','report','play','seek']) $(id).disabled = active() || !current.events.length || busy;
   $('compare').disabled = active() || storageBusy;
-  $('name').disabled = storageBusy;
+  for (const id of ['name','session-tags','session-notes']) $(id).disabled=storageBusy;
+  $('exercise').disabled=busy || active();
+  const annotationsValid=metadataValid();
+  for (const id of ['save','json','report']) $(id).disabled ||= !annotationsValid;
+  $('backup-export').disabled=active() || busy || !backupSelection.size;
+  $('backup-import').disabled=active() || busy;
+  $('select-shown').disabled=active() || busy || !savedItems.length;
+  for (const box of $('sessions').querySelectorAll('input')) box.disabled=active() || busy;
+  $('backup-count').textContent=`${backupSelection.size} selected for backup`;
   $('state').textContent = mode === 'syncing' ? 'Receiving host take' : mode === 'recording' ? 'Recording' : mode === 'paused' ? 'Paused' : dirty ? 'Not saved' : savedId ? 'Saved in this browser' : 'Ready';
   const playLabel=playing ? 'Pause replay' : 'Replay visually';
   if ($('play').textContent !== playLabel) $('play').textContent=playLabel;
@@ -68,6 +79,7 @@ async function replaceSession(loader, id=null, notice='Session loaded.') {
 }
 function useSession(session, id=null) {
   current = validateSession(session); profiles.unsaved=false; profiles.refresh(); savedId=id; dirty=!id; mode='ready'; playing=false; playhead=0; elapsed=current.durationMs;
+  metadataFields(); focus=''; focusSignature='';
   $('name').value=current.name; $('seek').max=String(Math.max(1,current.durationMs)); $('seek').value='0';
   drawNeeded=true; controls(); render();
 }
@@ -133,14 +145,15 @@ $('input').onchange=() => {
 $('record').onclick=async () => {
   if (!selected || selected.state !== 'connected' || (current.events.length && !await canReplace())) return;
   const padMap=current.padMap ? structuredClone(current.padMap) : undefined;
-  profiles.cancel();
+  const annotation={exercise:current.exercise,tags:current.events.length ? [] : current.tags,notesText:current.events.length ? '' : current.notesText};
+  profiles.cancel(); focus=''; focusSignature='';
   if (hostMode()) {
-    current={...newSession(), ...(padMap ? {padMap} : {})}; savedId=null; dirty=true; reference=null; playing=false; $('compare').value='';
-    await host.start(selected.id); return;
+    current={...newSession(), ...annotation, ...(padMap ? {padMap} : {})}; savedId=null; dirty=true; reference=null; playing=false; $('compare').value='';
+    metadataFields(); await host.start(selected.id); return;
   }
-  current={...newSession('Capture '+new Date().toLocaleTimeString(),(selected.name || 'Unnamed MIDI input').slice(0,160)), ...(padMap ? {padMap} : {})};
+  current={...newSession('Capture '+new Date().toLocaleTimeString(),(selected.name || 'Unnamed MIDI input').slice(0,160)), ...annotation, ...(padMap ? {padMap} : {})};
   savedId=null; dirty=true; reference=null; $('compare').value=''; elapsed=0; started=performance.now(); mode='recording'; playing=false; playhead=0;
-  $('name').value=current.name; drawNeeded=true; controls(); render(); setStatus('Recording channel messages. Hit a pad to see its note and velocity.');
+  metadataFields(); $('name').value=current.name; drawNeeded=true; controls(); render(); setStatus('Recording channel messages. Hit a pad to see its note and velocity.');
 };
 $('pause').onclick=() => {
   if (hostMode()) { void host.command(mode === 'paused' ? 'resume' : 'pause'); return; }
@@ -180,27 +193,74 @@ $('import').onchange=async () => {
     return JSON.parse(await file.text());
   },null,'Imported locally. Save this session to keep it in this browser.');
 };
+function metadataValid() {
+  try { sessionTags(current.tags); $('metadata-error').textContent=''; return true; }
+  catch (e) { $('metadata-error').textContent=e.message; return false; }
+}
+function metadataFields() {
+  $('session-tags').value=(current.tags || []).join(', '); $('session-notes').value=current.notesText || '';
+  $('exercise').value=current.exercise || ''; exercisePrompt();
+}
+function exercisePrompt() { $('exercise-prompt').textContent=EXERCISES[current.exercise]?.prompt || 'Free capture. Choose an optional exercise for a repeatable take; you start and stop it yourself.'; }
+$('session-tags').oninput=() => { current.tags=$('session-tags').value.split(',').map(t => t.trim()).filter(Boolean); dirty=true; controls(); };
+$('session-notes').oninput=() => { current.notesText=$('session-notes').value; dirty=true; controls(); };
+$('exercise').onchange=() => { current.exercise=$('exercise').value; dirty=true; exercisePrompt(); controls(); };
+function renderSaved() {
+  const shown=savedItems.filter(item => matchesSearch(item,$('session-search').value));
+  $('sessions').replaceChildren();
+  for (const item of shown) {
+    const row=document.createElement('div'); row.className='session';
+    const open=document.createElement('button'); open.textContent=item.name;
+    open.onclick=() => replaceSession(() => readSession(item.id),item.id,'Saved session loaded.');
+    const meta=document.createElement('small'); meta.textContent=`${item.count.toLocaleString()} messages${item.synthetic ? ' · Synthetic demo' : ''}${item.captureStatus === 'partial' ? ' · Partial take' : ''}${item.tags?.length ? ' · '+item.tags.join(', ') : ''}`;
+    const label=document.createElement('label'), box=document.createElement('input'); box.type='checkbox'; box.checked=backupSelection.has(item.id); box.setAttribute('aria-label','Back up '+item.name);
+    box.onchange=() => { if (box.checked) backupSelection.add(item.id); else backupSelection.delete(item.id); controls(); };
+    label.append(box,document.createTextNode(' Include in backup'));
+    const remove=document.createElement('button'); remove.className='delete'; remove.textContent='Delete'; remove.setAttribute('aria-label','Delete '+item.name);
+    remove.onclick=async () => {
+      if (!await confirmAction(`Delete “${item.name}” from this browser? Export it first if you need a backup.`, 'Delete saved session?')) return;
+      storageBusy=true; controls();
+      try { await deleteSession(item.id); backupSelection.delete(item.id); if (savedId === item.id) { savedId=null; dirty=true; } if ($('compare').value === item.id) reference=null; await refreshSaved(); render(); }
+      catch (e) { setStatus('Could not delete: '+e.message,true); }
+      finally { storageBusy=false; controls(); }
+    };
+    row.append(open,meta,label,remove); $('sessions').append(row);
+  }
+  if (!shown.length) $('sessions').textContent=savedItems.length ? 'No sessions match this search.' : 'No saved sessions yet.';
+  $('search-count').textContent=`${shown.length} of ${savedItems.length} saved sessions`;
+  controls();
+}
 async function refreshSaved() {
+  const generation=++savedGeneration;
   try {
-    const sessions=await listSessions(), compareId=$('compare').value;
-    $('sessions').replaceChildren(); $('compare').replaceChildren(new Option('Choose a reference', ''));
-    for (const item of sessions) {
-      const row=document.createElement('div'); row.className='session';
-      const open=document.createElement('button'); open.textContent=item.name;
-      open.onclick=() => replaceSession(() => readSession(item.id),item.id,'Saved session loaded.');
-      const meta=document.createElement('small'); meta.textContent=`${item.count.toLocaleString()} messages${item.synthetic ? ' · Synthetic demo' : ''}${item.captureStatus === 'partial' ? ' · Partial take' : ''}`;
-      const remove=document.createElement('button'); remove.className='delete'; remove.textContent='Delete'; remove.setAttribute('aria-label','Delete '+item.name);
-      remove.onclick=async () => {
-        if (!await confirmAction(`Delete “${item.name}” from this browser? Export it first if you need a backup.`, 'Delete saved session?')) return;
-        try { await deleteSession(item.id); if (savedId === item.id) { savedId=null; dirty=true; } if ($('compare').value === item.id) reference=null; await refreshSaved(); render(); }
-        catch (e) { setStatus('Could not delete: '+e.message,true); }
-      };
-      row.append(open,meta,remove); $('sessions').append(row); $('compare').add(new Option(item.name,item.id));
-    }
-    if (!sessions.length) $('sessions').textContent='No saved sessions yet.';
-    $('compare').value=compareId; controls();
+    const sessions=await listSessions(); if (generation !== savedGeneration) return;
+    const compareId=$('compare').value; savedItems=sessions;
+    for (const id of backupSelection) if (!sessions.some(s => s.id === id)) backupSelection.delete(id);
+    $('compare').replaceChildren(new Option('Choose a reference', ''));
+    for (const item of sessions) $('compare').add(new Option(item.name,item.id));
+    $('compare').value=compareId; renderSaved();
   } catch (e) { setStatus('Browser storage is unavailable. You can still capture/import and export JSON. '+e.message,true); }
 }
+$('session-search').oninput=renderSaved;
+$('select-shown').onclick=() => { for (const item of savedItems.filter(i => matchesSearch(i,$('session-search').value))) backupSelection.add(item.id); renderSaved(); };
+$('clear-selection').onclick=() => { backupSelection.clear(); renderSaved(); };
+$('backup-export').onclick=async () => {
+  storageBusy=true; controls();
+  try { const sessions=await readSessions([...backupSelection]); download(archiveJSON(sessions),'application/json','-sessions-backup.json'); setStatus(`Backed up ${sessions.length} saved sessions. Unsaved changes in this page are not included.`); }
+  catch (e) { setStatus('Backup was not created. '+e.message,true); }
+  finally { storageBusy=false; controls(); }
+};
+$('backup-import').onchange=async () => {
+  const file=$('backup-import').files[0]; $('backup-import').value=''; if (!file) return;
+  storageBusy=true; controls();
+  try {
+    if (file.size > MAX_ARCHIVE_BYTES) throw new Error('Backup exceeds 32 MB. Import a smaller group.');
+    const archive=validateArchive(JSON.parse(await file.text()));
+    if (!await confirmAction(`Add ${archive.sessions.length} sessions as new copies? Existing sessions and the current take remain unchanged. Repeated imports create duplicates.`, 'Restore session backup?')) return;
+    const count=await restoreSessions(archive); await refreshSaved(); setStatus(`Restored ${count} sessions as new copies. Current take unchanged.`);
+  } catch (e) { setStatus('Nothing was imported. '+e.message,true); }
+  finally { storageBusy=false; controls(); }
+};
 $('save').onclick=async () => {
   storageBusy=true; controls();
   try { savedId=await saveSession(current,savedId); dirty=false; await refreshSaved(); setStatus('Saved in this browser. Export JSON to keep a portable backup.'); }
@@ -209,7 +269,7 @@ $('save').onclick=async () => {
 };
 $('compare').onchange=async () => {
   const id=$('compare').value;
-  try { const loaded=id ? await readSession(id) : null; if ($('compare').value === id) { reference=loaded; renderComparison(); } }
+  try { const loaded=id ? await readSession(id) : null; if ($('compare').value === id) { reference=loaded; focusSignature=''; render(); } }
   catch (e) { reference=null; renderComparison(); setStatus(e.message,true); }
 };
 function download(body,type,suffix) {
@@ -219,7 +279,7 @@ function download(body,type,suffix) {
 }
 $('json').onclick=() => download(JSON.stringify(validateSession(current),null,2),'application/json','.json');
 $('csv').onclick=() => download(exportCSV(current),'text/csv;charset=utf-8','.csv');
-$('report').onclick=() => download(report(current,reference),'text/plain;charset=utf-8','-report.txt');
+$('report').onclick=() => download(report(current,reference,focus),'text/plain;charset=utf-8','-report.txt');
 function stopReplay() { playing=false; controls(); }
 $('play').onclick=() => {
   if (playing) { stopReplay(); return; }
@@ -235,7 +295,7 @@ function renderComparison() {
   const table=document.createElement('table'), caption=document.createElement('caption');
   caption.textContent=`Reference: ${reference.name} · ${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ' · Synthetic demo' : ''}${reference.captureStatus === 'partial' ? ' · Partial take' : ''}`; table.append(caption);
   const head=document.createElement('tr'); ['Channel / note · current / reference names','Current hits','Reference hits','Mean velocity change'].forEach(t => cell(head,t,'th')); table.append(head);
-  const pairs=compare(current,reference);
+  const pairs=compare(current,reference,focus);
   for (const r of pairs.slice(0,128)) {
     const row=document.createElement('tr'); [`${r.key} · ${padLabel(current.padMap,...r.key.split(':').map(Number)) || 'unnamed'} / ${padLabel(reference.padMap,...r.key.split(':').map(Number)) || 'unnamed'}`,r.current?.hits ?? '—',r.reference?.hits ?? '—',r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'Not in both'].forEach(t => cell(row,t)); table.append(row);
   }
@@ -247,15 +307,30 @@ function renderComparison() {
 function renderPlayhead() {
   $('seek').value=String(playhead); $('cursor-time').textContent=(playhead/1000).toFixed(2)+' s';
   const line=$('play-line'); if (line) { const x=40+($('timeline').viewBox.baseVal.width-60)*playhead/Math.max(1,current.durationMs); line.setAttribute('x1',x); line.setAttribute('x2',x); }
-  const events=current.events.filter(e => e.t <= playhead).slice(-6);
+  const events=current.events.filter(e => e.t <= playhead && matchesFocus(e.data,focus)).slice(-6);
   $('replay-events').textContent=events.length ? events.map(e => {
     const m=message(e.data); return `${(e.t/1000).toFixed(3)} s   Ch ${m.channel}   ${m.type}   ${e.data.slice(1).join(' / ')}${[8,9,10].includes(m.kind) && padLabel(current.padMap,m.channel,e.data[1]) ? '   '+padLabel(current.padMap,m.channel,e.data[1]) : ''}`;
   }).join('\n') : 'No events at this position.';
 }
+function focusOptions(all) {
+  const notes=new Map(all.notes.map(n => [`${n.channel}:${n.note}`,n]));
+  if (reference) for (const n of summarize(reference).notes) notes.set(`${n.channel}:${n.note}`,n);
+  const options=[...notes].sort((a,b) => a[1].channel-b[1].channel || a[1].note-b[1].note).map(([key,n]) => [key,`${padLabel(current.padMap,n.channel,n.note) || padLabel(reference?.padMap,n.channel,n.note) || 'Unnamed note'} · Ch ${n.channel} / ${n.note}`]);
+  if (focus && !notes.has(focus)) { const [channel,note]=focus.split(':').map(Number); options.push([focus,`Ch ${channel} / ${note} · no hits in these takes`]); }
+  const signature=JSON.stringify(options);
+  if (signature !== focusSignature) {
+    focusSignature=signature; $('analysis-focus').replaceChildren(new Option('All notes / channels',''));
+    for (const [key,label] of options) $('analysis-focus').add(new Option(label,key));
+  }
+  $('analysis-focus').value=focus;
+}
+$('analysis-focus').onchange=() => { focus=$('analysis-focus').value; render(); };
 function render() {
-  const stats=summarize(current);
-  $('hits').textContent=stats.hits.toLocaleString(); $('events').textContent=current.events.length.toLocaleString();
-  $('notes').textContent=String(stats.notes.length); $('duration').textContent=(current.durationMs/1000).toFixed(2)+' s';
+  const all=summarize(current); focusOptions(all);
+  const stats=focus ? summarize(current,Infinity,focus) : all;
+  $('focus-summary').textContent=`${stats.hits} of ${all.hits} hits shown. ${focus ? 'Charts, note measurements, replay and report use this channel/note. Controllers show the full take.' : 'Showing the full take.'} JSON, CSV and saved sessions always keep every event.`;
+  $('hits').textContent=all.hits.toLocaleString(); $('events').textContent=current.events.length.toLocaleString();
+  $('notes').textContent=String(all.notes.length); $('duration').textContent=(current.durationMs/1000).toFixed(2)+' s';
   $('origin').textContent=current.events.length ? `${current.captureStatus === 'partial' ? 'Partial take · ' : ''}${current.synthetic ? 'Synthetic demo · ' : ''}${current.source} · ${current.createdAt}` : 'No events yet. Record an input, import a JSON session, or try the demo.';
   const svg=$('timeline'); svg.replaceChildren(); const ns='http://www.w3.org/2000/svg';
   const width=Math.max(260,svg.clientWidth), right=width-20;
@@ -267,7 +342,7 @@ function render() {
   }
   add('text',{x:40,y:176,fill:'#aab3a8','font-size':11}).textContent='0 s';
   add('text',{x:right,y:176,fill:'#aab3a8','font-size':11,'text-anchor':'end'}).textContent=(current.durationMs/1000).toFixed(2)+' s';
-  const hits=current.events.filter(e => message(e.data)?.type === 'Note on'), stride=Math.max(1,Math.ceil(hits.length/1000));
+  const hits=current.events.filter(e => message(e.data)?.type === 'Note on' && matchesFocus(e.data,focus)), stride=Math.max(1,Math.ceil(hits.length/1000));
   for (let i=0;i<hits.length;i+=stride) {
     const dot=add('circle',{cx:40+hits[i].t/Math.max(1,current.durationMs)*(right-40),cy:160-hits[i].data[2],r:2.8,fill:'#d8b567',opacity:.8});
     const title=document.createElementNS(ns,'title'); title.textContent=`Ch ${(hits[i].data[0]&15)+1}, note ${hits[i].data[1]}, velocity ${hits[i].data[2]} at ${(hits[i].t/1000).toFixed(3)} s`; dot.append(title);
@@ -279,8 +354,8 @@ function render() {
   $('note-rows').replaceChildren();
   for (const n of stats.notes.slice(0,128)) { const row=document.createElement('tr'); [`${n.channel} / ${n.note}${padLabel(current.padMap,n.channel,n.note) ? ' · '+padLabel(current.padMap,n.channel,n.note) : ''}`,n.hits,n.mean.toFixed(1),`${n.min}–${n.max}`,n.std.toFixed(1),n.minGapMs === null ? '—' : n.minGapMs.toFixed(1)+' ms'].forEach(t => cell(row,t)); $('note-rows').append(row); }
   $('table-note').textContent=(stats.notes.length > 128 ? 'Showing the first 128 channel/note pairs; export a report for all. ' : '')+'Note numbers do not identify physical pads. Short gaps may be intentional playing.';
-  $('controllers').textContent=stats.controllers.length ? stats.controllers.slice(0,128).map(c => `Ch ${c.channel} CC ${c.controller}: ${c.count} messages · ${c.min}–${c.max} · last ${c.last}`).join('\n') : 'None observed.';
-  if (stats.controllers.length > 128) $('controllers').textContent+='\nShowing the first 128 pairs; export the report for all.';
+  $('controllers').textContent=all.controllers.length ? all.controllers.slice(0,128).map(c => `Ch ${c.channel} CC ${c.controller}: ${c.count} messages · ${c.min}–${c.max} · last ${c.last}`).join('\n') : 'None observed.';
+  if (all.controllers.length > 128) $('controllers').textContent+='\nShowing the first 128 pairs; export the report for all.';
   renderPlayhead(); renderComparison(); controls(); drawNeeded=false;
 }
 setInterval(() => {
@@ -307,6 +382,7 @@ $('setup-check').onclick=async () => {
   finally { storageBusy=false; controls(); }
 };
 $('setup-export').onclick=() => { if (setupReport) download(JSON.stringify(setupReport,null,2),'application/json','-host-setup.json'); };
+metadataFields();
 captureSupport();
 render(); void refreshSaved();
 if (hostAvailable && host.id) setStatus('A host take may be available from this tab. Choose Recover host take to retrieve it.');

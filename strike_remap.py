@@ -2683,7 +2683,7 @@ def list_tools() -> list:
     """Return [{name, label}] for runnable scripts in tools/."""
     tools_dir = Path(__file__).parent / 'tools'
     skip = {'hex_explorer.py', 'sin_inspector.py',
-            'build_factory_fingerprints.py'}         # not user-facing runners
+            'build_factory_fingerprints.py', 'build_beta.py'}  # not user-facing runners
     out = []
     for p in sorted(tools_dir.glob('*.py')):
         if p.name.startswith('_') or p.name in skip:
@@ -11249,6 +11249,8 @@ class Handler(BaseHTTPRequestHandler):
                        '/midi/core.js': ('core.js', 'text/javascript; charset=utf-8'),
                        '/midi/storage.js': ('storage.js', 'text/javascript; charset=utf-8'),
                        '/midi/host.js': ('host.js', 'text/javascript; charset=utf-8'),
+                       '/midi/metadata.js': ('metadata.js', 'text/javascript; charset=utf-8'),
+                       '/midi/organization.js': ('organization.js', 'text/javascript; charset=utf-8'),
                        '/midi/profiles.js': ('profiles.js', 'text/javascript; charset=utf-8'),
                        '/midi/profile-ui.js': ('profile-ui.js', 'text/javascript; charset=utf-8'),
                        '/midi/styles.css': ('styles.css', 'text/css; charset=utf-8')}

@@ -34,6 +34,13 @@ see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
+Add searchable notes/tags, back up groups of saved sessions, focus analysis on one
+pad/channel and follow optional repeatable capture exercises. JSON/CSV keep every
+event; focused reports describe only the selected channel/note.
+
+**Testing a source beta ZIP?** Follow the [first-run walkthrough](docs/BETA_START.md).
+The portable package keeps application files separate from your library and includes
+a file-hash manifest. Python is still required; it is not a signed installer.
 
 Requirements: **Python 3.10+**. The application uses only the standard library, so there is
 nothing to `pip install`.

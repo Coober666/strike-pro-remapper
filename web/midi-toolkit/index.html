@@ -11,18 +11,21 @@
       <p id="support">Checking MIDI support…</p><button id="connect">Connect MIDI input</button>
       <details id="setup-panel" hidden><summary>Host setup check</summary><p class="fine">Check the optional MIDI package and visible inputs. This does not open a port or install anything.</p><button id="setup-check">Check host setup</button><div id="setup-result" class="event-list" role="status">Run a check if connecting or recording fails.</div><button id="setup-export" disabled>Export setup report</button><p class="fine"><a href="https://github.com/Coober666/strike-pro-remapper/blob/main/docs/MIDI_TOOLKIT.md" target="_blank" rel="noopener">MIDI setup guide</a>. If Record fails even with visible inputs, another app may own the input; close it when convenient, refresh inputs and try again.</p></details>
       <label for="input">Input</label><select id="input" disabled><option value="">No input selected</option></select>
+      <label for="exercise">Optional capture exercise</label><select id="exercise"><option value="">Free capture</option><option value="soft">Soft hits</option><option value="hard">Hard hits</option><option value="rolls">Rolls</option><option value="hihat">Hi-hat movement</option></select><p id="exercise-prompt" class="fine"></p>
       <div class="buttons"><button id="record" class="primary" disabled>Record</button><button id="pause" disabled>Pause</button><button id="stop" disabled>Stop</button></div>
       <div id="host-recovery" hidden><p class="fine">The host keeps this take for 10 minutes after stopping. Save/export on this device before releasing its host copy.</p><div class="buttons"><button id="host-recover">Recover host take</button><button id="host-release">Release host copy</button><button id="host-forget">Forget expired connection</button></div></div>
       <p class="fine">Channel messages only. No SysEx. Up to 20 active minutes or 50,000 events. Paused time is excluded.</p>
     </section>
-    <section><h2>Saved sessions</h2><p class="fine">These belong to this browser and address. Export JSON for a backup or another device.</p><div id="sessions"></div>
+    <section><h2>Saved sessions</h2><p class="fine">These belong to this browser and address. Export JSON for a backup or another device.</p><label for="session-search">Search name, tags or notes</label><input id="session-search" type="search" placeholder="e.g. snare before"><p id="search-count" class="fine"></p><div id="sessions"></div>
+      <details><summary>Back up / restore sessions</summary><p class="fine">Select saved sessions below or choose Select shown. Unsaved changes are not included. Up to 25 sessions, 200,000 events and 32 MB per backup.</p><div class="buttons"><button id="select-shown">Select shown</button><button id="clear-selection">Clear selection</button><button id="backup-export" disabled>Export selected sessions</button></div><p id="backup-count" class="fine">0 selected for backup</p><label class="file-button" for="backup-import">Restore session backup<input type="file" id="backup-import" accept="application/json,.json"></label></details>
       <label class="file-button" for="import">Import session JSON<input type="file" id="import" accept="application/json,.json"></label>
     </section>
   </aside>
   <article>
     <section class="take"><div class="take-heading"><div class="name-field"><label for="name">Session name</label><input id="name" maxlength="120" value="Untitled capture"></div><span id="state" class="state">Ready</span></div>
       <p id="origin" class="fine">No session loaded. Try the demo without a MIDI device.</p>
-      <div class="buttons"><button id="save" disabled>Save session</button><button id="json" disabled>Export JSON</button><button id="csv" disabled>Export events CSV</button><button id="report" disabled>Export report</button></div>
+      <details><summary>Session notes &amp; tags</summary><label for="session-tags">Tags, separated by commas</label><input id="session-tags" maxlength="512" placeholder="snare, before, strike"><label for="session-notes">Notes</label><textarea id="session-notes" maxlength="2000" rows="3" placeholder="Pad, playing style, settings changed, anything you noticed…"></textarea><p id="metadata-error" role="status" class="fine"></p><p class="fine">Save the session to keep changes. Notes and tags travel with JSON and batch backups.</p></details>
+      <div class="buttons"><button id="save" disabled>Save session</button><button id="json" disabled>Export JSON</button><button id="csv" disabled>Export all events CSV</button><button id="report" disabled>Export report</button></div>
       <dl class="metrics"><div><dt>Note-on hits</dt><dd id="hits">0</dd></div><div><dt>Notes / channels</dt><dd id="notes">0</dd></div><div><dt>Active time</dt><dd id="duration">0.00 s</dd></div><div><dt>Channel messages</dt><dd id="events">0</dd></div></dl>
     </section>
     <section><details id="pad-profiles"><summary>Pad names &amp; MIDI Learn</summary>
@@ -34,17 +37,17 @@
       <div class="buttons"><button id="learn" disabled>Learn next hit</button><button id="learn-cancel" disabled>Cancel learning</button><button id="map-apply">Apply pad name</button></div>
       <p id="profile-status" role="status">While recording, choose Learn next hit and play one pad. Confirm the channel/note before applying its name. You can also enter a note manually.</p><div id="map-rows" aria-label="Assigned pad names"></div>
     </details></section>
-    <section><div class="section-heading"><h2>Velocity over time</h2><span id="cursor-time">0.00 s</span></div>
+    <section><label for="analysis-focus">Analysis focus</label><select id="analysis-focus"><option value="">All notes / channels</option></select><p id="focus-summary" class="fine"></p><div class="section-heading"><h2>Velocity over time</h2><span id="cursor-time">0.00 s</span></div>
       <svg id="timeline" viewBox="0 0 900 180" role="img" aria-label="Note-on velocity over elapsed time"></svg>
       <div class="replay"><button id="play" disabled>Replay visually</button><label for="speed">Speed</label><select id="speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select><label class="sr-only" for="seek">Replay position</label><input id="seek" type="range" min="0" max="1" value="0" step="1" disabled></div>
-      <p class="fine">Replay moves the playhead and event list. It produces no audio or MIDI output. Up to 1,000 hits are drawn; exports retain every event.</p>
+      <p class="fine">Replay moves the playhead and event list. It produces no audio or MIDI output. Up to 1,000 hits are drawn. JSON and CSV retain every event; the report uses the analysis focus.</p>
       <div id="replay-events" class="event-list" aria-label="Events at playhead">No events yet.</div>
     </section>
     <section><h2>Velocity distribution</h2><div id="histogram" class="histogram" role="img" aria-label="Hit counts in sixteen velocity ranges"></div><div class="axis"><span>Soft · 1</span><span>MIDI velocity</span><span>127 · Hard</span></div>
       <p class="fine">Velocity is MIDI data, not measured loudness. A wide range may simply reflect how you played.</p>
       <div class="table-scroll"><table><caption>Per-note measurements · channels are kept separate</caption><thead><tr><th>Channel / note</th><th>Hits</th><th>Mean</th><th>Range</th><th>Std dev</th><th>Shortest gap</th></tr></thead><tbody id="note-rows"></tbody></table></div>
       <p id="table-note" class="fine">Note numbers are shown without guessing which physical pad produced them.</p>
-      <details><summary>Controller messages, including hi-hat CC</summary><div id="controllers" class="event-list">None observed.</div></details>
+      <details><summary>Controller messages · full take, including hi-hat CC</summary><div id="controllers" class="event-list">None observed.</div></details>
     </section>
     <section><h2>Compare a session</h2><label for="compare">Reference from saved sessions</label><select id="compare"><option value="">Choose a reference</option></select><p class="fine">Current minus reference. Different durations and playing make hit counts unequal; these are observations, not a performance score.</p>
       <div id="comparison">Save another capture to compare the same channel and note.</div>

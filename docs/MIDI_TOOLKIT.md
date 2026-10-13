@@ -140,6 +140,47 @@ profiles are validated before replacing anything. If browser storage fails, curr
 names remain exportable. Unsaved names live in page memory; host take recovery only
 recovers MIDI events, so save/export the profile before reloading to retain the names.
 
+## Organize, back up and focus your sessions
+
+**Session notes & tags** stores up to 2,000 characters of notes and 12 tags of up to
+32 characters each. Separate tags with commas; they are trimmed, lowercased and
+deduplicated when saved/exported. Search matches all typed words across saved names,
+input names, tags and notes. Save changes explicitly and wait for **Saved in this
+browser**. Search examines saved values, not unsaved edits in the current page.
+Older captures without these fields still load with empty annotations.
+
+Select saved captures with their **Include in backup** checkboxes, or **Select shown**
+after searching, then **Export selected sessions**. Backups contain complete saved
+sessions and their pad-map snapshots, including partial/synthetic markers and notes.
+Unsaved current changes, reusable pad profiles and the host kit library are separate.
+A backup holds up to 25 sessions, 200,000 events and 32 MB; use smaller groups if needed.
+
+**Restore session backup** validates the whole file and adds new copies in one browser
+storage transaction. It never replaces existing captures or the current page's take.
+A bad session, insufficient room (25 saved sessions maximum), or storage error leaves
+the entire batch unimported. Repeated restores intentionally create duplicates.
+
+**Analysis focus** selects one channel/note from either the current or reference take,
+using your pad names when available. It filters the timeline, histogram, measurements,
+visual replay and exported report. The top totals, controllers, saved capture, JSON and
+CSV retain the full take. Pause boundaries and full-take duration remain unchanged;
+focus does not splice hits together or create shorter timing gaps. Comparisons still
+pair by channel/note, including a pair present only in the reference. Focus is a view
+choice and resets when loading/starting a different capture.
+
+## Repeatable capture exercises
+
+Before Record, optionally choose Soft hits, Hard hits, Rolls or Hi-hat movement. The
+page gives a short procedure to repeat across takes. You start/stop manually; the
+toolkit does not count physical attempts, grade technique, claim completion or infer
+trigger faults. The selected procedure is saved in session JSON/backups and the report.
+Add pad, sticks, approximate pace and any changed settings to your notes.
+
+The exercise and pad profile carry forward into a new take. Existing-take tags and
+notes clear when starting a new take; annotations prepared before the first event
+are kept. During Wi-Fi capture, annotations stay in the browser across event polls.
+Save/export before reloading: host recovery retrieves MIDI events, not these annotations.
+
 ## What the measurements mean
 
 - Counts include complete MIDI channel messages: notes, controllers, pressure,
@@ -199,3 +240,6 @@ not verify a physical Strike/Command/Nitro, OS MIDI driver or mobile device.
 without opening an input. Browser tests cover setup report export, local/host Learn,
 profile validation and storage failures, portable exports, channel separation and
 independent snapshots in saved sessions.
+Session workflow coverage includes annotation persistence, focused/empty comparisons,
+full-data exports under a filter, selected backups restored into another browser,
+capacity and transaction-abort rollback, exercise metadata and host-poll preservation.
