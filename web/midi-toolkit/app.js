@@ -386,3 +386,9 @@ metadataFields();
 captureSupport();
 render(); void refreshSaved();
 if (hostAvailable && host.id) setStatus('A host take may be available from this tab. Choose Recover host take to retrieve it.');
+
+// Explicit launcher demo: synthetic events only; never opens a MIDI port.
+if (new URLSearchParams(location.search).get('demo') === '1' && !host.id) {
+  history.replaceState(null, '', location.pathname);
+  $('demo').click();
+}

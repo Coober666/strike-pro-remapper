@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 from strike_remapper.balance import analyze as analyze_balance, selected_changes as balance_changes, preview as balance_preview
+from strike_remapper.runtime import worker_command, hidden_process, UTILITIES
 from strike_remapper.support import report as support_report
 from strike_remapper.setlists import Store as SetlistStore, Conflict as SetlistConflict, MAX_BYTES as SETLIST_MAX_BYTES
 
@@ -2683,10 +2684,8 @@ def hex_inspect_pad(pad_id: str) -> str:
         tmp = f.name
     try:
         r = subprocess.run(
-            [sys.executable,
-             str(Path(__file__).parent / 'tools' / 'hex_explorer.py'),
-             tmp, pad_id.upper()],
-            capture_output=True, text=True, timeout=10,
+            worker_command('utility', LIBRARY_DIR, 'hex_explorer.py', tmp, pad_id.upper()),
+            capture_output=True, text=True, encoding='utf-8', timeout=10, **hidden_process(),
         )
         return (r.stdout or '') + (r.stderr or '')
     finally:
@@ -2697,7 +2696,7 @@ def list_tools() -> list:
     """Return [{name, label}] for runnable scripts in tools/."""
     tools_dir = Path(__file__).parent / 'tools'
     skip = {'hex_explorer.py', 'sin_inspector.py',
-            'build_factory_fingerprints.py', 'build_beta.py'}  # not user-facing runners
+            'build_factory_fingerprints.py', 'build_beta.py', 'build_windows.py', 'check_windows_package.py'}  # not user-facing runners
     out = []
     for p in sorted(tools_dir.glob('*.py')):
         if p.name.startswith('_') or p.name in skip:
@@ -2724,9 +2723,12 @@ def run_tool(name: str, args: list | None = None) -> str:
         raise ValueError('Path escape detected')
     if not script.exists():
         raise FileNotFoundError(f'Tool not found: {name}')
-    cmd = [sys.executable, str(script)] + (args or [])
+    cmd = (worker_command('utility', LIBRARY_DIR, name, *(args or [])) if name in UTILITIES
+           else [sys.executable, str(script)] + (args or []))
+    if getattr(sys, 'frozen', False) and name not in UTILITIES:
+        raise ValueError('Unknown bundled utility')
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
-                       cwd=str(Path(__file__).parent))
+                       cwd=str(Path(__file__).parent), encoding='utf-8', **hidden_process())
     return (r.stdout or '') + (r.stderr or '')
 
 

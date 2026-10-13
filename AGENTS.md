@@ -850,3 +850,19 @@ SD volume detection searches one level deep (catches Ventoy `STORAGE/` subfolder
 `balance.py` is state-independent analysis of local files through library_assets.py. It measures first-0.5-second PCM windows, at most eight highest-velocity mappings/layer and 96 unique WAVs. RMS uses channel energy, never stereo downmix; medians compare at least three same-instrument-group/same-layer peers. A/B boundary differences and worst-case overlapping peak sums are estimates. Suggestions are capped at 6 dB and level 1–127; muted/unmeasured layers get no suggestion.
 
 POST /api/balance analyze/apply uses STATE_LOCK and the existing paired ownership guard with an 8 KB body bound. Apply recomputes evidence and validates a token covering kit bytes, revision, SIN bytes, measured WAV bytes/metadata and report. Only server-provided selected levels may be applied. Validate all selections before one _push_history, then change known level offsets; no audio writes. GET balance_preview serves a bounded local sample window. Native dialog UI requires unchecked explicit selection, offers current/proposed audition, and never retries failed writes. New tests: test_balance.py, zzz-release-polish.spec.js. Physical listening acceptance remains open.
+
+## Windows folder beta
+
+Build with Python 3.11 x64 and requirements-build-windows.txt using tools/build_windows.py.
+The windowed Strike Remapper.exe and private console _internal/StrikeHelper.exe share
+bundled modules/data. runtime.worker_command selects source or frozen helper; never use
+sys.executable -m in a frozen app. Console helpers launch hidden and retain JSON pipes.
+desktop_worker only dispatches named MIDI modes, allowlisted utilities and explicit
+release probes. Utilities receive the chosen external library; frozen libraries inside
+the app folder are rejected before probing/writing. Package data excludes user libraries.
+check_windows_package.py verifies hashes, extracts fresh, removes Python/Tk environment
+paths and tests bundled Tk/MIDI plus synthetic library save/recovery without opening
+MIDI ports or discovering cards. This is not physical hardware or clean-OS acceptance.
+The launcher Open editor starts then opens; Try a demo starts and opens synthetic MIDI.
+Wi-Fi demo pairing uses an exact view=demo flag, never a user-provided redirect URL.
+Manual updates only. Source entry points remain supported. No automatic activation.

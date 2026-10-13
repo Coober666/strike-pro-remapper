@@ -10,3 +10,6 @@ node_modules/
 playwright-report/
 test-results/
 dist/
+
+# Chromium driver diagnostic output
+debug.log

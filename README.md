@@ -3,7 +3,7 @@
 ![CI](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml/badge.svg)
 
 **An offline kit and instrument editor for the Alesis Strike / Strike Pro drum module.**
-No module connection required. No packages to install for the editor. Clone and run.
+No module connection required. Windows beta bundles Python, Tk and host MIDI support; the source editor remains standard-library Python.
 
 ![Strike Pro Remapper — touch map controls, layer rack, and pad editor](docs/screenshot.png)
 
@@ -44,6 +44,13 @@ their own pad names; MIDI messages and module settings stay unchanged.
 Add searchable notes/tags, back up groups of saved sessions, focus analysis on one
 pad/channel and follow optional repeatable capture exercises. JSON/CSV keep every
 event; focused reports describe only the selected channel/note.
+
+**Windows without installing Python:** use the Windows x64 beta ZIP from a tested
+[CI run](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml)
+(artifact named `strike-windows-beta-…`; GitHub sign-in required). Extract the
+artifact and then the application ZIP fully. Open **Strike Remapper.exe**, then
+**Open editor** or **Try a demo**. See the [Windows walkthrough](docs/WINDOWS_BETA.md).
+This is an unsigned beta, not a published signed installer. Updates are manual.
 
 **Testing a source beta ZIP?** Follow the [first-run walkthrough](docs/BETA_START.md).
 The portable package keeps application files separate from your library and includes

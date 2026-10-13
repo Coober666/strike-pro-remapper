@@ -111,18 +111,18 @@ def main():
     actions.pack(fill='x')
     qr = tk.Canvas(frame, width=260, height=260, bg='#151916', highlightthickness=0)
     qr.pack(pady=(14, 0))
-    pairing_note = ttk.Label(frame, text='Enable Wi-Fi, then Start to show your pairing code.', wraplength=650)
+    pairing_note = ttk.Label(frame, text='Enable Wi-Fi, then Open editor to show your pairing code.', wraplength=650)
     pairing_note.pack()
 
     def refresh():
         held = host.running or host.recovery_pending
-        start.configure(state='disabled' if busy or held else 'normal')
+        start.configure(state='disabled' if busy or host.recovery_pending else 'normal')
+        demo.configure(state='disabled' if busy or host.recovery_pending else 'normal')
         stop.configure(state='normal' if held and not busy else 'disabled',
                        text='Retry recovery save' if host.recovery_pending else 'Stop')
         for control in (entry, browse, wifi_check, address_entry):
             control.configure(state='disabled' if busy or held else 'normal')
-        for control in (open_editor, copy_link):
-            control.configure(state='normal' if host.running and not busy else 'disabled')
+        copy_link.configure(state='normal' if host.running and not busy else 'disabled')
         qr.delete('all')
         if host.pair_url:
             matrix = pairing_matrix(host.pair_url)
@@ -137,7 +137,7 @@ def main():
             pairing_note.configure(text='Scan with your iPad/iPhone camera on the same Wi-Fi. The link grants editor access. Keep this computer awake; use HTTP.')
         else:
             qr.configure(bg='#151916')
-            pairing_note.configure(text='Wi-Fi is off.' if host.running else 'Enable Wi-Fi, then Start to show your pairing code.')
+            pairing_note.configure(text='Wi-Fi is off.' if host.running else 'Enable Wi-Fi, then Open editor to show your pairing code.')
 
     def run_async(action, done):
         nonlocal busy
@@ -152,7 +152,7 @@ def main():
         threading.Thread(target=worker, daemon=True).start()
 
     def started():
-        status.set('Running · Open the editor below, or scan to pair')
+        status.set('Running · Keep this window open while editing')
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
             tmp = config_path.with_suffix('.tmp')
@@ -161,13 +161,29 @@ def main():
         except OSError:
             status.set('Running · Folder preference could not be saved; choose it again next time')
 
-    def start_host():
+    def open_browser(demo_mode=False):
+        url = host.pair_url or host.url
+        if demo_mode:
+            url = url + '&view=demo' if host.pair_url else host.url.rstrip('/') + '/midi?demo=1'
+        try:
+            if not webbrowser.open(url):
+                status.set('Running · Browser did not open. Use Copy link to open it yourself.')
+        except Exception:
+            status.set('Running · Browser did not open. Use Copy link to open it yourself.')
+
+    def start_host(demo_mode=False):
+        if host.running:
+            open_browser(demo_mode)
+            return
         root, bind = library.get(), address.get().strip() if wifi.get() else None
         if wifi.get() and not bind:
             messagebox.showerror('Choose an address', 'Enter this computer’s private Wi-Fi IPv4 address.')
             return
         status.set('Starting…')
-        run_async(lambda: host.start(root, bind), started)
+        def ready():
+            started()
+            open_browser(demo_mode)
+        run_async(lambda: host.start(root, bind), ready)
 
     def stop_host(closing=False):
         status.set('Saving recovery and stopping…')
@@ -181,12 +197,12 @@ def main():
         window.clipboard_clear()
         window.clipboard_append(value)
 
-    start = ttk.Button(actions, text='Start', command=start_host)
+    start = ttk.Button(actions, text='Open editor', command=start_host)
     start.pack(side='left')
     stop = ttk.Button(actions, text='Stop', command=stop_host)
     stop.pack(side='left', padx=6)
-    open_editor = ttk.Button(actions, text='Open editor', command=lambda: webbrowser.open(host.pair_url or host.url))
-    open_editor.pack(side='left')
+    demo = ttk.Button(actions, text='Try a demo', command=lambda: start_host(True))
+    demo.pack(side='left')
     copy_link = ttk.Button(actions, text='Copy link', command=lambda: copy_text(host.pair_url or host.url))
     copy_link.pack(side='left', padx=6)
     ttk.Button(footer, text='Copy diagnostics (no pairing token)', command=lambda: copy_text(host.diagnostics())).pack(anchor='w', pady=(10, 0))

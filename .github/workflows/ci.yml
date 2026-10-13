@@ -141,3 +141,30 @@ jobs:
             ${{ runner.temp }}/strike-remapper-*.sha256.txt
           if-no-files-found: error
           retention-days: 30
+
+  windows-beta:
+    needs: [windows-host, test, browser]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Install pinned packaging tools and MIDI
+        run: python -m pip install -r requirements-build-windows.txt
+      - name: Build standalone Windows beta
+        run: python tools/build_windows.py --output "${{ runner.temp }}/strike-remapper-windows-x64-${{ github.sha }}.zip" --require-clean
+      - name: Check extracted bundled runtime without Python on PATH
+        run: python tools/check_windows_package.py "${{ runner.temp }}/strike-remapper-windows-x64-${{ github.sha }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strike-windows-beta-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/strike-remapper-windows-x64-*.zip
+            ${{ runner.temp }}/strike-remapper-windows-x64-*.sha256.txt
+          if-no-files-found: error
+          retention-days: 30

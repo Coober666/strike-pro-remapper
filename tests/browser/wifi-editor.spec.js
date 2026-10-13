@@ -153,3 +153,14 @@ test('another device is view-only until an explicit handover reloads the current
     await secondContext.close();
   }
 });
+
+
+test('launcher demo pairs and opens synthetic events without starting capture', async ({page}) => {
+  const starts=[];
+  page.on('request', request => { if (request.url().endsWith('/wifi/midi/start')) starts.push(request.url()); });
+  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing&view=demo');
+  await expect(page.locator('#hits')).toHaveText('96');
+  await expect(page.locator('#status')).toContainText('Synthetic demo loaded');
+  expect(page.url()).toBe(host + '/midi');
+  expect(starts).toEqual([]);
+});

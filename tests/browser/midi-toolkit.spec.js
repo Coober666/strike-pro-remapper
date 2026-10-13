@@ -245,3 +245,13 @@ test('capture stops at its event limit without discarding the captured take',asy
   await expect(page.locator('#status')).toContainText('limit reached'); await expect(page.locator('#stop')).toBeDisabled();
   await expect(page.locator('#json')).toBeEnabled();
 });
+
+
+test('launcher demo opens synthetic events without requesting MIDI', async ({page}) => {
+  await fakeMidi(page);
+  await page.goto('/midi?demo=1');
+  await expect(page.locator('#status')).toContainText('Synthetic demo loaded');
+  expect(await page.evaluate(() => window.midiRequests)).toEqual([]);
+  expect(new URL(page.url()).search).toBe('');
+  await expect(page.locator('#save')).toBeEnabled();
+});

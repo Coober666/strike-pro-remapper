@@ -2,7 +2,7 @@
 
 The optional host window controls one editor process and its library. It does not
 install a background service, start on login, update firmware, or deploy automatically.
-Python 3.10+ with Tk is required for the window. The existing command-line editor
+The [Windows beta](WINDOWS_BETA.md) bundles Python and Tk. Source launch requires Python 3.10+ with Tk. The existing command-line editor
 continues to work without Tk. This is a source launcher, not a signed installer.
 
 ## First launch
@@ -11,10 +11,10 @@ continues to work without Tk. This is a source launcher, not a signed installer.
    Or run `python launch_editor.py` (`python3` on Mac).
 2. Choose the folder containing your existing `kits`, `instruments`, and `samples`
    folders. For a new library, choose an empty folder. No existing files are moved.
-3. Leave Wi-Fi off for computer-only use. Choose **Start**, then **Open editor**.
+3. Leave Wi-Fi off for computer-only use. Choose **Open editor**.
 4. For iPad/iPhone, stop first, enable Wi-Fi, and select the computer's private IPv4
    address. The address list is a convenience; some Macs require entering their Wi-Fi
-   address manually. Start, then scan the QR code using the mobile camera.
+   address manually. Open editor, then scan the QR code using the mobile camera.
 5. Use the private pairing link on the same Wi-Fi. It grants full editor access.
    HTTP is required; if Brave upgrades it, permit HTTP for that local address.
 6. Keep the computer awake. **Stop** writes a local recovery copy and closes this
@@ -23,7 +23,7 @@ continues to work without Tk. This is a source launcher, not a signed installer.
    edits remain in memory. Free disk space or restore folder access, then choose
    **Retry recovery save**. Changing libraries and closing are held until it succeeds.
 
-Start/Stop and diagnostics remain visible in short windows. Scroll the setup/pairing
+Open editor/Stop and diagnostics remain visible in short windows. Scroll the setup/pairing
 area to reach its contents; keyboard focus brings setup fields back into view.
 
 The launcher uses port 8765 and never stops an existing process to free it. If occupied,
@@ -95,7 +95,7 @@ set `STRIKE_PREVIOUS_APP` to an extracted older release to repeat a version boun
 
 Automated loopback tests cover start/stop, initial and final recovery failures on stop,
 occupied ports, pairing, token renewal and diagnostics. Real Tk control tests on Windows
-exercise Start/Stop, saved library selection, QR rendering, short-window scrolling and
+exercise Open editor/Stop, saved library selection, QR rendering, short-window scrolling and
 recovery retries, including a blocked close. They use disposable libraries with card
 discovery disabled. CI has a Windows job where missing Tk/display fails instead of skipping.
 These are programmatic checks, not a new-user install or a camera scan. The launcher
