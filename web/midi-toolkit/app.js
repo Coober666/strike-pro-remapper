@@ -1,6 +1,8 @@
 import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, summarize, compare, demoSession, exportCSV, report} from './core.js';
 import {listSessions, readSession, saveSession, deleteSession} from './storage.js';
 import {HostTake} from './host.js';
+import {PadProfiles} from './profile-ui.js';
+import {padLabel} from './profiles.js';
 const $ = id => document.getElementById(id);
 let current = newSession(), savedId = null, dirty = false, mode = 'ready', access = null, selected = null;
 let elapsed = 0, started = 0, playhead = 0, playing = false, playStart = 0, playFrom = 0, reference = null;
@@ -9,10 +11,13 @@ const setStatus = (text, error=false) => { $('status').textContent=text; $('stat
 const active = () => ['recording','paused','syncing'].includes(mode);
 const hostMode = () => $('capture-source').value === 'host';
 const hostAvailable = document.documentElement.dataset.hostMidi === 'true';
+let profiles=null;
 const host = new HostTake((session, state) => {
   if (session) {
-    const name=current.name;
-    current=session; savedId=null; dirty=true;
+    const name=current.name, padMap=current.padMap, offset=current.events.length;
+    current={...session, ...(padMap ? {padMap} : {})};
+    if (state === 'recording' && mode === 'recording') profiles?.consume(current.events.slice(offset));
+    savedId=null; dirty=true;
     if (name !== 'Untitled capture') current.name=name;
     $('name').value=current.name; elapsed=current.durationMs; playhead=current.durationMs;
     $('seek').max=String(Math.max(1,current.durationMs));
@@ -43,6 +48,8 @@ function controls() {
   $('host-recover').disabled=busy || active();
   $('host-release').disabled=busy || active() || !host.connected;
   $('host-forget').disabled=busy || active() || host.connected;
+  $('setup-check').disabled=busy || active() || held;
+  profiles?.controls(mode,busy);
 }
 async function confirmAction(text, title='Replace this session?') {
   $('confirm-title').textContent=title;
@@ -60,7 +67,7 @@ async function replaceSession(loader, id=null, notice='Session loaded.') {
   finally { storageBusy=false; controls(); }
 }
 function useSession(session, id=null) {
-  current = validateSession(session); savedId=id; dirty=!id; mode='ready'; playing=false; playhead=0; elapsed=current.durationMs;
+  current = validateSession(session); profiles.unsaved=false; profiles.refresh(); savedId=id; dirty=!id; mode='ready'; playing=false; playhead=0; elapsed=current.durationMs;
   $('name').value=current.name; $('seek').max=String(Math.max(1,current.durationMs)); $('seek').value='0';
   drawNeeded=true; controls(); render();
 }
@@ -74,6 +81,7 @@ function onMessage(event) {
   const t = Math.max(current.events.at(-1)?.t || 0, usableStamp ? elapsed+stamp-started : time());
   if (current.events.length >= MAX_EVENTS || t >= MAX_DURATION) { stopCapture('Capture limit reached. Save or export this session.'); return; }
   current.events.push({t:Math.round(t*1000)/1000, data:parsed.bytes});
+  profiles.consume(current.events.slice(-1));
   current.durationMs=Math.max(t, current.events.at(-1).t); dirty=true; drawNeeded=true;
   if (current.events.length === MAX_EVENTS) stopCapture('Capture limit reached. Save or export this session.');
 }
@@ -123,12 +131,14 @@ $('input').onchange=() => {
   controls();
 };
 $('record').onclick=async () => {
-  if (!selected || selected.state !== 'connected' || !await canReplace()) return;
+  if (!selected || selected.state !== 'connected' || (current.events.length && !await canReplace())) return;
+  const padMap=current.padMap ? structuredClone(current.padMap) : undefined;
+  profiles.cancel();
   if (hostMode()) {
-    current=newSession(); savedId=null; dirty=true; reference=null; playing=false; $('compare').value='';
+    current={...newSession(), ...(padMap ? {padMap} : {})}; savedId=null; dirty=true; reference=null; playing=false; $('compare').value='';
     await host.start(selected.id); return;
   }
-  current=newSession('Capture '+new Date().toLocaleTimeString(),(selected.name || 'Unnamed MIDI input').slice(0,160));
+  current={...newSession('Capture '+new Date().toLocaleTimeString(),(selected.name || 'Unnamed MIDI input').slice(0,160)), ...(padMap ? {padMap} : {})};
   savedId=null; dirty=true; reference=null; $('compare').value=''; elapsed=0; started=performance.now(); mode='recording'; playing=false; playhead=0;
   $('name').value=current.name; drawNeeded=true; controls(); render(); setStatus('Recording channel messages. Hit a pad to see its note and velocity.');
 };
@@ -150,6 +160,7 @@ $('host-forget').onclick=async () => {
   if (await confirmAction('Forget this connection? Keep the received events here. An unreachable host may still hold its take until it expires; this does not stop or delete it remotely.', 'Forget host connection?')) host.forget();
 };
 function captureSupport() {
+  $('setup-panel').hidden=!hostMode();
   const liveAvailable=!!navigator.requestMIDIAccess && window.isSecureContext;
   $('support').textContent=hostMode() ? 'Plug the module into the host computer. Host timestamps keep Wi-Fi delay out of the measurements. Hiding this page stops capture; recover it when you return.' :
     liveAvailable ? 'Connect a MIDI input on this computer. No kit needs to be loaded.' : 'Live MIDI is unavailable in this browser/context. Use the Wi-Fi host option on a paired page, or import JSON here.';
@@ -223,10 +234,10 @@ function renderComparison() {
   if (!reference) { $('comparison').textContent='Save another capture to compare the same channel and note.'; return; }
   const table=document.createElement('table'), caption=document.createElement('caption');
   caption.textContent=`Reference: ${reference.name} · ${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ' · Synthetic demo' : ''}${reference.captureStatus === 'partial' ? ' · Partial take' : ''}`; table.append(caption);
-  const head=document.createElement('tr'); ['Channel / note','Current hits','Reference hits','Mean velocity change'].forEach(t => cell(head,t,'th')); table.append(head);
+  const head=document.createElement('tr'); ['Channel / note · current / reference names','Current hits','Reference hits','Mean velocity change'].forEach(t => cell(head,t,'th')); table.append(head);
   const pairs=compare(current,reference);
   for (const r of pairs.slice(0,128)) {
-    const row=document.createElement('tr'); [r.key,r.current?.hits ?? '—',r.reference?.hits ?? '—',r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'Not in both'].forEach(t => cell(row,t)); table.append(row);
+    const row=document.createElement('tr'); [`${r.key} · ${padLabel(current.padMap,...r.key.split(':').map(Number)) || 'unnamed'} / ${padLabel(reference.padMap,...r.key.split(':').map(Number)) || 'unnamed'}`,r.current?.hits ?? '—',r.reference?.hits ?? '—',r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'Not in both'].forEach(t => cell(row,t)); table.append(row);
   }
   $('comparison').append(table);
   if (pairs.length > 128) {
@@ -238,7 +249,7 @@ function renderPlayhead() {
   const line=$('play-line'); if (line) { const x=40+($('timeline').viewBox.baseVal.width-60)*playhead/Math.max(1,current.durationMs); line.setAttribute('x1',x); line.setAttribute('x2',x); }
   const events=current.events.filter(e => e.t <= playhead).slice(-6);
   $('replay-events').textContent=events.length ? events.map(e => {
-    const m=message(e.data); return `${(e.t/1000).toFixed(3)} s   Ch ${m.channel}   ${m.type}   ${e.data.slice(1).join(' / ')}`;
+    const m=message(e.data); return `${(e.t/1000).toFixed(3)} s   Ch ${m.channel}   ${m.type}   ${e.data.slice(1).join(' / ')}${[8,9,10].includes(m.kind) && padLabel(current.padMap,m.channel,e.data[1]) ? '   '+padLabel(current.padMap,m.channel,e.data[1]) : ''}`;
   }).join('\n') : 'No events at this position.';
 }
 function render() {
@@ -266,7 +277,7 @@ function render() {
   stats.histogram.forEach((count,i) => { const bar=document.createElement('div'); bar.style.height=(count/high*100)+'%'; bar.title=`Velocity ${Math.max(1,i*8)}–${i*8+7}: ${count} hits`; const n=document.createElement('span'); n.textContent=count || ''; bar.append(n); $('histogram').append(bar); });
   $('histogram').setAttribute('aria-label',stats.histogram.map((n,i) => `Velocity ${Math.max(1,i*8)} to ${i*8+7}: ${n} hits`).join('; '));
   $('note-rows').replaceChildren();
-  for (const n of stats.notes.slice(0,128)) { const row=document.createElement('tr'); [`${n.channel} / ${n.note}`,n.hits,n.mean.toFixed(1),`${n.min}–${n.max}`,n.std.toFixed(1),n.minGapMs === null ? '—' : n.minGapMs.toFixed(1)+' ms'].forEach(t => cell(row,t)); $('note-rows').append(row); }
+  for (const n of stats.notes.slice(0,128)) { const row=document.createElement('tr'); [`${n.channel} / ${n.note}${padLabel(current.padMap,n.channel,n.note) ? ' · '+padLabel(current.padMap,n.channel,n.note) : ''}`,n.hits,n.mean.toFixed(1),`${n.min}–${n.max}`,n.std.toFixed(1),n.minGapMs === null ? '—' : n.minGapMs.toFixed(1)+' ms'].forEach(t => cell(row,t)); $('note-rows').append(row); }
   $('table-note').textContent=(stats.notes.length > 128 ? 'Showing the first 128 channel/note pairs; export a report for all. ' : '')+'Note numbers do not identify physical pads. Short gaps may be intentional playing.';
   $('controllers').textContent=stats.controllers.length ? stats.controllers.slice(0,128).map(c => `Ch ${c.channel} CC ${c.controller}: ${c.count} messages · ${c.min}–${c.max} · last ${c.last}`).join('\n') : 'None observed.';
   if (stats.controllers.length > 128) $('controllers').textContent+='\nShowing the first 128 pairs; export the report for all.';
@@ -284,6 +295,18 @@ $('host-option').hidden=!hostAvailable;
 if (hostAvailable) $('capture-source').value='host';
 document.addEventListener('visibilitychange',() => { if (document.hidden && hostMode()) host.suspend(); });
 window.addEventListener('pagehide',() => { if (hostMode()) host.suspend(); });
+profiles=new PadProfiles(() => current, padMap => { current.padMap=padMap; dirty=true; drawNeeded=true; controls(); },confirmAction,download);
+let setupReport=null;
+$('setup-check').onclick=async () => {
+  storageBusy=true; controls(); $('setup-result').textContent='Checking the host MIDI environment…'; $('setup-export').disabled=true;
+  try {
+    setupReport=await host.fetch('/wifi/midi/setup');
+    $('setup-result').textContent=`${setupReport.message}\n${setupReport.system} · Python ${setupReport.python} · python-rtmidi ${setupReport.package || 'not installed'}\n${setupReport.inputs.length} input(s) visible${setupReport.inputs.length ? ': '+setupReport.inputs.map(p => p.name).join(', ') : ''}${setupReport.detail ? '\n'+setupReport.detail : ''}`;
+    $('setup-export').disabled=false;
+  } catch (e) { setupReport=null; $('setup-result').textContent='Host setup check failed: '+e.message+' Check that the host is running and this browser is still paired.'; }
+  finally { storageBusy=false; controls(); }
+};
+$('setup-export').onclick=() => { if (setupReport) download(JSON.stringify(setupReport,null,2),'application/json','-host-setup.json'); };
 captureSupport();
 render(); void refreshSaved();
 if (hostAvailable && host.id) setStatus('A host take may be available from this tab. Choose Recover host take to retrieve it.');

@@ -11249,6 +11249,8 @@ class Handler(BaseHTTPRequestHandler):
                        '/midi/core.js': ('core.js', 'text/javascript; charset=utf-8'),
                        '/midi/storage.js': ('storage.js', 'text/javascript; charset=utf-8'),
                        '/midi/host.js': ('host.js', 'text/javascript; charset=utf-8'),
+                       '/midi/profiles.js': ('profiles.js', 'text/javascript; charset=utf-8'),
+                       '/midi/profile-ui.js': ('profile-ui.js', 'text/javascript; charset=utf-8'),
                        '/midi/styles.css': ('styles.css', 'text/css; charset=utf-8')}
         if path in midi_assets:
             filename, content_type = midi_assets[path]

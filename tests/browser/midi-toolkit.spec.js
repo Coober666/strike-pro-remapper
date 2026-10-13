@@ -19,6 +19,64 @@ async function importSession(page, session) {
   await page.locator('#import').setInputFiles({name:'session.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(session))});
 }
 
+test('learned pad names require confirmation, survive saves and label exports without mixing channels',async ({page}) => {
+  await fakeMidi(page); await page.goto('/midi'); await page.locator('#connect').click(); await page.locator('#input').selectOption('drums');
+  await page.locator('#pad-profiles summary').click(); await page.locator('#profile-name').fill('My Command');
+  await page.locator('#record').click(); await expect(page.locator('#state')).toHaveText('Recording');
+  await page.locator('#map-label').fill('Snare head');
+  await page.locator('#learn').click();
+  await page.evaluate(() => { emitMidi([0x99,40,0]); emitMidi([0xb9,4,90]); });
+  await expect(page.locator('#profile-status')).toContainText('Listening');
+  await page.evaluate(() => { emitMidi([0x98,40,76]); emitMidi([0x99,40,72]); });
+  await expect(page.locator('#map-channel')).toHaveValue('9'); await expect(page.locator('#map-note')).toHaveValue('40');
+  await expect(page.locator('#map-rows')).toBeEmpty();
+  await page.locator('#map-apply').click(); await expect(page.locator('#map-rows')).toContainText('Snare head · Ch 9 / 40');
+  await page.locator('#stop').click(); await page.locator('#profile-save').click();
+  await page.locator('#name').fill('Named take'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  const event=page.waitForEvent('download'); await page.locator('#json').click();
+  const exported=JSON.parse(await readFile(await (await event).path(),'utf8'));
+  expect(exported.padMap).toMatchObject({name:'My Command',mappings:[{channel:9,note:40,label:'Snare head'}]});
+  expect(exported.events.length).toBe(4);
+  await page.reload(); await page.locator('#sessions').getByRole('button',{name:'Named take',exact:true}).click();
+  await expect(page.locator('#note-rows')).toContainText('9 / 40 · Snare head');
+  await expect(page.locator('#note-rows tr').filter({hasText:'10 / 40'})).not.toContainText('Snare head');
+  await page.locator('#pad-profiles summary').click();
+  await page.locator('#map-label').fill('Changed'); await page.locator('#map-channel').fill('9'); await page.locator('#map-note').fill('40');
+  await page.locator('#map-apply').click(); await expect(page.locator('#confirm')).toBeVisible();
+  await page.getByRole('button',{name:'Cancel',exact:true}).click(); await expect(page.locator('#map-rows')).toContainText('Snare head');
+  await page.locator('#map-apply').click(); await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.locator('#profile-save').click(); await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await page.reload(); await page.locator('#sessions').getByRole('button',{name:'Named take',exact:true}).click();
+  await expect(page.locator('#note-rows')).toContainText('Snare head');
+});
+
+test('profile import is portable, rejects malformed replacements and fits a phone',async ({page}) => {
+  await page.goto('/midi'); await page.locator('#demo').click(); await page.locator('#pad-profiles summary').click();
+  const profile={format:'drum-midi-profile',version:1,name:'Nitro upstairs',mappings:[{channel:10,note:38,label:'<Snare & rim>'}]};
+  const upload=p => page.locator('#profile-import').setInputFiles({name:'profile.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(p))});
+  await upload(profile); await expect(page.locator('#map-rows')).toContainText('<Snare & rim>');
+  await upload({...profile,mappings:[...profile.mappings,...profile.mappings]});
+  await expect(page.locator('#profile-status')).toContainText('Invalid pad profile'); await expect(page.locator('#profile-name')).toHaveValue('Nitro upstairs');
+  const event=page.waitForEvent('download'); await page.locator('#profile-export').click();
+  expect(JSON.parse(await readFile(await (await event).path(),'utf8'))).toEqual(profile);
+  await page.locator('#profile-save').click(); await page.reload(); await page.locator('#pad-profiles summary').click();
+  await page.locator('#profile-select').selectOption('Nitro upstairs'); await page.locator('#profile-load').click();
+  await expect(page.locator('#map-rows')).toContainText('<Snare & rim>');
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('unreadable profile storage is preserved while profile export remains available',async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('drum-midi-profiles-v1','unreadable'));
+  await page.goto('/midi'); await page.locator('#pad-profiles summary').click();
+  await expect(page.locator('#profile-status')).toContainText('could not be read');
+  await page.locator('#map-label').fill('Kick'); await page.locator('#map-apply').click();
+  await page.locator('#profile-save').click(); await expect(page.locator('#profile-status')).toContainText('not saved');
+  expect(await page.evaluate(() => localStorage.getItem('drum-midi-profiles-v1'))).toBe('unreadable');
+  await expect(page.locator('#profile-export')).toBeEnabled();
+});
+
 test('demo saves, reloads, compares, exports and replays without touching editor APIs',async ({page}) => {
   const apiCalls=[]; page.on('request',r => { if (r.url().includes('/api/')) apiCalls.push(r.url()); });
   await page.goto('/midi'); await page.locator('#demo').click();

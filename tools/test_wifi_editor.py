@@ -69,6 +69,7 @@ class WifiEditorTests(unittest.TestCase):
         return data
 
     def test_unpaired_cannot_read_editor_or_mutate_or_send_midi(self):
+        self.assertEqual(self.request('/wifi/midi/setup')[0], 401)
         code, _, page = self.request()
         self.assertEqual(code, 200)
         self.assertIn(b'Pairing link', page)
@@ -83,6 +84,10 @@ class WifiEditorTests(unittest.TestCase):
 
     def test_pair_cookie_opens_editor_and_authenticated_api(self):
         headers = self.pair()
+        with patch('strike_remapper.wifi_editor.check_setup', return_value={'status': 'ready'}) as check:
+            self.assertEqual(json.loads(self.request('/wifi/midi/setup')[2]), {'status': 'ready'})
+            check.assert_called_once_with(self.midi.backend)
+        self.assertEqual(self.request('/wifi/midi/setup', overrides={'Origin': 'http://evil.invalid'})[0], 403)
         self.assertIn('HttpOnly', headers['Set-Cookie'])
         self.assertIn('SameSite=Strict', headers['Set-Cookie'])
         self.assertNotIn('test-editor-pairing', headers['Set-Cookie'])

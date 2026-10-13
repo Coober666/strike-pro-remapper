@@ -30,6 +30,10 @@ Save and portable JSON export. Capture directly with Web MIDI, or use **Wi-Fi ho
 computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
+**Host setup check** reports missing MIDI support, driver errors and visible inputs.
+**Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
+learned channel/note, and export/import profiles between devices. Saved sessions keep
+their own pad names; MIDI messages and module settings stay unchanged.
 
 Requirements: **Python 3.10+**. The application uses only the standard library, so there is
 nothing to `pip install`.

@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {emptyProfile, validateProfile, assignPad, padLabel, readProfiles, writeProfiles} from '../web/midi-toolkit/profiles.js';
 import {newSession, validateSession, summarize, compare, message, demoSession, exportCSV, report, MAX_EVENTS, MAX_DURATION} from '../web/midi-toolkit/core.js';
 test('partial host captures retain their status across import and exports', () => {
   const value=demoSession(); value.captureStatus='partial';
@@ -8,6 +9,41 @@ test('partial host captures retain their status across import and exports', () =
   assert.match(report(value),/Capture status: partial/);
   delete value.captureStatus; assert.equal(validateSession(value).captureStatus,'complete');
   value.captureStatus='unknown'; assert.throws(() => validateSession(value));
+});
+
+test('pad profiles survive session round trips, label note exports and keep channels separate', () => {
+  const s=fixture(); s.padMap=assignPad(emptyProfile('My Nitro'),10,38,'=Snare');
+  const clean=validateSession(s);
+  assert.deepEqual(clean.padMap,s.padMap);
+  assert.equal(padLabel(clean.padMap,9,38),'');
+  assert.match(exportCSV(clean),/"'=Snare"/);
+  assert.match(report(clean),/My Nitro/);
+  assert.match(report(clean),/\[=Snare\]/);
+  s.padMap.mappings[0].label='Renamed';
+  assert.equal(clean.padMap.mappings[0].label,'=Snare');
+  assert.equal(clean.events.length,s.events.length);
+});
+
+test('pad profiles reject duplicate pairs, invalid values and excessive size', () => {
+  const p=assignPad(emptyProfile(),1,0,'Kick');
+  for (const bad of [null,{...p,version:2},{...p,name:''},{...p,mappings:[...p.mappings,...p.mappings]},
+    {...p,mappings:[{channel:0,note:0,label:'Kick'}]}, {...p,mappings:[{channel:1,note:128,label:'Kick'}]},
+    {...p,mappings:[{channel:1,note:0,label:'Bad\nlabel'}]}, {...p,mappings:Array(129).fill(p.mappings[0])}]) {
+    assert.throws(() => validateProfile(bad),/Invalid pad profile/);
+  }
+  assert.equal(assignPad(p,1,0,'New kick').mappings.length,1);
+});
+
+test('profile storage is bounded and write failure preserves the previous data', () => {
+  let raw=null;
+  const storage={getItem:() => raw,setItem:(_,value) => { raw=value; }};
+  writeProfiles([emptyProfile('Strike')],storage);
+  assert.equal(readProfiles(storage)[0].name,'Strike');
+  assert.throws(() => writeProfiles(Array.from({length:26},(_,i) => emptyProfile(String(i))),storage),/25 profiles/);
+  assert.equal(readProfiles(storage).length,1);
+  assert.throws(() => writeProfiles([emptyProfile()],{setItem() { throw new Error('Quota'); }}),/Quota/);
+  raw='not json'; assert.throws(() => readProfiles(storage));
+  raw='界'.repeat(50000); assert.throws(() => readProfiles(storage),/too large/);
 });
 function fixture() {
   const s=newSession('Test', 'Drum input'); s.durationMs=1000;

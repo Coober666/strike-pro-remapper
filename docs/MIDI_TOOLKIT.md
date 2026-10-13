@@ -87,6 +87,59 @@ application to own an input; close the competing MIDI input application if openi
 Complete means this browser received the entire host take. It does not establish that
 the driver received every physical hit. Captures/imports are observational data.
 
+## Host setup check
+
+On a paired Wi-Fi toolkit page, expand **Host setup check** and choose **Check host
+setup** before recording. It reports the host OS, Python version, optional package
+version and visible MIDI inputs. It installs nothing, opens no input port and sends
+no MIDI. The same check is available from the application folder with
+`python -m strike_remapper.midi_setup` (use `python3` on a Mac/Linux setup that uses it).
+The command exits successfully when inputs are visible; other statuses exit with 1.
+
+- **Package missing:** install `requirements-midi.txt` on the host using the same
+  Python environment as the editor, following the instructions above.
+- **Driver error:** the package is present, but input discovery failed. Check the
+  host driver and USB connection; the report includes the helper's error detail.
+- **No inputs:** the helper works. Connect/power on the module at the host, check
+  the USB cable or MIDI interface, then check again.
+- **Inputs visible:** choose one and Record. This is not a successful input-open
+  test. A driver may still deny access, particularly when another application owns
+  the port. Close the competing app when convenient, refresh inputs and try again.
+
+**Export setup report** downloads these results, including input names/error detail,
+without pairing tokens or the Python executable path. Nothing is uploaded. The UI
+keeps the check disabled while a take is held; save/export and release that copy first.
+
+## Name your pads and learn their notes
+
+Expand **Pad names & MIDI Learn**. Create separate profiles named for your own setups,
+such as “Strike downstairs”, “Command” and “Nitro upstairs”. There are no assumed
+factory maps: learn or enter what each module actually sends.
+
+1. Record the selected browser or Wi-Fi host input.
+2. Enter a pad/zone name, choose **Learn next hit**, and play that pad once.
+3. Check the candidate channel/note and choose **Apply pad name**. Learning ignores
+   Note Off, velocity-zero Note On and controllers. The first newly received positive
+   Note On is a candidate, not an automatic assignment. Wi-Fi may deliver a queued hit;
+   cancel/relearn if it is not the intended pad. Pause/Stop cancels pending learning.
+4. Repeat for other pads/zones, or enter a channel and note manually. Renaming an
+   existing pair asks for confirmation. Different channels remain distinct.
+5. **Save profile** to reuse it in this browser. **Export profile** / **Import profile**
+   transfers its JSON to another device/browser. Applying/importing a profile updates
+   this capture's labels; it never changes note bytes or sends settings to a module.
+
+Names appear in per-note measurements, visual replay, CSV and text reports. Session
+JSON embeds a snapshot of the map; save the session again after changing its names.
+Renaming/deleting a saved profile does not alter captures already saved. Comparison
+still pairs by channel/note and shows each take's names separately; it does not infer
+that differently numbered notes on two modules are the same physical pad.
+
+The profile shelf holds 25 profiles / 128 KB in this browser and address. Each profile
+has up to 128 unique channel/note entries with names up to 80 characters. Imported
+profiles are validated before replacing anything. If browser storage fails, current
+names remain exportable. Unsaved names live in page memory; host take recovery only
+recovers MIDI events, so save/export the profile before reloading to retain the names.
+
 ## What the measurements mean
 
 - Counts include complete MIDI channel messages: notes, controllers, pressure,
@@ -142,3 +195,7 @@ limits, lease expiry and an injected input-only RtMidi boundary. `wifi-midi.spec
 uses the real paired server with a simulated host input in Chromium and iPad WebKit,
 covering capture/export, lost responses, hidden pages and reload recovery. This does
 not verify a physical Strike/Command/Nitro, OS MIDI driver or mobile device.
+`tools/test_midi_setup.py` tests missing dependencies, driver errors and enumeration
+without opening an input. Browser tests cover setup report export, local/host Learn,
+profile validation and storage failures, portable exports, channel separation and
+independent snapshots in saved sessions.

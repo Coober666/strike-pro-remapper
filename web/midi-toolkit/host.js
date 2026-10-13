@@ -13,7 +13,7 @@ export class HostTake {
     try { if (id) sessionStorage.setItem(KEY,id); else sessionStorage.removeItem(KEY); } catch { /* current take still works */ }
   }
   async fetch(path, data) {
-    const controller=new AbortController(), timer=setTimeout(() => controller.abort(),path.endsWith('/inputs') ? 10000 : 6000);
+    const controller=new AbortController(), timer=setTimeout(() => controller.abort(),['/inputs','/setup'].some(suffix => path.endsWith(suffix)) ? 10000 : 6000);
     try {
       const response=await fetch(path,{signal:controller.signal,cache:'no-store',
         ...(data ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)} : {})});
