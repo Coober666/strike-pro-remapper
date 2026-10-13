@@ -1,5 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {validateArchive, archiveJSON} from '../web/midi-toolkit/organization.js';
+import {matchesSearch} from '../web/midi-toolkit/metadata.js';
 import {emptyProfile, validateProfile, assignPad, padLabel, readProfiles, writeProfiles} from '../web/midi-toolkit/profiles.js';
 import {newSession, validateSession, summarize, compare, message, demoSession, exportCSV, report, MAX_EVENTS, MAX_DURATION} from '../web/midi-toolkit/core.js';
 test('partial host captures retain their status across import and exports', () => {
@@ -9,6 +11,39 @@ test('partial host captures retain their status across import and exports', () =
   assert.match(report(value),/Capture status: partial/);
   delete value.captureStatus; assert.equal(validateSession(value).captureStatus,'complete');
   value.captureStatus='unknown'; assert.throws(() => validateSession(value));
+});
+
+test('session notes, tags and exercises validate and survive portable backups', () => {
+  const s=fixture(); s.tags=[' Snare ','BEFORE','snare']; s.notesText='Ghost notes\nSame sticks'; s.exercise='soft';
+  const clean=validateSession(s); assert.deepEqual(clean.tags,['snare','before']);
+  assert.equal(clean.notesText,s.notesText); assert.equal(clean.exercise,'soft');
+  assert.deepEqual(validateArchive(JSON.parse(archiveJSON([s]))).sessions,[clean]);
+  assert.equal(matchesSearch(clean,'snare sticks'),true); assert.equal(matchesSearch(clean,'after'),false);
+  assert.match(report(clean),/Soft hits/); assert.match(report(clean),/completion is not measured/);
+  for (const change of [v => v.notesText='x'.repeat(2001),v => v.tags=Array(13).fill('tag'),v => v.tags=['x'.repeat(33)],v => v.exercise='__proto__',v => v.exercise=['soft']]) {
+    const v=fixture(); change(v); assert.throws(() => validateSession(v));
+  }
+  const old=fixture(); delete old.tags; delete old.notesText; delete old.exercise;
+  assert.deepEqual(validateSession(old).tags,[]);
+});
+
+test('focused analysis separates channels, keeps pause boundaries and does not mutate capture', () => {
+  const s=fixture(); s.segments=[0,2]; const before=JSON.stringify(s);
+  const result=summarize(s,Infinity,'10:38'); assert.equal(result.hits,2); assert.equal(result.notes[0].minGapMs,null);
+  assert.equal(result.controllers.length,0); assert.equal(compare(s,s,'9:38').length,1);
+  assert.equal(summarize(s,Infinity,'10:127').hits,0);
+  assert.match(report(s,null,'10:38'),/Analysis focus: channel:note 10:38/);
+  assert.doesNotMatch(report(s,null,'10:38'),/Ch 9 \/ 38/);
+  assert.equal(JSON.stringify(s),before);
+});
+
+test('invalid or oversized archive rejects the whole batch', () => {
+  const s=fixture(), archive={format:'drum-midi-session-backup',version:1,sessions:[s]};
+  assert.throws(() => validateArchive({...archive,sessions:[]}));
+  assert.throws(() => validateArchive({...archive,sessions:[s,{...s,events:[{t:0,data:[0xf0,0xf7]}]}]}));
+  assert.throws(() => validateArchive({...archive,sessions:Array(26).fill(s)}));
+  const many={...s,events:Array(50000).fill(s.events[0])};
+  assert.throws(() => validateArchive({...archive,sessions:Array(5).fill(many)}),/200,000/);
 });
 
 test('pad profiles survive session round trips, label note exports and keep channels separate', () => {

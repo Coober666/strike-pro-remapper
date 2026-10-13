@@ -1,4 +1,5 @@
 import {validateProfile, padLabel} from './profiles.js';
+import {sessionTags, EXERCISES} from './metadata.js';
 // Pure channel-message capture/analysis. No device access, audio, or MIDI output.
 export const MAX_EVENTS = 50000;
 export const MAX_DURATION = 20 * 60 * 1000;
@@ -16,7 +17,7 @@ export function message(data) {
 }
 export function newSession(name='Untitled capture', source='Unknown input', synthetic=false) {
   return {format:'drum-midi-session', version:1, name, source, synthetic,
-    createdAt:new Date().toISOString(), durationMs:0, segments:[0], captureStatus:'complete', events:[]};
+    createdAt:new Date().toISOString(), durationMs:0, segments:[0], captureStatus:'complete', tags:[], notesText:'', exercise:'', events:[]};
 }
 export function validateSession(value) {
   const fail = reason => { throw new Error('Invalid session: ' + reason); };
@@ -29,6 +30,9 @@ export function validateSession(value) {
   if (value.captureStatus !== undefined && !['complete','partial'].includes(value.captureStatus)) fail('bad capture status.');
   if (!Number.isFinite(value.durationMs) || value.durationMs < 0 || value.durationMs > MAX_DURATION) fail('duration exceeds 20 minutes.');
   if (!Array.isArray(value.events) || value.events.length > MAX_EVENTS) fail('too many events (maximum 50,000).');
+  if (value.notesText !== undefined && (typeof value.notesText !== 'string' || value.notesText.length > 2000)) fail('notes exceed 2,000 characters.');
+  if (value.exercise !== undefined && (typeof value.exercise !== 'string' || (value.exercise !== '' && !Object.hasOwn(EXERCISES,value.exercise)))) fail('unknown capture exercise.');
+  const tags=sessionTags(value.tags);
   const segments=value.segments ?? [0];
   if (!Array.isArray(segments) || !segments.length || segments.length > MAX_EVENTS+1 || segments[0] !== 0 ||
       segments.some((n,i) => !Number.isInteger(n) || n < 0 || n > value.events.length || (i && n <= segments[i-1]))) fail('bad pause boundaries.');
@@ -41,17 +45,23 @@ export function validateSession(value) {
     return {t:e.t, data:parsed.bytes};
   });
   return {...newSession(value.name.trim(), value.source.trim(), value.synthetic), createdAt:value.createdAt,
+    tags, notesText:value.notesText || '', exercise:value.exercise || '',
     durationMs:value.durationMs, segments:[...segments], captureStatus:value.captureStatus || 'complete', events,
     ...(value.padMap === undefined ? {} : {padMap:validateProfile(value.padMap)})};
 }
-export function summarize(session, until=Infinity) {
+export function matchesFocus(data, focus='') {
+  if (!focus) return true;
+  const m=message(data);
+  return !!m && [8,9,10].includes(m.kind) && `${m.channel}:${data[1]}` === focus;
+}
+export function summarize(session, until=Infinity, focus='') {
   const groups = new Map(), histogram = Array(16).fill(0), controllers = new Map();
   let hits = 0, count = 0, segment = 0;
   for (const [index,e] of session.events.entries()) {
     while (index >= (session.segments?.[segment+1] ?? Infinity)) segment++;
     if (e.t > until) break;
     const m = message(e.data);
-    if (!m) continue;
+    if (!m || !matchesFocus(e.data,focus)) continue;
     count++;
     if (m.kind === 11) {
       const key = `${m.channel}:${e.data[1]}`, value = e.data[2];
@@ -77,8 +87,8 @@ export function summarize(session, until=Infinity) {
   }).sort((a,b) => a.channel-b.channel || a.note-b.note);
   return {hits, count, histogram, notes, controllers:[...controllers.values()].sort((a,b) => a.channel-b.channel || a.controller-b.controller)};
 }
-export function compare(current, reference) {
-  const a = summarize(current).notes, b = summarize(reference).notes;
+export function compare(current, reference, focus='') {
+  const a = summarize(current,Infinity,focus).notes, b = summarize(reference,Infinity,focus).notes;
   const key = n => `${n.channel}:${n.note}`, old = new Map(b.map(n => [key(n), n]));
   const keys = new Set([...a.map(key), ...b.map(key)]), now = new Map(a.map(n => [key(n), n]));
   return [...keys].map(k => ({key:k, current:now.get(k) || null, reference:old.get(k) || null}));
@@ -98,18 +108,23 @@ export function exportCSV(session) {
   }
   return rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 }
-export function report(session, reference=null) {
-  const s = summarize(session);
+export function report(session, reference=null, focus='') {
+  const s = summarize(session,Infinity,focus);
   const lines = ['Drum MIDI session report', session.name, `Input: ${session.source}`, `Created: ${session.createdAt}`,
     `Source: ${session.synthetic ? 'Synthetic demo' : 'Recorded/imported MIDI'}`, `Active duration: ${(session.durationMs/1000).toFixed(2)} s`,
     `Capture status: ${session.captureStatus || 'complete'} (partial takes may be missing host events)`,
+    `Analysis focus: ${focus ? 'channel:note '+focus : 'all channel messages'}; full-take duration retained`,
+    `Tags: ${(session.tags || []).join(', ') || 'None'}`,
+    `Notes: ${session.notesText || 'None'}`,
+    `Exercise: ${EXERCISES[session.exercise]?.name || 'Free capture'} (user-selected; completion is not measured)`,
+    ...(EXERCISES[session.exercise] ? ['Instructions: '+EXERCISES[session.exercise].prompt] : []),
     `Pad profile: ${session.padMap?.name || 'None'} (user-assigned names)`,
     `Channel messages: ${s.count}; note-on hits: ${s.hits}`, '', 'Channel / note: hits, mean velocity, range, standard deviation, shortest repeated-note interval'];
   for (const n of s.notes) lines.push(`Ch ${n.channel} / ${n.note}${padLabel(session.padMap,n.channel,n.note) ? ' ['+padLabel(session.padMap,n.channel,n.note)+']' : ''}: ${n.hits}, ${n.mean.toFixed(1)}, ${n.min}–${n.max}, ${n.std.toFixed(1)}, ${n.minGapMs === null ? 'n/a' : n.minGapMs.toFixed(1)+' ms'}`);
   for (const c of s.controllers) lines.push(`Ch ${c.channel} CC ${c.controller}: ${c.count} messages, range ${c.min}–${c.max}, last ${c.last}`);
   if (reference) {
     lines.push('', `Comparison with: ${reference.name} (${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ', synthetic demo' : ''}${reference.captureStatus === 'partial' ? ', partial take' : ''})`, 'Channel:note — mean velocity change (current minus reference)');
-    for (const r of compare(session, reference)) lines.push(`${r.key} [current: ${padLabel(session.padMap,...r.key.split(':').map(Number)) || 'unnamed'}; reference: ${padLabel(reference.padMap,...r.key.split(':').map(Number)) || 'unnamed'}]: ${r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'not present in both captures'}`);
+    for (const r of compare(session, reference,focus)) lines.push(`${r.key} [current: ${padLabel(session.padMap,...r.key.split(':').map(Number)) || 'unnamed'}; reference: ${padLabel(reference.padMap,...r.key.split(':').map(Number)) || 'unnamed'}]: ${r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'not present in both captures'}`);
   }
   lines.push('', 'Velocity is MIDI data, not measured audio loudness. Pause gaps are excluded from captured time.',
     'Repeated-note gaps never cross a recorded pause boundary.',

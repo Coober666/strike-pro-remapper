@@ -22,6 +22,9 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 
 ## Hands-on gates still required
 
+For each candidate, also run the packaged-source smoke test and follow the
+[beta first-run walkthrough](BETA_START.md). Record the manifest revision.
+
 - [ ] A new Windows user launches, chooses a persistent library and opens the editor.
 - [ ] The Intel Mac launcher starts with its installed Python/Tk and retains library choice.
 - [ ] iPad and iPhone cameras scan the QR code; pairing succeeds over HTTP.
@@ -32,6 +35,10 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 - [ ] Deploy a copied kit, reload it on the Strike, and confirm sound and layer assignment.
 - [ ] Upgrade and roll back application files while keeping a copied library intact.
 - [ ] Another person completes install, edit, save, deploy and restore without developer help.
+- [ ] Host MIDI setup/Record succeeds with real OS input drivers; unplugging retains the take.
+- [ ] On real iPad/iPhone, learn pad names, annotate a take, filter one pad and export it.
+- [ ] Transfer a session backup and reusable pad profile to another browser/device; verify
+  notes, event counts and labels. Browser data and the host kit library are separate backups.
 
 Signed installers, automatic updates, and native mobile/direct-USB apps are not included
 in this beta. Do not describe simulated browser tests as device acceptance.

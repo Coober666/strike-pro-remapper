@@ -19,6 +19,91 @@ async function importSession(page, session) {
   await page.locator('#import').setInputFiles({name:'session.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(session))});
 }
 
+async function exportFile(page, id) {
+  const event=page.waitForEvent('download'); await page.locator('#'+id).click();
+  return readFile(await (await event).path(),'utf8');
+}
+const archive=sessions => ({format:'drum-midi-session-backup',version:1,sessions});
+async function restoreFile(page,value) {
+  await page.locator('#backup-import').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+}
+
+test('notes and tags persist, search combines words and invalid annotations cannot be saved',async ({page}) => {
+  await page.goto('/midi'); await page.locator('#demo').click();
+  await page.getByText('Session notes & tags',{exact:true}).click();
+  await page.locator('#session-tags').fill('Snare, Before'); await page.locator('#session-notes').fill('Same sticks. Soft strokes.');
+  await page.locator('#save').click(); await expect(page.locator('#state')).toHaveText('Saved in this browser'); await page.reload();
+  await page.locator('#session-search').fill('snare sticks'); await expect(page.locator('#search-count')).toHaveText('1 of 1 saved sessions');
+  await page.locator('#sessions').getByRole('button',{name:'Demo · steady groove',exact:true}).click();
+  await page.getByText('Session notes & tags',{exact:true}).click();
+  await expect(page.locator('#session-tags')).toHaveValue('snare, before'); await expect(page.locator('#session-notes')).toHaveValue('Same sticks. Soft strokes.');
+  await page.locator('#session-search').fill('after'); await expect(page.locator('#sessions')).toHaveText('No sessions match this search.');
+  await page.locator('#session-tags').fill('x'.repeat(33)); await expect(page.locator('#save')).toBeDisabled();
+  await expect(page.locator('#metadata-error')).toContainText('1–32');
+  await page.locator('#session-tags').fill('after');
+  const value=JSON.parse(await exportFile(page,'json')); expect(value.tags).toEqual(['after']); expect(value.notesText).toContain('Same sticks');
+});
+
+test('pad focus filters measurements and reports while full exports preserve every event',async ({page}) => {
+  const before=demoSession(); before.name='Before'; before.padMap={format:'drum-midi-profile',version:1,name:'Drums',mappings:[{channel:10,note:38,label:'Snare head'}]};
+  await page.goto('/midi'); await importSession(page,before); await page.locator('#save').click();
+  await page.locator('#analysis-focus').selectOption('10:38');
+  await expect(page.locator('#focus-summary')).toContainText('16 of 96 hits shown');
+  await expect(page.locator('#note-rows tr')).toHaveCount(1); await expect(page.locator('#timeline circle')).toHaveCount(16);
+  await expect(page.locator('#hits')).toHaveText('96');
+  expect(JSON.parse(await exportFile(page,'json')).events).toEqual(before.events);
+  expect((await exportFile(page,'csv')).split('\r\n')).toHaveLength(before.events.length+1);
+  const text=await exportFile(page,'report'); expect(text).toContain('Analysis focus: channel:note 10:38'); expect(text).not.toContain('Ch 10 / 42:');
+  const after=demoSession(); after.name='No snare'; after.events=after.events.filter(e => e.data[1] !== 38);
+  await importSession(page,after); await page.locator('#compare').selectOption({label:'Before'}); await page.locator('#analysis-focus').selectOption('10:38');
+  await expect(page.locator('#focus-summary')).toContainText('0 of 80 hits shown'); await expect(page.locator('#comparison')).toContainText('Not in both');
+  await expect(page.locator('#timeline circle')).toHaveCount(0); await expect(page.locator('#controllers')).toContainText('CC 4');
+});
+
+test('selected session backups restore as new copies and invalid batches leave the shelf intact',async ({page,browser}) => {
+  await page.goto('/midi'); await page.locator('#demo').click(); await page.locator('#name').fill('Before'); await page.locator('#save').click();
+  await page.locator('#name').fill('Unsaved rename');
+  await page.getByRole('checkbox',{name:'Back up Before',exact:true}).check();
+  await page.getByText('Back up / restore sessions',{exact:true}).click();
+  const backup=JSON.parse(await exportFile(page,'backup-export')); expect(backup.sessions[0].name).toBe('Before');
+  const context=await browser.newContext(); const other=await context.newPage();
+  try {
+    await other.goto('http://127.0.0.1:8767/midi'); await other.locator('#demo').click();
+    await restoreFile(other,backup); await other.getByRole('button',{name:'Continue',exact:true}).click();
+    await expect(other.locator('#search-count')).toHaveText('1 of 1 saved sessions'); await expect(other.locator('#hits')).toHaveText('96');
+    await restoreFile(other,backup); await other.getByRole('button',{name:'Continue',exact:true}).click();
+    await expect(other.locator('#search-count')).toHaveText('2 of 2 saved sessions');
+    await restoreFile(other,archive([backup.sessions[0],{...backup.sessions[0],events:[{t:0,data:[0xf0,0xf7]}]}]));
+    await expect(other.locator('#status')).toContainText('Nothing was imported'); await expect(other.locator('#search-count')).toHaveText('2 of 2 saved sessions');
+  } finally { await context.close(); }
+});
+
+test('full storage and transaction abort never partially restore a backup',async ({page}) => {
+  await page.goto('/midi');
+  await page.evaluate(async () => {
+    const {saveSession}=await import('/midi/storage.js'), {demoSession}=await import('/midi/core.js');
+    for (let i=0;i<24;i++) { const s=demoSession(); s.name='Take '+i; await saveSession(s); }
+  });
+  await page.reload(); await restoreFile(page,archive([demoSession(),demoSession()])); await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#status')).toContainText('Nothing was imported'); await expect(page.locator('#search-count')).toHaveText('24 of 24 saved sessions');
+  await page.evaluate(() => {
+    const original=IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add=function(...args) { const request=original.apply(this,args); if (this.name === 'sessions') request.addEventListener('success',() => this.transaction.abort()); return request; };
+  });
+  await restoreFile(page,archive([demoSession()])); await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#status')).toContainText('Nothing was imported');
+  expect(await page.evaluate(async () => (await (await import('/midi/storage.js')).listSessions()).length)).toBe(24);
+});
+
+test('capture exercises are saved as instructions without grading the performance',async ({page}) => {
+  await fakeMidi(page); await page.goto('/midi'); await page.locator('#exercise').selectOption('soft');
+  await expect(page.locator('#exercise-prompt')).toContainText('20 separate soft hits');
+  await page.locator('#connect').click(); await page.locator('#input').selectOption('drums'); await page.locator('#record').click();
+  await expect(page.locator('#exercise')).toBeDisabled(); await page.evaluate(() => emitMidi([0x99,38,31])); await page.locator('#stop').click();
+  expect(JSON.parse(await exportFile(page,'json')).exercise).toBe('soft');
+  expect(await exportFile(page,'report')).toContain('completion is not measured');
+});
+
 test('learned pad names require confirmation, survive saves and label exports without mixing channels',async ({page}) => {
   await fakeMidi(page); await page.goto('/midi'); await page.locator('#connect').click(); await page.locator('#input').selectOption('drums');
   await page.locator('#pad-profiles summary').click(); await page.locator('#profile-name').fill('My Command');

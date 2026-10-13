@@ -130,6 +130,25 @@ of the profile store and retained across host polling; names do not affect stati
 `drum-midi-profiles-v1` localStorage is bounded to 25 profiles / 128 KB, with 128 unique
 channel/note pairs per profile. Invalid imports/storage cannot replace current data;
 failed saves leave export available. Profile names/labels render only as text.
+Session v1 also accepts bounded `tags`, `notesText` and an `exercise` key defined in
+`metadata.js`; old sessions default to empty values. Preserve annotations across host
+polling. Exercises are user-selected instructions, never scored or marked completed.
+`organization.js` validates portable session backup JSON: 25 sessions / 200k events /
+32 MB file bound. `storage.js` restores new IDs in one readwrite transaction, with a
+count guard; never overwrite existing sessions or commit a partial batch. Metadata
+and session records stay in sync. Search uses saved metadata, and backups use saved
+records from one readonly transaction. Browser-local unsaved work is separate.
+Analysis focus is a channel/note view, never event deletion: filters in summarize,
+compare, charts/replay/report retain original pause boundaries and duration. JSON/CSV,
+overview totals and controller list always retain the full take. Reset focus on a
+new/load capture. Tests include capacity/transaction-abort restore and empty comparisons.
+
+`tools/build_beta.py` creates an exclusive-output portable source ZIP from an allowlist;
+it must never package libraries, secrets, captures, Git state or development dependencies.
+Manifest hashes cover all files except the manifest itself. Unix launchers normalize LF
+and carry executable bits. `test_beta_package.py` verifies reproducibility from identical
+inputs, hashes, exclusions and an extracted paired host with external temporary library
+and disabled card discovery. This is not a signed installer or physical OS acceptance.
 Note On velocity zero is Note Off; always separate channel/note. Never infer missed
 physical hits or trigger faults from MIDI alone. Pause time is excluded and timing
 is not calibrated. Bound captures/imports (20 active minutes, 50k events, 8 MB JSON),
