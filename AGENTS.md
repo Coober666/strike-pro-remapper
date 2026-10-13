@@ -73,6 +73,55 @@ CSS: `.main { grid-template-columns: 66px minmax(500px, 1fr) minmax(330px, 390px
 At ≤900px the rail remains beside the map and the contextual panel moves below it; at
 ≤620px the rail becomes a sticky horizontal strip and the shell stacks vertically.
 
+The Sounds panel keeps its assignment target and filters outside the independently
+scrolling `#inst-list`. `renderInstruments()` restores a visible row by section/path
+and offset when the search/tag/sort key is unchanged, including when recents insert
+rows. Assignment never silently advances Layer A to B. Sound names are explicit
+assignment buttons; preview and surrounding row space do not assign. Inline path
+arguments use `inlinePathArg()`, including names with apostrophes. Preview callbacks
+must match the current audio instance before clearing it or reporting failure.
+Touch/coarse-pointer sound and layer controls have 44px minimum targets. Browser
+regressions live in `tests/browser/workflow-polish.spec.js` and use synthetic media.
+
+Map interactions use Pointer Events captured on the stable root SVG, since pad
+children are replaced during dragging. Touch scrolls/selects normally; Arrange pads
+enables drag/resize/rotate with `touch-action:none`. Pointer cancellation restores
+the original overrides. Velocity dragging also captures its pointer and converts
+screen coordinates to SVG coordinates. Keyboard pads and confirmation focus are
+covered by `tests/browser/zz-recovery-touch.spec.js`.
+
+## Host lifecycle and recovery
+
+`launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
+It starts only one service, defaults to localhost, and uses the existing paired handler
+when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
+Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
+encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
+No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.
+The scrollable setup/pairing area keeps host controls in a fixed footer. Windows CI
+runs `tools/test_host_window.py` against real Tk widgets and a disposable loopback host;
+`STRIKE_REQUIRE_TK=1` makes unavailable Tk/display fail that job (other headless runs skip).
+If the post-drain recovery flush fails, `Host.recovery_pending` retains the worker and
+active kit. Retry Stop flushes again; start cannot switch libraries until this succeeds.
+The window offers Retry recovery save and keeps closing blocked while recovery fails.
+Host startup catches common wrong-library selections before creating files. Setup failures
+are covered by `test_launcher_setup.py`. `test_library_portability.py` uses copied apps,
+fresh processes and external synthetic libraries to verify backup/restore and relocation;
+`STRIKE_PREVIOUS_APP` optionally selects an older extracted application for version testing.
+Wi-Fi connection loss, unconfirmed save responses and suspended tabs pause editing.
+On reconnect, reload the host kit before allowing writes; never replay a failed POST.
+`wifiNeedsReload` tracks that requirement and visibility/online events check ownership.
+
+All editor POST handlers run under `STATE_LOCK`. The host-owned `RecoveryWorker` uses
+the same lock, writes atomic local autosaves every 60 seconds, and flushes after pending
+requests finish on normal shutdown. Imported kits use their display name before a first
+save. Load/new/import preserve dirty state before replacement; failed preservation blocks
+the switch. Recovery loads remain dirty, normalize the original kit name/save target, and
+snapshot current work before recovering another version. Never restore a recovery target
+to a removable-card save path automatically. Browser autosave is supplemental, uses
+`kitDirty`, and reports failures. Tests: `test_recovery_interruptions.py` and
+`test_host_launcher.py`, always with temporary libraries and loopback networking.
+
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
 
@@ -396,6 +445,19 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   factory activation uses the native host controller, while local Web MIDI is unchanged.
   `tools/test_wifi_editor.py` checks auth boundaries; `tests/browser/wifi-editor.spec.js`
   checks actual editing/saving on an isolated library in Chromium and iPad WebKit.
+  **Editing ownership:** `make_handler` holds a process-local token bound to a paired
+  session. `/wifi/editor` acquires/resumes or explicitly transfers it. Every full-editor
+  POST must carry `X-Strike-Editor`; checking ownership and the complete handler run
+  share a lock with transfer/logout. Reload rotates the per-tab resume token; the
+  frontend reloads host state before enabling edits on takeover. Other pages are
+  view-only snapshots, not collaborative clients. The separate fixed `/api/activate`
+  command still uses pairing auth. Localhost behavior is unchanged. Never infer UI
+  disabling alone protects writes; keep the host checks and stale-token tests.
+  **Connection/save polish:** `/api/status` also returns `library_path`. Connection
+  details refresh card discovery explicitly, not on a card-polling loop. Save confirms
+  the library copy; Deploy success asks for a module kit reload, and failure preserves
+  uncertainty about partially completed writes. New tests are in
+  `tests/browser/workflow-polish.spec.js` and `tools/test_wifi_editor.py`.
   **Physical iPad → Intel Mac → Strike verified October 12, 2026:** user changed
   SEVENzREC snare Layer A from BJ DWMaple Center to BJ DWBallad Center, saved on the
   Mac, deployed from iPad, and confirmed playback. Independent reads verified Save

@@ -3,12 +3,11 @@
 ![CI](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml/badge.svg)
 
 **An offline kit and instrument editor for the Alesis Strike / Strike Pro drum module.**
-No module connection required. No install. No third-party dependencies. Clone and run.
+No module connection required. No packages to install for the editor. Clone and run.
 
-![Strike Pro Remapper — drum map, pad editor, and instrument browser](docs/screenshot.png)
+![Strike Pro Remapper — touch map controls, layer rack, and pad editor](docs/screenshot.png)
 
-> **Screenshot note:** `docs/screenshot.png` shows the previous interface. The current
-> graphite-and-brass workspace redesign is not yet reflected in this image.
+> Screenshot uses a synthetic test kit; missing-media and card indicators are expected.
 
 The official Strike Editor hasn't been updated since January 2018, requires the module
 plugged in via USB for every edit, and never worked reliably on modern macOS. This tool
@@ -38,6 +37,23 @@ py strike_remap.py            # Windows
 reliable launcher there.)
 
 Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
+
+**Optional host window:** double-click `launch-host.bat` / `launch-host.command`, or run
+`python launch_editor.py` (`python3` on macOS). This requires Python 3.10+ with Tk.
+Choose your existing library folder, then **Start** and **Open editor**. The folder is
+remembered across launches and can live outside the downloaded application folder.
+For iPad/iPhone, enable Wi-Fi, select this computer's private IPv4 address, start,
+and scan the pairing QR code. The code is generated locally. **Stop** saves a recovery
+copy of unsaved kit edits before shutting down this host. If the final recovery write
+fails, keep the window open and use **Retry recovery save** after fixing the folder or
+disk-space problem. Host controls stay visible in shorter windows; setup and pairing scroll.
+Existing command-line
+launchers remain available; see [host setup and upgrades](docs/HOST_LAUNCHER.md).
+
+The host window explains missing Tk, unavailable Wi-Fi addresses and occupied ports,
+and catches common wrong-library selections. See [first-run help](docs/HOST_LAUNCHER.md#first-run-help).
+Wi-Fi pages pause editing after a connection loss or suspended tab and reload host state
+before resuming. A lost Save response remains unconfirmed and is never automatically retried.
 
 > **First-run notes:**
 > - **macOS:** expect a one-time "access files in your Documents folder" / removable-volume
@@ -215,6 +231,24 @@ double-click.
   have hardware-confirmed names; the rest show as "Type N" until enumerated
 
 **Library & workflow**
+- **Connection details** — shows the computer connection, library location, user card,
+  and read-only factory card, with refresh and recovery guidance. A lost computer
+  connection is shown as unknown card status, rather than as missing cards.
+- **Clear save and deploy states** — Save to library confirms the computer copy;
+  verified deployment prompts you to reload the kit on the Strike. A lost deployment
+  response never claims that no files were copied.
+- **Host-owned recovery** — unsaved kits, including imports, receive an atomic local
+  recovery copy every 60 seconds even with the browser closed, before changing kits,
+  and on normal shutdown. A failed recovery write blocks a kit change. Abrupt host
+  termination can lose edits since the last recovery copy. Recovery is separate from
+  Save and Deploy; recovered kits stay marked unsaved until explicitly saved.
+- **Touch and keyboard map controls** — tap to select and swipe to scroll; choose
+  **Arrange pads** to move, resize or rotate. Zoom buttons work without a mouse wheel.
+  Keyboard users can focus a pad and press Enter/Space; confirmation dialogs retain
+  focus and respect Cancel. New kit names cannot overwrite an existing kit.
+- **One Wi-Fi editing page at a time** — additional pages are view-only. Take editing
+  control explicitly to load the current kit and its unsaved changes on another device;
+  writes from the previous page are rejected by the host.
 - One-click full library sync from SD card (background, with progress)
 - **Deploy to Module** — a guided SD-card transfer with a readable preflight, explicit
   destination and asset plan, conflict blocking, backup of a replaced kit, progress, and
@@ -226,6 +260,11 @@ double-click.
   preflights can tell "missing" from "not visible right now".
 - Instrument browser: search, tag filtering, favorites, recents, waveform thumbnails,
   audio preview at any velocity, A+B layer blend preview
+- **Touch-friendly sound selection** — a persistent pad/zone and Layer A/B selector,
+  larger touch controls, and separate assigned/previewing labels. Tap a sound's name
+  to assign it to the displayed target, or its play button to audition without editing.
+  Assigning Layer A keeps Layer A selected. Search and your position in the list stay
+  in place when switching targets or adding a sound to recents.
 - **"More like this" similarity search** — instead of scrolling 168 snares, click the
   **≈** on any instrument (or a pad layer) to get the ~10 closest-*sounding* alternatives,
   ranked. Cheap audio fingerprints (spectral centroid, spectral rolloff, zero-crossing
@@ -323,6 +362,10 @@ with confidence levels, and implementer notes. Methodology and community researc
 `RESEARCH.md`, exploration tools in `tools/`.
 
 ## Credits
+
+- [Project Nayuki QR encoder](https://github.com/nayuki/QR-Code-generator) — vendored
+  MIT-licensed, standard-library-only code for offline pairing QR codes; source revision
+  and license are recorded in `strike_remapper/vendor/`.
 
 - [strike4j](https://github.com/cbuschka/strike4j) (cbuschka) — first full decode of the
   `.sin` INST parameter block, which this project's instrument editor builds on

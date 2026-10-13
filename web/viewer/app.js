@@ -1061,45 +1061,47 @@ function renderTrigModal() {
 }
 
 function updatePlayButtons() {
-  // Update all play buttons in-place without re-rendering the list (preserves scroll)
   document.querySelectorAll('.play-btn[data-rel]').forEach(btn => {
-    const r = btn.getAttribute('data-rel');
-    const playing = r === previewRel;
-    btn.className   = 'play-btn' + (playing ? ' playing' : '');
-    btn.title       = playing ? 'Stop preview' : 'Preview sound';
-    btn.innerHTML   = playing ? '&#9632;' : '&#9654;';
+    const playing = btn.dataset.rel === previewRel;
+    btn.classList.toggle('playing', playing);
+    btn.title = playing ? 'Stop preview' : 'Preview sound';
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(playing));
+    btn.innerHTML = playing ? '&#9632;' : '&#9654;';
+  });
+  document.querySelectorAll('.inst-item[data-rel]').forEach(row => {
+    row.querySelector('.preview-state').textContent = row.dataset.rel === previewRel ? 'Previewing' : '';
   });
 }
 
 function previewInstrument(rel) {
   if (window.VIEWER) return;  // viewer-mode: no audio in v1 (/api/wav 404s)
-  // Toggle: clicking the currently-playing instrument stops it
-  if (previewAudio) {
-    previewAudio.pause();
-    previewAudio.src = '';
-    previewAudio = null;
-    const wasRel = previewRel;
-    previewRel = null;
-    updatePlayButtons();
-    if (wasRel === rel) return;  // same item → just stop
-  }
-  previewRel   = rel;
-  previewAudio = new Audio('/api/preview?sin=' + encodeURIComponent(rel));
-  previewAudio.volume = previewVol * previewVelGain;
-  previewAudio.onended = () => {
-    previewAudio = null; previewRel = null; updatePlayButtons();
+  const wasRel = previewRel;
+  stopPreview();
+  if (wasRel === rel) return;
+  const audio = new Audio('/api/preview?sin=' + encodeURIComponent(rel));
+  previewRel = rel;
+  previewAudio = audio;
+  audio.volume = previewVol * previewVelGain;
+  audio.onended = () => {
+    if (previewAudio === audio) stopPreview();
   };
-  previewAudio.onerror = () => {
-    setMsg('Preview unavailable — mount the preset SD card to enable audio', true);
-    previewAudio = null; previewRel = null; updatePlayButtons();
+  const failed = () => {
+    if (previewAudio !== audio) return;
+    stopPreview();
+    setMsg('Could not preview this sound. Check the computer connection and that its sample files are available, then try again.', true);
   };
-  updatePlayButtons();  // flip button to ■ immediately
-  previewAudio.play().catch(() => {});
+  audio.onerror = failed;
+  updatePlayButtons();
+  audio.play().catch(failed);
 }
 
 function stopPreview() {
-  if (previewAudio) { previewAudio.pause(); previewAudio.src = ''; previewAudio = null; }
-  if (previewRel) { previewRel = null; updatePlayButtons(); }
+  const audio = previewAudio;
+  previewAudio = null;
+  previewRel = null;
+  if (audio) { audio.onended = null; audio.onerror = null; audio.pause(); audio.src = ''; }
+  updatePlayButtons();
 }
 
 // Patch panel collapse state (persisted in localStorage)
@@ -1768,14 +1770,56 @@ function svgPt(svgEl, clientX, clientY) {
   return pt.matrixTransform(svgEl.getScreenCTM().inverse());
 }
 
+let layoutEditing = false;
+let mapTouchTapId = null;
+function toggleLayoutEditing() {
+  cancelMapDrag();
+  layoutEditing = !layoutEditing;
+  document.getElementById('drum-svg-wrap').classList.toggle('layout-editing', layoutEditing);
+  const btn = document.getElementById('layout-edit-btn');
+  btn.setAttribute('aria-pressed', String(layoutEditing));
+  btn.textContent = layoutEditing ? 'Done arranging' : 'Arrange pads';
+  setMsg(layoutEditing ? 'Drag pads or their resize/rotate handles. Done arranging restores touch scrolling.' : 'Tap a pad to select; swipe to scroll.');
+}
+function cancelMapDrag() {
+  if (!dragState) { mapTouchTapId = null; return; }
+  if (dragState?.original) padOverrides = dragState.original;
+  dragState = null;
+  mapTouchTapId = null;
+  renderDrumMap();
+  renderPadDetail();
+}
+function tapMapPad(id) {
+  if (mapTouchTapId !== id) return;
+  mapTouchTapId = null;
+  clickPad(id);
+}
+function keySelectMapPad(e, id) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  e.stopPropagation();
+  clickPad(id);
+  document.querySelector(`#drum-svg .map-pad[data-pid="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
+}
+function zoomMap(factor) {
+  const w = Math.min(SVG_DEF_W * 3, Math.max(SVG_DEF_W * .2, svgView.w * factor));
+  const h = w * SVG_DEF_H / SVG_DEF_W;
+  svgView = {x:svgView.x + (svgView.w-w)/2, y:svgView.y + (svgView.h-h)/2, w, h};
+  applySvgView();
+}
+
 function startDrag(e, id, isMirror) {
+  if (e.button !== 0 || dragState) return;
+  if (e.pointerType !== 'mouse' && !layoutEditing) { mapTouchTapId = id; return; }
+
   e.preventDefault();
   const svgEl = document.getElementById('drum-svg');
   const pt    = svgPt(svgEl, e.clientX, e.clientY);
   const def   = effectivePadDef(id);
   if (!def) return;
   const mir = isMirror ? ((padOverrides[id] || {}).mirror || {dx: 0, dy: 0}) : null;
-  dragState = {id, isMirror: !!isMirror,
+  svgEl.setPointerCapture(e.pointerId);
+  dragState = {id, pointerId:e.pointerId, original:JSON.parse(JSON.stringify(padOverrides)), isMirror: !!isMirror,
                origCx: def[2] + (mir ? mir.dx : 0), origCy: def[3] + (mir ? mir.dy : 0),
                baseCx: def[2], baseCy: def[3],
                startX: pt.x, startY: pt.y, moved: false};
@@ -1783,6 +1827,7 @@ function startDrag(e, id, isMirror) {
 
 // Resize / rotate handle drag — edits the pad's rx/ry or rot in padOverrides live.
 function startHandle(e, id, kind) {
+  if (e.button !== 0 || dragState || (e.pointerType !== 'mouse' && !layoutEditing)) return;
   e.preventDefault();
   e.stopPropagation();
   const svgEl = document.getElementById('drum-svg');
@@ -1790,8 +1835,9 @@ function startHandle(e, id, kind) {
   const def   = effectivePadDef(id);
   if (!def) return;
   const cx = def[2], cy = def[3];
+  svgEl.setPointerCapture(e.pointerId);
   dragState = {
-    id, handle: kind, cx, cy,
+    id, pointerId:e.pointerId, original:JSON.parse(JSON.stringify(padOverrides)), handle: kind, cx, cy,
     origRx: def[4], origRy: def[5], origRot: +((padOverrides[id] || {}).rot) || 0,
     startDist: Math.max(2, Math.hypot(pt.x - cx, pt.y - cy)),
     startAng:  Math.atan2(pt.y - cy, pt.x - cx) * 180 / Math.PI,
@@ -1800,7 +1846,7 @@ function startHandle(e, id, kind) {
 }
 
 function svgMouseMove(e) {
-  if (!dragState) return;
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
   const svgEl = document.getElementById('drum-svg');
   const pt    = svgPt(svgEl, e.clientX, e.clientY);
 
@@ -1848,7 +1894,7 @@ function svgMouseMove(e) {
 }
 
 function svgMouseUp(e) {
-  if (!dragState) return;
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
   const wasMoved = dragState.moved;
   const isHandle = !!dragState.handle;
   const id = dragState.id;
@@ -1865,13 +1911,104 @@ function svgMouseUp(e) {
   }
 }
 
+const wifiMode = document.documentElement.dataset.wifiEditor === 'true';
+let wifiEditorToken = '';
+let wifiEditing = !wifiMode;
+let wifiAccessChecking = false;
+let wifiNeedsReload = false;
+let connectionInfo = null;
+let kitDirty = false;
+let saveFeedback = '';
+
+function updateWifiAccess(data) {
+  wifiEditing = !!data.editing;
+  document.querySelector('.wifi-session').classList.toggle('view-only', !wifiEditing);
+  document.getElementById('wifi-access-status').textContent = wifiEditing
+    ? 'Editing here. Files stay on the USB computer.'
+    : 'View only. Take editing control to refresh the kit and make changes.';
+  document.getElementById('wifi-take-control').hidden = wifiEditing;
+  updateSaveState();
+}
+
+async function initWifiEditor() {
+  if (!wifiMode) return;
+  let resume = '';
+  try { resume = sessionStorage.getItem('strike_editor_resume') || ''; } catch {}
+  const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resume})});
+  if (response.status === 401) { location.replace('/wifi/pair'); throw new Error('Pairing required'); }
+  if (!response.ok) throw new Error('Could not connect to the editor. Reload to try again.');
+  const data = await response.json();
+  wifiEditorToken = data.token || '';
+  try { sessionStorage.setItem('strike_editor_resume', wifiEditorToken); } catch {}
+  updateWifiAccess(data);
+}
+
+async function wifiTakeControl() {
+  if (!await appConfirm('Move editing to this page? The other page becomes view-only. The current kit and unsaved edits stay on the computer and will be loaded here.', 'Take editing control')) return;
+  try {
+    const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({takeover:true})});
+    if (!response.ok) throw new Error('Could not take control. Check the connection and try again.');
+    const data = await response.json();
+    // Reload before enabling writes, so stale controls cannot edit a different kit.
+    sessionStorage.setItem('strike_editor_resume', data.token);
+    location.reload();
+  } catch (err) { setMsg(err.message, true); }
+}
+
+async function checkWifiAccess() {
+  if (!wifiMode || wifiAccessChecking || deployBusy || document.hidden) return;
+  wifiAccessChecking = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch('/wifi/editor', {signal:controller.signal, headers:{'X-Strike-Editor':wifiEditorToken}});
+    if (response.status === 401) { location.replace('/wifi/pair'); return; }
+    if (!response.ok) throw new Error('Editor connection unavailable');
+    const access = await response.json();
+    if (document.hidden) return;
+    if (access.editing && wifiNeedsReload) { location.reload(); return; }
+    updateWifiAccess(access);
+  } catch {
+    pauseWifiEditing();
+  } finally {
+    clearTimeout(timeout);
+    wifiAccessChecking = false;
+  }
+}
+
+function pauseWifiEditing() {
+  if (!wifiMode) return;
+  wifiNeedsReload = true;
+  updateWifiAccess({editing:false});
+  document.getElementById('wifi-access-status').textContent = 'Connection needs checking. Reconnect to refresh the kit before editing.';
+  connectionInfo = null;
+  renderConnectionStatus();
+}
+
+function updateSaveState() {
+  const el = document.getElementById('save-state');
+  if (!el) return;
+  el.textContent = !pads.length ? 'Open a kit to begin' : kitDirty
+    ? 'Changes not saved to library' : saveFeedback || 'Save to library, then deploy when ready';
+  document.getElementById('save-lib-btn').disabled = !libSavePath || !wifiEditing;
+  document.getElementById('save-sd-btn').disabled = !pads.length || !wifiEditing;
+  document.getElementById('kit-name').contentEditable = pads.length && wifiEditing ? 'true' : 'false';
+}
+
 async function api(path, body) {
+  if (body && !wifiEditing) {
+    const error = 'This page is view-only. Take editing control to refresh the kit before making changes.';
+    setMsg(error, true);
+    return {error};
+  }
   const opts = body
-    ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }
+    ? { method: 'POST', headers: {'Content-Type':'application/json', ...(wifiMode ? {'X-Strike-Editor':wifiEditorToken} : {})}, body: JSON.stringify(body) }
     : {};
   const r = await fetch('/api' + path, opts);
   if (r.status === 401 && document.documentElement.dataset.wifiEditor === 'true') location.assign('/wifi/pair');
-  return r.json();
+  const data = await r.json();
+  if (data.code === 'editor_read_only') updateWifiAccess({editing:false});
+  return data;
 }
 
 async function wifiDisconnect() {
@@ -1885,11 +2022,15 @@ async function wifiDisconnect() {
 // native confirm() blocks the event loop and is auto-dismissed as "cancel"
 // by headless browsers, which made restore/delete undriveable in tests.
 let _confirmResolve = null;
+let _confirmReturnFocus = null;
 function appConfirm(message, okLabel = 'OK') {
   let m = document.getElementById('confirm-modal');
   if (!m) {
     m = document.createElement('div');
     m.id = 'confirm-modal';
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    m.setAttribute('aria-labelledby', 'confirm-msg');
     m.innerHTML = '<div class="confirm-box"><p id="confirm-msg"></p>'
       + '<div class="confirm-actions">'
       + '<button id="confirm-cancel">Cancel</button>'
@@ -1903,10 +2044,20 @@ function appConfirm(message, okLabel = 'OK') {
     document.addEventListener('keydown', e => {
       if (!m.classList.contains('open')) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _confirmDone(false); }
-      if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); _confirmDone(true); }
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+        if (e.target.tagName !== 'BUTTON') { e.preventDefault(); _confirmDone(true); }
+      }
+      if (e.key === 'Tab') {
+        const first = document.getElementById('confirm-cancel');
+        const last = document.getElementById('confirm-ok');
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
     }, true);
   }
   document.getElementById('confirm-msg').textContent = message;
+  _confirmReturnFocus = document.activeElement;
   document.getElementById('confirm-ok').textContent  = okLabel;
   m.classList.add('open');
   document.getElementById('confirm-ok').focus();
@@ -1915,6 +2066,8 @@ function appConfirm(message, okLabel = 'OK') {
 function _confirmDone(ok) {
   document.getElementById('confirm-modal').classList.remove('open');
   const r = _confirmResolve; _confirmResolve = null;
+  if (_confirmReturnFocus?.isConnected) _confirmReturnFocus.focus({preventScroll:true});
+  _confirmReturnFocus = null;
   if (r) r(ok);
 }
 
@@ -1923,14 +2076,15 @@ function _confirmDone(ok) {
 let _extSel = null, _extRev = -1;
 
 function postSelect() {
+  if (!wifiEditing) return;
   const id = selectedMapPad || null;
   if (id === _extSel) return;
   _extSel = id;
-  fetch('/api/select', {method:'POST', headers:{'Content-Type':'application/json'},
-                        body: JSON.stringify({pad_id: id})}).catch(() => {});
+  api('/select', {pad_id:id}).catch(() => {});
 }
 
 setInterval(async () => {
+  if (!wifiEditing) return;
   try {
     const s = await (await fetch('/api/selected')).json();
     if (vmActive && s.rev !== vmRev) { vmRev = s.rev; vmRefreshManifest(); }
@@ -1959,6 +2113,9 @@ function setMsg(txt, err=false) {
 }
 
 function setDirtyState(dirty, cnt, labels) {
+  kitDirty = !!dirty;
+  if (dirty) saveFeedback = '';
+  updateSaveState();
   undoCount = cnt != null ? cnt : undoCount;
   if (labels !== undefined) undoLabels = labels;
   const badge = document.getElementById('dirty-badge');
@@ -2184,7 +2341,8 @@ async function loadKitList() {
 // Shared post-load state application: used by openKit, drag-drop .skt loading,
 // and boot-time rehydration from /api/session.
 function applyKitData(data, path, opts) {
-  const {dirty = false, undoCount = 0, historyLabels = []} = opts || {};
+  saveFeedback = '';
+  const {dirty = !!data.dirty, undoCount = 0, historyLabels = []} = opts || {};
   kitName       = data.name;
   pads          = data.pads;
   libSavePath   = data.lib_save_path || '';
@@ -2219,11 +2377,14 @@ function applyKitData(data, path, opts) {
 async function openKit(idx) {
   stopPreview();
   const path = typeof idx === 'number' ? kits[idx].path : idx;
-  const data = await api('/load', {path});
-  if (data.error) { setMsg(data.error, true); return; }
+  let data;
+  try { data = await api('/load', {path}); }
+  catch { setMsg('Kit load could not be confirmed. Reconnect and reload the editor before editing.', true); return false; }
+  if (data.error) { setMsg(data.error, true); return false; }
   applyKitData(data, path);
   closeAllPopovers();
   setMsg(data.message);
+  return true;
 }
 
 // ── Drum map ──────────────────────────────────────────────────────────────────
@@ -2501,7 +2662,7 @@ function renderDrumMap() {
 
     const inner = titleEl + sprite + ring + textEl + warnEl;
     (isOverlay ? overlays : parts).push(
-      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}')">`
+      `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" role="button" tabindex="0" aria-label="Select ${id}" onclick="tapMapPad('${id}')" onkeydown="keySelectMapPad(event,'${id}')" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" style="opacity:${opacity};${glow}" onpointerdown="startDrag(event,'${id}')">`
       + inner + `</g>`);
 
     // Mirror pad: same zone drawn a second time (e.g. dual hi-hats on a Y-splitter)
@@ -2510,8 +2671,8 @@ function renderDrumMap() {
       const link = `<text x="${(scx + srx - 6).toFixed(1)}" y="${(scy - sry + 8).toFixed(1)}" font-size="9" `
         + `fill="#7f8a9c" pointer-events="none" font-family="system-ui,sans-serif">&#x29C9;</text>`;
       (isOverlay ? overlays : parts).push(
-        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
-        + `style="opacity:${opacity};${glow}" onmousedown="startDrag(event,'${id}',true)">`
+        `<g class="map-pad${inGroup ? ' input-lit' : ''}" data-pid="${id}" role="button" tabindex="0" aria-label="Select ${id}" onclick="tapMapPad('${id}')" onkeydown="keySelectMapPad(event,'${id}')" data-input-group="${escHtml(PAD_TO_GROUP[id] || '')}" transform="translate(${mir.dx},${mir.dy})" `
+        + `style="opacity:${opacity};${glow}" onpointerdown="startDrag(event,'${id}',true)">`
         + `<title>${escHtml((padMap[id]?.label || id) + ' (mirror — same zone, shared settings)')}</title>`
         + sprite + ring + textEl + warnEl + link + `</g>`);
     }
@@ -2531,12 +2692,12 @@ function renderDrumMap() {
       const rex = hcx + (hrx + 7) * Math.cos(rad), rey = hcy + (hrx + 7) * Math.sin(rad);
       const rotHandleX = hcx + (hry + 22) * Math.sin(rad), rotHandleY = hcy - (hry + 22) * Math.cos(rad);
       handles =
-        `<g class="pad-handle" data-h="rotate" onmousedown="startHandle(event,'${et}','rotate')">`
+        `<g class="pad-handle" data-h="rotate" onpointerdown="startHandle(event,'${et}','rotate')">`
         + `<line x1="${hcx.toFixed(1)}" y1="${hcy.toFixed(1)}" x2="${rotHandleX.toFixed(1)}" y2="${rotHandleY.toFixed(1)}" stroke="#f0b32e" stroke-width="1.2" opacity=".8"/>`
         + `<circle cx="${rotHandleX.toFixed(1)}" cy="${rotHandleY.toFixed(1)}" r="5" fill="#141519" stroke="#f0b32e" stroke-width="1.6"/>`
         + `<path d="M ${(rotHandleX-2.4).toFixed(1)} ${rotHandleY.toFixed(1)} a 2.4 2.4 0 1 1 1.4 2.1" fill="none" stroke="#f0b32e" stroke-width="1"/>`
         + `</g>`
-        + `<g class="pad-handle" data-h="resize" onmousedown="startHandle(event,'${et}','resize')">`
+        + `<g class="pad-handle" data-h="resize" onpointerdown="startHandle(event,'${et}','resize')">`
         + `<circle cx="${rex.toFixed(1)}" cy="${rey.toFixed(1)}" r="5" fill="#f0b32e" stroke="#141519" stroke-width="1.4"/>`
         + `<path d="M ${(rex-2.2).toFixed(1)} ${(rey-2.2).toFixed(1)} L ${(rex+2.2).toFixed(1)} ${(rey+2.2).toFixed(1)} M ${(rex+2.2).toFixed(1)} ${(rey-2.2).toFixed(1)} L ${(rex-2.2).toFixed(1)} ${(rey+2.2).toFixed(1)}" stroke="#141519" stroke-width="1.1"/>`
         + `</g>`;
@@ -2611,7 +2772,7 @@ function velXfadeControl(padId, xfade, laLevel, lbLevel) {
     <text id="${eid}_lbl" x="${W/2}" y="${H-3}" text-anchor="middle" font-size="8" fill="#445">A only (drag to enable B)</text>`;
 
   return `<svg id="${eid}" class="vel-xfade-svg" width="${W}" height="${H}"
-      data-pid="${escHtml(padId)}" onmousedown="startVelDrag(event)"
+      data-pid="${escHtml(padId)}" onpointerdown="startVelDrag(event)"
       style="display:block;flex-shrink:0;cursor:ew-resize;user-select:none;" xmlns="http://www.w3.org/2000/svg">
     <rect x="${pad}" y="0" width="${W - pad*2}" height="${H-14}" fill="#0a1520" rx="2"/>
     <rect id="${eid}_abar" x="${pad}" y="${aY}" width="${Math.max(0, splitX - pad)}" height="${aH}" fill="${aCol}" opacity="0.75" rx="1"/>
@@ -2623,9 +2784,11 @@ function velXfadeControl(padId, xfade, laLevel, lbLevel) {
 }
 
 function startVelDrag(e) {
+  if (e.button !== 0 || _velDrag) return;
   e.preventDefault();
   const svg = e.currentTarget;
-  _velDrag = {padId: svg.dataset.pid, svg, rect: svg.getBoundingClientRect(), lastVel: null};
+  svg.setPointerCapture(e.pointerId);
+  _velDrag = {pointerId:e.pointerId, padId: svg.dataset.pid, svg, rect: svg.getBoundingClientRect(), lastVel: null};
   _applyVelDrag(e.clientX);
 }
 
@@ -2634,7 +2797,7 @@ function _applyVelDrag(clientX) {
   const {svg, rect, padId} = _velDrag;
   const W = svg.viewBox?.baseVal?.width || svg.getBoundingClientRect().width;
   const pad = 4;
-  const x = Math.max(pad, Math.min(W - pad, clientX - rect.left));
+  const x = Math.max(pad, Math.min(W - pad, (clientX - rect.left) * W / rect.width));
   const vel = Math.round((x - pad) / (W - pad * 2) * 127);
   const eid = 'vx_' + padId.replace(/\W/g,'_');
   const aCol = '#4a90d9', bCol = '#e06040';
@@ -2716,7 +2879,7 @@ function renderLayerRack() {
       <button class="rack-action assign" onclick="selectPadLayer('${pad.id}','${layer}');setWorkspaceMode('sounds')">Choose sound</button>`;
     return `<article class="rack-layer${active ? ' active' : ''}${path ? '' : ' empty'}${broken ? ' broken' : ''}">
       <div class="rack-layer-head">
-        <button class="rack-layer-key" title="Target Layer ${upper}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
+        <button class="rack-layer-key" title="Target Layer ${upper}" aria-label="Target Layer ${upper}" aria-pressed="${active}" onclick="selectPadLayer('${pad.id}','${layer}')">${upper}</button>
         <div class="rack-layer-title"><small>Layer ${upper}</small><strong title="${escHtml(path || '')}">${escHtml(name)}</strong></div>
         <span class="rack-layer-status">${status}</span>
       </div>
@@ -3109,6 +3272,7 @@ function clearSelection() {
   renderPatchPanel();
   renderDrumMap();
   renderPadDetail();
+  renderInstruments();
 }
 
 function updateAssignBanner() {
@@ -3119,9 +3283,10 @@ function updateAssignBanner() {
     const p     = pads.find(p => p.id === selectedPad.id);
     const label = p ? p.label : selectedPad.id;
     el.className = 'assign-target';
-    el.innerHTML = `<strong>${escHtml(selectedPad.id)}</strong> ${escHtml(label)}`
-      + ` &ndash; Layer ${selectedPad.layer.toUpperCase()}`
-      + ` <span class="clr" onclick="clearSelection()" title="Cancel">&#xD7;</span>`;
+    el.innerHTML = `<div class="assign-target-label"><small>Assigning sounds to</small><strong>${escHtml(selectedPad.id)} · ${escHtml(label)}</strong></div>
+      <div class="assign-layer-switch" role="group" aria-label="Assignment layer">
+        ${['a', 'b'].map(layer => `<button aria-pressed="${selectedPad.layer === layer}" onclick="selectPadLayer('${selectedPad.id}','${layer}')">Layer ${layer.toUpperCase()}</button>`).join('')}
+      </div><button class="clr" onclick="clearSelection()" aria-label="Clear assignment target">&#xD7;</button>`;
   } else {
     el.className = 'assign-target empty';
     el.textContent = 'Click a pad or jack above to assign instruments';
@@ -3137,6 +3302,7 @@ async function clearLayer(padId, layer) {
   renderPadDetail();
   setMsg(data.message);
   refreshKitSize();
+  renderInstruments();
 }
 
 // Gate time (off 53): 0–99 = Free ms, 100–109 = sync divisions, 255 = OFF
@@ -3228,53 +3394,55 @@ function toggleCat(cat) {
   renderInstruments();
 }
 
-function renderInstItem(rel, inUse, currentPath) {
-  const name      = rel.split('/').slice(1).join('/').replace(/\.sin$/i, '');
-  const users     = inUse[rel] || [];
-  const isCurr    = rel === currentPath;
+function renderInstItem(rel, inUse, currentPath, section = 'category') {
+  const name = rel.split('/').slice(1).join('/').replace(/\.sin$/i, '') || rel;
+  const encoded = inlinePathArg(rel);
+  const arg = `decodeURIComponent('${encoded}')`;
+  const users = inUse[rel] || [];
+  const isCurr = rel === currentPath;
   const isPlaying = previewRel === rel;
-  const isStar    = favorites.has(rel);
-  const tags      = instTags[rel] || [];
-
-  let badge = '';
-  if (users.length) {
-    const isMine = users.some(u => selectedPad && u.id === selectedPad.id);
-    const tip    = 'Used by: ' + users.map(u => `${u.id} Lyr ${u.layer}`).join(', ');
-    const cls    = isMine ? 'in-use-badge mine' : 'in-use-badge';
-    const lbl    = users.length === 1 ? users[0].id : `\xD7${users.length}`;
-    badge = `<span class="${cls}" title="${escHtml(tip)}">${escHtml(lbl)}</span>`;
-  }
-  const waveId  = 'wv-' + rel.replace(/[^a-zA-Z0-9]/g, '_');
-  const waveCanvas = `<canvas class="waveform-canvas" id="${escHtml(waveId)}" width="60" height="18"
-    data-sin="${escHtml(rel)}" title="Waveform"></canvas>`;
-  const playBtn = `<button class="play-btn${isPlaying ? ' playing' : ''}" `
-    + `data-rel="${escHtml(rel)}" `
-    + `onclick="event.stopPropagation();previewInstrument('${rel}')" `
-    + `title="${isPlaying ? 'Stop' : 'Preview'}">${isPlaying ? '&#9632;' : '&#9654;'}</button>`;
-  const starBtn = `<button class="star-btn${isStar ? ' starred' : ''}" `
-    + `onclick="event.stopPropagation();toggleFavorite('${rel}')" `
-    + `title="${isStar ? 'Unstar' : 'Star'}">&#9733;</button>`;
-  const abBtns = `<span class="ab-btns">
-    <button class="ab-btn" onclick="event.stopPropagation();directAssign('${rel}','a')" title="Layer A">A</button>
-    <button class="ab-btn" onclick="event.stopPropagation();directAssign('${rel}','b')" title="Layer B">B</button>
-  </span>`;
-  const tagHtml = tags.length
-    ? tags.map(t => `<span class="inst-tag" onclick="event.stopPropagation();setTagFilter('${escHtml(t)}')" title="Filter by: ${escHtml(t)}">${escHtml(t)}</span>`).join('')
-    : '';
-  const editTagBtn = `<span class="inst-tag" style="opacity:.4;" title="Edit tags" onclick="event.stopPropagation();editTagsInline('${rel}',this)">&#9998;</span>`;
-  const sinEditBtn = `<span class="inst-tag" style="opacity:.4;" title="Edit instrument parameters" onclick="event.stopPropagation();openSinEditor('${rel}')">&#9881;</span>`;
-  const simBtn = `<span class="inst-tag" style="opacity:.4;" title="Find similar-sounding instruments" onclick="event.stopPropagation();openSimilar('${rel}')">&#8776;</span>`;
-  const currStyle = isCurr ? ' style="background:#0a2218;border-left:2px solid #3a9060;"' : '';
-  const hoverEvt  = hoverPreview
-    ? ` onmouseenter="previewInstrument('${rel}')" onmouseleave="if(previewRel==='${rel}')stopPreview()"` : '';
-  return `<div class="inst-item" onclick="assignInstrument('${rel}')" title="${escHtml(rel)}"${currStyle}${hoverEvt}>
-    ${playBtn}${starBtn}<span class="iname">${escHtml(name)}</span>${badge}${waveCanvas}${tagHtml}${editTagBtn}${sinEditBtn}${simBtn}${abBtns}
+  const isStar = favorites.has(rel);
+  const target = selectedPad ? `${selectedPad.id} Layer ${selectedPad.layer.toUpperCase()}` : '';
+  const assignment = isCurr ? `Assigned · Layer ${selectedPad.layer.toUpperCase()}` : target ? `Assign to ${target}` : 'Select a pad to assign';
+  const used = users.map(u => `${u.id} Layer ${u.layer}`).join(', ');
+  const tags = (instTags[rel] || []).map(t => `<button class="inst-tag" data-tag="${escHtml(t)}" onclick="setTagFilter(this.dataset.tag)">${escHtml(t)}</button>`).join('');
+  return `<div class="inst-item${isCurr ? ' is-assigned' : ''}" data-rel="${escHtml(rel)}" data-browser-key="${escHtml(section + ':' + rel)}"
+    ${hoverPreview ? `onpointerenter="if(event.pointerType==='mouse')previewInstrument(${arg})" onpointerleave="if(event.pointerType==='mouse' && previewRel===${arg})stopPreview()"` : ''}>
+    <button class="play-btn${isPlaying ? ' playing' : ''}" data-rel="${escHtml(rel)}" onclick="previewInstrument(${arg})"
+      aria-label="${isPlaying ? 'Stop preview' : 'Preview sound'}" aria-pressed="${isPlaying}" title="Preview sound">${isPlaying ? '&#9632;' : '&#9654;'}</button>
+    <button class="star-btn${isStar ? ' starred' : ''}" onclick="toggleFavorite(${arg})" aria-label="${isStar ? 'Unstar' : 'Star'} sound" aria-pressed="${isStar}">&#9733;</button>
+    <button class="inst-assign" onclick="assignInstrument(${arg})" title="${escHtml(rel)}" ${target ? '' : 'disabled'}>
+      <span class="iname">${escHtml(name)}</span><small>${escHtml(assignment)}</small>
+    </button>
+    <div class="inst-meta"><span class="preview-state">${isPlaying ? 'Previewing' : ''}</span>
+      ${used ? `<span class="in-use-badge" title="${escHtml(used)}">Used: ${escHtml(used)}</span>` : ''}
+      <canvas class="waveform-canvas" width="60" height="18" data-sin="${escHtml(rel)}" title="Waveform"></canvas>
+    </div>
+    <div class="inst-actions">
+      <button class="inst-tag" title="Edit tags" onclick="editTagsInline(${arg},this)">Tags</button>
+      <button class="inst-tag" title="Edit instrument parameters" onclick="openSinEditor(${arg})">Edit</button>
+      <button class="inst-tag" title="Find similar sounds" onclick="openSimilar(${arg})">Similar</button>
+      <span class="ab-btns"><button class="ab-btn" ${target ? '' : 'disabled'} onclick="directAssign(${arg},'a')" title="Assign to Layer A">A</button>
+      <button class="ab-btn" ${target ? '' : 'disabled'} onclick="directAssign(${arg},'b')" title="Assign to Layer B">B</button></span>
+    </div>${tags ? `<div class="inst-tags">${tags}</div>` : ''}
   </div>`;
 }
 
+let browserFilterKey = '';
 function renderInstruments() {
   const query     = document.getElementById('inst-search').value.toLowerCase();
   const el        = document.getElementById('inst-list');
+  const filterKey = JSON.stringify([query, activeTagFilter, instSort]);
+  const keepPlace = filterKey === browserFilterKey;
+  browserFilterKey = filterKey;
+  const listTop = el.getBoundingClientRect().top;
+  const anchor = keepPlace ? [...el.querySelectorAll('.inst-item')].find(row => {
+    const rect = row.getBoundingClientRect();
+    return rect.height > 0 && rect.bottom > listTop;
+  }) : null;
+  const anchorKey = anchor?.dataset.browserKey;
+  const anchorOffset = anchor ? anchor.getBoundingClientRect().top - listTop : 0;
+  const scrollTop = keepPlace ? el.scrollTop : 0;
   const searching = query.length > 0;
   const inUse     = buildInUseMap();
 
@@ -3295,7 +3463,7 @@ function renderInstruments() {
   let starredHtml = '';
   if (starredRels.length) {
     starredHtml = `<div class="sect-hdr" style="border-left:2px solid #e8b820;">&#9733; Starred</div>`
-      + starredRels.map(r => renderInstItem(r, inUse, currentPath)).join('');
+      + starredRels.map(r => renderInstItem(r, inUse, currentPath, 'starred')).join('');
   }
 
   // Recent section (hidden while searching/filtering)
@@ -3304,7 +3472,7 @@ function renderInstruments() {
   if (recentRels.length && !searching) {
     recentHtml = `<div class="sect-hdr" style="border-left:2px solid #5a9aaa;">&#x23F0; Recent`
       + `<button class="layer-btn" style="margin-left:auto;font-size:.6rem;padding:1px 5px;" onclick="clearRecent()">Clear</button></div>`
-      + recentRels.map(r => renderInstItem(r, inUse, currentPath)).join('');
+      + recentRels.map(r => renderInstItem(r, inUse, currentPath, 'recent')).join('');
   }
 
   // Categories
@@ -3340,7 +3508,7 @@ function renderInstruments() {
     const collapsed = !searching && !expandedCats.has(cat);
     const arrow     = collapsed ? '&#9654;' : '&#9660;';
     const color     = catColor(cat);
-    return `<div class="cat-header" style="border-left:2px solid ${color}" onclick="toggleCat('${escHtml(cat)}')">
+    return `<div class="cat-header" style="border-left:2px solid ${color}" data-cat="${escHtml(cat)}" onclick="toggleCat(this.dataset.cat)">
         <span class="cat-arrow">${arrow}</span>${escHtml(cat)}
         <span class="cat-count">${items.length}</span>
       </div>
@@ -3348,6 +3516,11 @@ function renderInstruments() {
   }).join('');
 
   el.innerHTML = starredHtml + recentHtml + catsHtml;
+  el.scrollTop = scrollTop;
+  const restored = anchorKey && [...el.querySelectorAll('.inst-item')].find(row => row.dataset.browserKey === anchorKey);
+  if (restored && restored.getBoundingClientRect().height) {
+    el.scrollTop += restored.getBoundingClientRect().top - el.getBoundingClientRect().top - anchorOffset;
+  }
   attachWaveObservers();
 }
 
@@ -3371,14 +3544,8 @@ async function assignInstrument(sinRel, forcePadId, forceLayer) {
   pads = data.pads;
   addToRecent(sinRel);
   if (autoPreview) previewInstrument(sinRel);
-  // Advance to Layer B if A was just filled and B is empty
-  if (!forcePadId && target.layer === 'a') {
-    const updated = pads.find(p => p.id === target.id);
-    if (updated && !updated.layer_b_path) {
-      selectedPad = {id: target.id, layer: 'b'};
-      updateAssignBanner();
-    }
-  }
+  updateAssignBanner();
+  renderInstruments();
   setDirtyState(data.dirty, data.undo_count, data.history_labels);
   renderDrumMap();
   renderPadDetail();
@@ -4123,6 +4290,7 @@ let _autoSnapTimer = null;
 function scheduleAutoSnapshot() {
   if (_autoSnapTimer) clearTimeout(_autoSnapTimer);
   _autoSnapTimer = setTimeout(() => {
+    if (!wifiEditing) return;
     _autoSnapTimer = null;
     api('/snapshot', {kind: 'auto'}).then(() => {
       if (document.getElementById('tm-modal').classList.contains('open')) loadTimeMachine();
@@ -4636,6 +4804,7 @@ async function runTemplate(name) {
   setMsg(`Running template ${name}…`);
   const data = await api('/run_template', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kitName       = data.name;
   pads          = data.pads;
   libSavePath   = data.lib_save_path || '';
@@ -5119,12 +5288,7 @@ async function createInstrument() {
     }
 
     prog.textContent = 'Creating instrument…';
-    const resp = await fetch('/api/import_instrument', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({category, name, mode, normalize, auto_map, wavs}),
-    });
-    const data = await resp.json();
+    const data = await api('/import_instrument', {category, name, mode, normalize, auto_map, wavs});
     if (data.error) {
       prog.style.color  = '#e08080';
       prog.textContent  = 'Error: ' + data.error;
@@ -5150,7 +5314,14 @@ async function createInstrument() {
 // ── Save ──────────────────────────────────────────────────────────────────────
 async function _doSave(path) {
   if (!path) { setMsg('No kit loaded', true); return; }
-  const data = await api('/save', {path});
+  const savingToLibrary = path === libSavePath;
+  let data;
+  try { data = await api('/save', {path}); }
+  catch {
+    pauseWifiEditing();
+    setMsg('Save could not be confirmed. Check the computer connection before trying again.', true);
+    return;
+  }
   if (data.error) { setMsg(data.error, true); return; }
   if (data.kits) {
     kits = data.kits;
@@ -5159,8 +5330,9 @@ async function _doSave(path) {
     if (data.sd_save_path)  sdSavePath  = data.sd_save_path;
     renderKitList();
   }
+  saveFeedback = savingToLibrary ? 'Saved to library · Deploy to update the module' : 'Saved to selected path';
   setDirtyState(false, null);
-  setMsg(data.message);
+  setMsg(savingToLibrary ? 'Saved to the computer library. The module has not been updated.' : data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
 async function saveCustom() {
@@ -5295,7 +5467,7 @@ async function runDeploy() {
     const data = await api('/deploy', {});
     if (data.error) throw new Error(data.error);
     setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
-    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+    body.innerHTML = `<div class="deploy-result"><strong>Copied to user card and verified</strong><p>Reload this kit on the Strike to hear your changes.</p><p>${escHtml(data.message)}<br>`
       + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
       + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
     kits = data.kits || kits;
@@ -5303,6 +5475,7 @@ async function runDeploy() {
     sdSavePath = data.sd_save_path || sdSavePath;
     state_kitPath = libSavePath;
     document.getElementById('save-path').value = libSavePath;
+    saveFeedback = 'Deployed and verified · Reload the kit on the Strike';
     setDirtyState(false, null);
     renderKitList();
     setMsg(data.message);
@@ -5312,7 +5485,7 @@ async function runDeploy() {
   } catch (err) {
     setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
     body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
-    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+    document.getElementById('deploy-action-note').textContent = 'Deployment could not be confirmed. Some files may have been copied. Check the connection and run preflight again before retrying.';
   } finally {
     deployBusy = false;
     refresh.disabled = false; cancel.disabled = false;
@@ -5334,6 +5507,7 @@ async function confirmNewKit() {
   cancelNewKit();
   const data = await api('/new_kit', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kits          = data.kits;
   kitName       = data.name;
   pads          = data.pads;
@@ -5363,38 +5537,73 @@ async function confirmNewKit() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function checkStatus() {
-  const s = await api('/status');
-  const parts = [];
-  if (s.user_mounted)   parts.push('&#x1F4BE; User: ' + s.user_path);
-  else                  parts.push('&#x26A0; User card NOT mounted');
-  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path + ' (read-only)');
-  const volEl = document.getElementById('vol-status');
-  volEl.innerHTML = parts.join(' \xB7 ');
-  volEl.title = 'Cards are identified by their content, not their name. '
-    + 'Saves only ever go to the user card; the factory preset card is never written.';
-  const hint = document.getElementById('save-hint');
-  if (hint) {
-    const sep = (s.user_path || '').includes('\\') ? '\\' : '/';
-    hint.textContent = s.user_mounted
-      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card. Factory presets are never touched.`
-      : 'Mount the user card to save back to SD.';
+  if (window.VIEWER) return;
+  try {
+    const s = await api('/status');
+    if (s.error) throw new Error(s.error);
+    connectionInfo = s;
+    renderConnectionStatus();
+  } catch {
+    connectionInfo = null;
+    renderConnectionStatus();
   }
+  const hint = document.getElementById('save-hint');
+  if (hint) hint.textContent = 'Save to library keeps a copy on the computer. Deploy to Module checks and copies the kit to the user card. A custom path is on the computer, even when using an iPad.';
+}
+
+function renderConnectionStatus() {
+  const s = connectionInfo;
+  const host = document.getElementById('connection-host');
+  host.textContent = s ? (wifiMode ? 'Computer connected over Wi-Fi' : 'Local editor connected') : 'Computer connection lost';
+  host.dataset.state = s ? 'ready' : 'missing';
+  for (const [id, label, mounted] of [['user', 'User card', s?.user_mounted], ['factory', 'Factory card', s?.preset_mounted]]) {
+    const el = document.getElementById('connection-' + id);
+    el.textContent = label + ': ' + (!s ? 'unknown' : mounted ? (id === 'factory' ? 'read-only' : 'available') : 'not detected');
+    el.dataset.state = !s ? '' : mounted ? 'ready' : 'missing';
+  }
+  document.getElementById('connection-computer-detail').textContent = s
+    ? (wifiMode ? 'Your browser is connected to ' + location.host + '. USB and files stay on that computer.' : 'The editor and library are on this computer.')
+    : 'Keep the editor running on the USB computer. Reconnect to the same network, then choose Refresh connection.';
+  document.getElementById('connection-library-detail').textContent = s?.library_path || 'Library location unavailable until the computer reconnects.';
+  document.getElementById('connection-user-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.user_mounted
+    ? 'Available at ' + s.user_path + '. Deploy checks the destination before copying.'
+    : 'Connect the powered-on Strike by USB with its user card inserted. If the module sees the card but the computer does not, check the computer’s mounted disks. You can keep editing the library.';
+  document.getElementById('connection-factory-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.preset_mounted
+    ? 'Available at ' + s.preset_path + '. Factory content is never written by the editor.'
+    : 'Factory sounds may still work from your saved library. Use Activate factory card to expose the card, then refresh.';
+  document.getElementById('connection-activate').hidden = !s || !!s.preset_mounted;
+  document.getElementById('vol-status').textContent = '';
+}
+
+async function openConnectionDetails() {
+  document.getElementById('connection-dialog').showModal();
+  await checkStatus();
 }
 
 (async () => {
+  await initWifiEditor();
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
-  svgEl.addEventListener('mousemove', svgMouseMove);
-  window.addEventListener('mouseup', e => {
+  svgEl.addEventListener('pointermove', svgMouseMove);
+  window.addEventListener('pointerup', e => {
     svgMouseUp(e);
-    if (_velDrag?.lastVel != null) {
-      setParam(_velDrag.padId, 'xfade_vel', _velDrag.lastVel);
+    if (_velDrag && e.pointerId === _velDrag.pointerId) {
+      if (_velDrag.lastVel != null) setParam(_velDrag.padId, 'xfade_vel', _velDrag.lastVel);
+      _velDrag = null;
     }
-    _velDrag = null;
   });
-  window.addEventListener('mousemove', e => {
-    if (_velDrag) _applyVelDrag(e.clientX);
+  window.addEventListener('pointercancel', e => {
+    if (dragState?.pointerId === e.pointerId) cancelMapDrag();
+    mapTouchTapId = null;
+    if (_velDrag?.pointerId === e.pointerId) { _velDrag = null; renderPadDetail(); }
+  });
+  window.addEventListener('pointermove', e => {
+    if (_velDrag?.pointerId === e.pointerId) _applyVelDrag(e.clientX);
+  });
+  window.addEventListener('blur', () => {
+    cancelMapDrag();
+    if (_velDrag) { _velDrag = null; renderPadDetail(); }
   });
 
   // Scroll-to-zoom on drum map; double-click resets
@@ -5450,12 +5659,7 @@ async function checkStatus() {
       const u8   = new Uint8Array(buf);
       let bin = '';
       for (let j = 0; j < u8.length; j += 8192) bin += String.fromCharCode(...u8.subarray(j, j + 8192));
-      const resp = await fetch('/api/load_bytes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify({filename: file.name, data: btoa(bin)}),
-      });
-      const data = await resp.json();
+      const data = await api('/load_bytes', {filename:file.name, data:btoa(bin)});
       if (data.error) { setMsg(data.error, true); return; }
       applyKitData(data, '', {dirty: true});
       setMsg(data.message);
@@ -5597,6 +5801,7 @@ async function checkStatus() {
       document.getElementById('save-lib-btn').disabled = false;
       document.getElementById('save-path').value = libSavePath;
     }
+    setDirtyState(true);
     setMsg(`Kit name set to ${kitName} — save to apply`);
   });
 
@@ -5636,9 +5841,26 @@ async function checkStatus() {
   renderPatchPanel();
   renderDrumMap();
 
+  // Poll ownership cheaply; card discovery is explicit to avoid repeatedly
+  // probing the Strike's intermittently slow storage.
+  if (wifiMode) {
+    setInterval(checkWifiAccess, 3000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) pauseWifiEditing();
+      else void checkWifiAccess();
+    });
+    window.addEventListener('online', () => { void checkWifiAccess(); });
+    window.addEventListener('offline', pauseWifiEditing);
+    if (document.hidden) pauseWifiEditing();
+  }
+
   // Auto-save every 60 s while there are unsaved changes
   setInterval(async () => {
-    if (undoCount > 0) await api('/autosave', {});
+    if (!wifiEditing || !kitDirty) return;
+    try {
+      const data = await api('/autosave', {});
+      if (data.error) setMsg('Recovery copy could not be saved: ' + data.error, true);
+    } catch { setMsg('Recovery could not be confirmed. Check the computer connection.', true); }
   }, 60000);
 
   // Check for crash-recovery autosaves from previous sessions
@@ -5676,14 +5898,14 @@ async function checkStatus() {
 });
 
 async function recoverAutosave(autosavePath, kitPath) {
-  await openKit(autosavePath);
-  if (kitPath) {
-    document.getElementById('save-path').value = kitPath;
-    libSavePath = kitPath;
+  if (!await openKit(autosavePath)) return false;
+  if (kitPath && !kitPath.includes('.autosave.')) {
+    document.getElementById('save-path').value = libSavePath;
     document.getElementById('save-lib-btn').disabled = false;
   }
   document.getElementById('autosave-banner')?.remove();
   setMsg('Recovered from autosave — review changes and save to keep them');
+  return true;
 }
 
 async function dismissAutosave(autosavePath, el) {

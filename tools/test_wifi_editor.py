@@ -29,6 +29,7 @@ class WifiEditorTests(unittest.TestCase):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.cookie = ''
+        self.edit_token = ''
 
     def tearDown(self):
         self.server.shutdown()
@@ -40,7 +41,7 @@ class WifiEditorTests(unittest.TestCase):
 
     def request(self, path='/', body=None, overrides=None):
         conn = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
-        headers = {'Host': self.authority, 'Cookie': self.cookie}
+        headers = {'Host': self.authority, 'Cookie': self.cookie, 'X-Strike-Editor': self.edit_token}
         if body is not None:
             headers.update({'Origin': 'http://' + self.authority, 'Content-Type': 'application/json'})
         headers.update(overrides or {})
@@ -56,6 +57,13 @@ class WifiEditorTests(unittest.TestCase):
         self.assertEqual(code, 200, body)
         self.cookie = headers['Set-Cookie'].split(';')[0]
         return headers
+
+    def acquire(self, **body):
+        code, _, payload = self.request('/wifi/editor', body)
+        self.assertEqual(code, 200, payload)
+        data = json.loads(payload)
+        self.edit_token = data.get('token', '')
+        return data
 
     def test_unpaired_cannot_read_editor_or_mutate_or_send_midi(self):
         code, _, page = self.request()
@@ -82,6 +90,7 @@ class WifiEditorTests(unittest.TestCase):
         self.assertEqual(headers['Cache-Control'], 'no-store')
         self.assertEqual(headers['X-Frame-Options'], 'DENY')
         self.assertEqual(self.request('/api/kits')[0], 200)
+        self.acquire()
         self.assertEqual(self.request('/api/select', {'pad_id': 'SNARE'})[0], 200)
         self.assertEqual(self.request('/api/outputs')[0], 200)
         self.assertIn(b'data-host-session="true"', self.request('/factory')[2])
@@ -111,6 +120,47 @@ class WifiEditorTests(unittest.TestCase):
         self.assertEqual(self.request('/api/status')[0], 401)
         new_process = Pairing('new-pair-link', self.authority)
         self.assertFalse(new_process.authenticated({'Cookie':cookie}))
+
+    def test_second_page_cannot_edit_and_takeover_revokes_old_page(self):
+        self.pair()
+        self.acquire()
+        first_cookie, first_token = self.cookie, self.edit_token
+        self.assertEqual(self.request('/api/new_kit', {'name':'Protected'})[0], 200)
+        self.assertEqual(app.state['kit_display'], 'Protected.skt')
+        self.pair()
+        second_cookie = self.cookie
+        self.assertFalse(self.acquire()['editing'])
+        for path in ('/api/new_kit', '/api/load', '/api/save', '/api/deploy', '/api/assign',
+                     '/api/select', '/api/load_bytes', '/api/import_instrument', '/api/run_tool'):
+            self.assertEqual(self.request(path, {})[0], 409, path)
+        self.assertEqual(app.state['kit_display'], 'Protected.skt')
+        self.assertEqual(self.request('/api/session')[0], 200)
+        # A token alone never grants another paired browser editing authority.
+        self.edit_token = first_token
+        self.assertEqual(self.request('/api/new_kit', {'name':'Wrong'})[0], 409)
+        self.acquire(takeover=True)
+        self.assertEqual(self.request('/api/new_kit', {'name':'Second'})[0], 200)
+        self.cookie, self.edit_token = first_cookie, first_token
+        self.assertEqual(self.request('/api/new_kit', {'name':'Stale'})[0], 409)
+        self.assertEqual(app.state['kit_display'], 'Second.skt')
+        self.assertFalse(self.acquire(resume=first_token)['editing'])
+        self.cookie = second_cookie
+        self.request('/wifi/logout', {})
+        self.cookie = first_cookie
+        self.assertTrue(self.acquire()['editing'])
+
+    def test_reload_rotates_token_and_same_browser_other_tab_is_view_only(self):
+        self.pair()
+        self.acquire()
+        old = self.edit_token
+        self.assertFalse(self.acquire()['editing'])
+        self.assertTrue(self.acquire(resume=old)['editing'])
+        current = self.edit_token
+        self.assertNotEqual(old, current)
+        self.edit_token = old
+        self.assertEqual(self.request('/api/select', {'pad_id':'S1H'})[0], 409)
+        self.edit_token = current
+        self.assertEqual(self.request('/api/select', {'pad_id':'S1H'})[0], 200)
 
 
 if __name__ == '__main__':

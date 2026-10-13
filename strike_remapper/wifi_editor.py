@@ -69,8 +69,23 @@ class Pairing:
 
 def make_handler(app, pairing, controller=None):
     controller = controller or Controller()
+    # Serialize ownership changes with complete editor writes (including deploy).
+    # A page gets a fresh token on reload; in-flight writes from its old page lose
+    # authority. No timeout silently transfers an unsaved kit to another browser.
+    edit_lock = threading.RLock()
+    owner = {'session': '', 'token': ''}
 
     class Handler(app.Handler):
+        def editor_access(self):
+            with pairing.lock:
+                alive = pairing.sessions.get(owner['session'], 0) > time.time()
+            if not alive:
+                owner.update(session='', token='')
+            editing = bool(owner['token']) and (
+                owner['session'] == pairing.session_id(self.headers)
+                and hmac.compare_digest(owner['token'].encode(), self.headers.get('X-Strike-Editor', '').encode()))
+            return {'editing': editing, 'occupied': bool(owner['token'])}
+
         def end_headers(self):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Referrer-Policy', 'no-referrer')
@@ -114,7 +129,10 @@ def make_handler(app, pairing, controller=None):
                 return
             if not self._guard():
                 return
-            if self.path in ('/', '/index.html'):
+            if self.path == '/wifi/editor':
+                with edit_lock:
+                    self.send_json(self.editor_access())
+            elif self.path in ('/', '/index.html'):
                 self.document(app.HTML.replace('<html lang="en">', '<html lang="en" data-wifi-editor="true">', 1))
             elif self.path == '/factory':
                 page = (FACTORY_WEB / 'index.html').read_text(encoding='utf-8')
@@ -157,7 +175,26 @@ def make_handler(app, pairing, controller=None):
             if not self._guard():
                 return
             if self.path == '/wifi/logout':
-                self.document('{"disconnected":true}', 'application/json', pairing.logout(self.headers))
+                with edit_lock:
+                    self.document('{"disconnected":true}', 'application/json', pairing.logout(self.headers))
+                    self.editor_access()
+            elif self.path == '/wifi/editor':
+                try:
+                    data = self.small_json()
+                    if not isinstance(data, dict) or not isinstance(data.get('resume', ''), str):
+                        raise ValueError('Invalid editor request.')
+                    with edit_lock:
+                        access = self.editor_access()
+                        resume = (owner['session'] == pairing.session_id(self.headers)
+                                  and bool(owner['token'])
+                                  and hmac.compare_digest(owner['token'].encode(), data.get('resume', '').encode()))
+                        if not access['occupied'] or resume or data.get('takeover') is True:
+                            owner.update(session=pairing.session_id(self.headers), token=secrets.token_urlsafe(32))
+                            self.send_json({'editing': True, 'occupied': True, 'token': owner['token']})
+                        else:
+                            self.send_json({'editing': False, 'occupied': True})
+                except (ValueError, TypeError):
+                    self.send_json({'error': 'Invalid editor request.'}, 400)
             elif self.path == '/api/activate':
                 try:
                     data = self.small_json()
@@ -167,7 +204,12 @@ def make_handler(app, pairing, controller=None):
                 except (ValueError, TypeError) as exc:
                     self.send_json({'error': str(exc)}, 400)
             else:
-                super().do_POST()
+                with edit_lock:
+                    if not self.editor_access()['editing']:
+                        self.send_json({'error': 'This page is view-only. Take editing control to load the current kit before making changes.',
+                                        'code': 'editor_read_only'}, 409)
+                        return
+                    super().do_POST()
 
     return Handler
 
@@ -195,13 +237,17 @@ def main():
     print('Strike full editor Wi-Fi mode. Use only on your trusted local network; do not port-forward.')
     print('Pairing grants full editor access, including library edits and deliberate Deploy actions.')
     print(f'http://{pairing.authority}/wifi/pair#pair={pairing.token}', flush=True)
-    print('Files and USB stay on this host. Browsers share one active kit; use one editing browser at a time.')
+    print('Files and USB stay on this host. One page controls editing; other pages open view-only.')
+    recovery = app.RecoveryWorker()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        try:
+            server.server_close()
+        finally:
+            recovery.close()
 
 
 if __name__ == '__main__':
