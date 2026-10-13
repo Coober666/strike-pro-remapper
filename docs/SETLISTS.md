@@ -79,3 +79,7 @@ kit preservation, exact copies, atomic-write failure, revisions, path restrictio
 missing/corrupt kits, duplicate outputs, import/export/print, drag/touch ordering and
 paired editor ownership. Physical iPad/iPhone interaction and batch deployment remain
 release acceptance work; no new module-write claim is made by these tests.
+
+## Collection preview
+
+Check saved kits also checks local WAV headers and declared audio length, flags missing or ambiguous files, and estimates unique local storage. Export batch preview saves the current check results and planned kit names. This is a review document, not a deployable bundle. Factory samples, existing card files, free space and final asset layout are unverified; batch writes remain disabled. Recheck after external library changes. No audio or card files are written.

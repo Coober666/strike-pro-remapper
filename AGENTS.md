@@ -107,7 +107,7 @@ follow links outside the library. Listing excludes autosaves; copies use exact s
 bytes and exclusive creation, reject case-insensitive collisions, and never load/mutate
 the active kit. Local checks parse saved .skt files, require exact round trip, validate
 assigned references, and use local .sin / factory-catalog positive evidence only.
-Unknown references remain unverified. No SD discovery, sample reads or card-space checks
+Unknown references remain unverified. Local sample headers are inspected through library_assets.py (safe relative paths, no symlinks, bounded metadata reads). Shared files are counted once in the exportable batch preview; missing/ambiguous/truncated files block a row. No SD discovery or card-space checks
 occur; do not call a local pass deployment-ready. Filename plans use conservative ASCII,
 optional three-digit ordering, at most 26 characters including .skt, reserved-name guards
 and case-insensitive duplicate detection. Source names never change. Printing uses the

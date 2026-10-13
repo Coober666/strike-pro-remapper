@@ -5033,7 +5033,7 @@ body.viewer-mode .setlist-link { display:none !important; }
       <label class="sl-number"><input id="sl-numbered" type="checkbox" onchange="slEditHeader()"> Number planned filenames in show order (001, 002…)</label>
       <p class="sl-hint">Move songs with the arrows or drag the order handle. Output names are a plan; source kits keep their names.</p>
       <ol id="sl-rows" aria-label="Songs in show order"></ol>
-      <div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
+      <p id="sl-preview" class="sl-hint" aria-live="polite"></p><div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-export-preview" onclick="slExportPreview()">Export batch preview</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
       <p class="sl-hint">Local checks cover saved kit structure, instrument references and planned names. Samples, card space and existing card files still need Deploy to Module preflight. Batch deployment is not available yet.</p>
     </section>
   </div>
@@ -7242,7 +7242,14 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
+function slExportPreview() {
+  if(!sl.report) { slStatus('Run Check saved kits first.'); return; }
+  slDownload('strike-batch-preview.json',JSON.stringify({format:'strike-batch-preview',version:1,setlist:sl.document,report:sl.report},null,2),'application/json');
+}
 function slResults() {
+  const plan=sl.report?.preview;
+  slEl('export-preview').disabled=!plan || sl.busy;
+  slEl('preview').textContent=plan ? `${plan.files.length} planned local files · ${plan.samples} unique samples · ${(plan.local_bytes/1048576).toFixed(2)} MiB on disk. ${plan.collisions.length} collection path collisions. ${sl.report.scope}` : 'Check saved kits for a batch preview. Batch writes are disabled.';
   document.querySelectorAll('#sl-rows [data-result]').forEach(el => {
     const row=sl.report?.rows[Number(el.dataset.result)]; el.dataset.status=row?.status || '';
     el.innerHTML=row ? `<strong>${{blocked:'Needs fixing',review:'Review references',checked:'Local check passed'}[row.status]}</strong><p>Planned file: <code>${escHtml(row.filename)}</code></p>${row.issues.map(v=>`<p>${escHtml(v.message)}</p>`).join('')}` : 'Not checked. Run Check saved kits to preview filenames and readiness.';
@@ -7275,7 +7282,7 @@ async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete thi
 async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
 function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
 function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
-async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. No card or sample check. Nothing deployed.`);}); }
+async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. Local samples checked; card and factory contents unverified. Nothing deployed.`);}); }
 function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
 async function slImport(input) {
