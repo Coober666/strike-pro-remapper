@@ -26,8 +26,14 @@ test('connection details explain missing cards and distinguish host loss from mi
   await expect(page.locator('#connection-host')).toHaveText('Local editor connected');
   await page.getByRole('button', {name:'Done', exact:true}).click();
   await expect(page.locator('#connection-dialog')).toBeHidden();
-  await page.setViewportSize({width:390, height:844});
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({width, height:844});
+    expect(await page.evaluate(() => ({viewport:innerWidth, document:document.documentElement.scrollWidth}))).toEqual({viewport:width, document:width});
+    for (const id of ['save-lib-btn', 'save-sd-btn', 'connection-details-btn']) {
+      const bounds = await page.locator('#' + id).boundingBox();
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    }
+  }
   await page.screenshot({path:'.build/editor-polish-phone-' + testInfo.project.name + '.png'});
   expect(errors).toEqual([]);
 });

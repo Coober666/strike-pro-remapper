@@ -1133,10 +1133,12 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   header.app-topbar { grid-template-columns: 1fr; grid-template-areas: "brand" "identity" "actions" "utility"; }
   .brand-lockup { min-height: 48px; padding-block: 7px; }
   .kit-identity { min-height: 36px; }
-  .primary-actions { min-height: 48px; justify-content: stretch; padding: 6px 8px; border-top: 1px solid #303731; }
+  .primary-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); min-width:0; min-height:48px; padding:6px 8px; border-top:1px solid #303731; }
+  .primary-actions .tb-group { min-width:0; }
+  .primary-actions #save-lib-btn { flex:1; min-width:0; white-space:normal; }
   .primary-actions .tb-group:first-child { flex: 1; }
   .primary-actions .tb-group:first-child > button { width: 100%; }
-  .primary-actions .deploy-btn { flex: 1; }
+  .primary-actions .deploy-btn { grid-column:1 / -1; }
   .primary-actions .tb-btn { min-height:36px; }
   .utility-strip { flex-wrap:wrap; overflow:visible; }
   .utility-strip #msg { order:10; flex:1 0 100%; white-space:normal; overflow-wrap:anywhere; }
