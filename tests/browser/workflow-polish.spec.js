@@ -114,6 +114,11 @@ test('sound assignment keeps the chosen layer and previewing does not edit the k
   expect(await page.evaluate(() => pads.map(p => [p.id, p.layer_a_path, p.layer_b_path]))).toEqual(after);
   await page.getByRole('button', {name:'Layer B', exact:true}).click();
   await expect(page.locator('.inst-assign small')).toContainText('Layer B');
+  for (const head of await page.locator('.rack-layer-head').all()) {
+    const key = await head.locator('.rack-layer-key').boundingBox();
+    const title = await head.locator('.rack-layer-title').boundingBox();
+    expect(title.x).toBeGreaterThanOrEqual(key.x + key.width);
+  }
   await page.screenshot({path:'.build/sound-browser-' + testInfo.project.name + '.png', fullPage:true});
   for (const width of [320, 390]) {
     await page.setViewportSize({width, height:844});

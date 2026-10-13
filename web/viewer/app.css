@@ -1173,6 +1173,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
 body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: column; overflow: hidden; }
 .sound-browser-body { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 #inst-list { overflow-y: auto; overflow-anchor: none; min-height: 160px; flex: 1; padding-bottom: 10px; }
+#inst-sort { color-scheme: dark; }
 .assign-target { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
 .assign-target-label { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .assign-target-label small { color: var(--text-3); }
@@ -1197,6 +1198,7 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 @media (pointer: coarse), (max-width: 620px) {
   .inst-item { grid-template-columns: 44px 44px minmax(0,1fr); }
   .inst-item button, .assign-target button, .rack-action, .rack-layer-key, .det-layer .layer-btn { min-height: 44px; min-width: 44px; }
+  .rack-layer-head { grid-template-columns: 44px minmax(0,1fr) auto; }
   .inst-actions { gap: 6px; }
   .inst-actions .ab-btns { gap: 6px; }
   #inst-search, #inst-sort { min-height: 44px; }
