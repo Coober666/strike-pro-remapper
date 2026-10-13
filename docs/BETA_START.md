@@ -85,3 +85,11 @@ ZIP bytes; this manifest detects content changes, not publisher authenticity.
 exclusions and launch-file attributes, and starts the extracted host with a temporary
 external library and card discovery disabled. It verifies pairing and served assets.
 It does not install Python/Tk or test macOS launch permissions or physical MIDI.
+
+## Check your build and send useful feedback
+
+Open Connection details to see the source revision. Export troubleshooting report downloads a small JSON file with the build, host OS/Python, browser capabilities and editor counts. It excludes library paths/names, MIDI captures, audio and pairing credentials. Add your browser name/version, module model, expected result and exact reproduction steps; indicate demo versus hardware. Review before sharing.
+
+For a module-free editor check, create and save a blank kit, add it to a new Setlist, check saved kits and export its batch preview. An empty kit correctly asks for review. No deployment is expected. For a full sound check use a copied library.
+
+On GitHub, open a successful CI run and download its source-beta artifact. Extract the artifact wrapper and then the application ZIP. A pull-request artifact identifies its tested merge revision, not a release tag. The adjacent SHA-256 file verifies the ZIP; BETA-MANIFEST identifies the application inside. Artifacts expire after 30 days.

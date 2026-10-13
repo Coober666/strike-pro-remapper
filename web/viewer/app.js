@@ -5714,6 +5714,21 @@ function renderConnectionStatus() {
 async function openConnectionDetails() {
   document.getElementById('connection-dialog').showModal();
   await checkStatus();
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    const app=data.application;
+    document.getElementById('connection-version').textContent=`${app.product} · ${app.channel} · ${app.revision.slice(0,12)}${app.working_tree_changed ? ' · local changes' : ''}`;
+  } catch { document.getElementById('connection-version').textContent='Build information unavailable. Reconnect and try again.'; }
+}
+async function exportSupportReport() {
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    data.client={touch:navigator.maxTouchPoints>0,web_midi:typeof navigator.requestMIDIAccess==='function',secure_context:window.isSecureContext,wifi:!!wifiMode};
+    slDownload('strike-troubleshooting.json',JSON.stringify(data,null,2),'application/json');
+    document.getElementById('connection-version').textContent='Report downloaded. Add your browser, module model and reproduction steps when sharing.';
+  } catch { document.getElementById('connection-version').textContent='Report unavailable. Reconnect and try again.'; }
 }
 
 (async () => {

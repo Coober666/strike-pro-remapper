@@ -28,6 +28,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
+from strike_remapper.support import report as support_report
 from strike_remapper.setlists import Store as SetlistStore, Conflict as SetlistConflict, MAX_BYTES as SETLIST_MAX_BYTES
 
 from strike_remapper.audio import (
@@ -4772,12 +4773,15 @@ body.viewer-mode .setlist-link { display:none !important; }
 </div>
 <dialog id="connection-dialog" aria-labelledby="connection-title">
   <h3 id="connection-title">Connection details</h3>
+  <p id="connection-version">Build information loads when opened.</p>
+  <p>First visit? Choose a copied or empty library, save a local kit, then try the MIDI demo. Pair your iPad/iPhone over Wi-Fi when ready.</p>
   <div class="connection-row"><strong>Computer</strong><p id="connection-computer-detail">Checking connection…</p></div>
   <div class="connection-row"><strong>Library on computer</strong><p id="connection-library-detail">Checking library…</p></div>
   <div class="connection-row"><strong>User card · deployment destination</strong><p id="connection-user-detail">Checking card…</p></div>
   <div class="connection-row"><strong>Factory card · read-only sounds</strong><p id="connection-factory-detail">Checking card…</p></div>
   <div class="connection-actions">
     <button class="btn-secondary" type="button" onclick="checkStatus()">Refresh connection</button>
+    <button class="btn-secondary" type="button" onclick="exportSupportReport()">Export troubleshooting report</button>
     <button id="connection-activate" class="btn-secondary" data-factory-card type="button" onclick="document.getElementById('connection-dialog').close();showFactoryCard()">Activate factory card</button>
     <button class="btn-primary" type="button" onclick="document.getElementById('connection-dialog').close()">Done</button>
   </div>
@@ -10754,6 +10758,21 @@ function renderConnectionStatus() {
 async function openConnectionDetails() {
   document.getElementById('connection-dialog').showModal();
   await checkStatus();
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    const app=data.application;
+    document.getElementById('connection-version').textContent=`${app.product} · ${app.channel} · ${app.revision.slice(0,12)}${app.working_tree_changed ? ' · local changes' : ''}`;
+  } catch { document.getElementById('connection-version').textContent='Build information unavailable. Reconnect and try again.'; }
+}
+async function exportSupportReport() {
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    data.client={touch:navigator.maxTouchPoints>0,web_midi:typeof navigator.requestMIDIAccess==='function',secure_context:window.isSecureContext,wifi:!!wifiMode};
+    slDownload('strike-troubleshooting.json',JSON.stringify(data,null,2),'application/json');
+    document.getElementById('connection-version').textContent='Report downloaded. Add your browser, module model and reproduction steps when sharing.';
+  } catch { document.getElementById('connection-version').textContent='Report unavailable. Reconnect and try again.'; }
 }
 
 (async () => {
@@ -11462,6 +11481,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if path == '/api/support_report':
+            with STATE_LOCK:
+                self.send_json(support_report(Path(__file__).parent, state))
             return
 
         if path == '/api/setlists':

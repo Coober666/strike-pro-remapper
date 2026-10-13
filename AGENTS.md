@@ -840,3 +840,7 @@ Two volumes expected: "NO NAME" (user, writable) and "NO NAME 1" (preset, read-o
 
 Instrument `.sin` files live under `<volume>/Instruments/`. Kits under `<volume>/Kits/`.
 SD volume detection searches one level deep (catches Ventoy `STORAGE/` subfolder).
+
+## Beta identity and support
+
+`support.py` reads the packaged manifest, or bounded Git commands only when the app root has .git. Reports allowlist OS/Python, build identity and editor counts; never include library paths, kit names, addresses, credentials, exceptions or captured data. GET /api/support_report retains normal host/pairing guards and never discovers cards. CI source-beta waits for all three test jobs, builds a clean checkout and uploads a ZIP/checksum without publishing a release.

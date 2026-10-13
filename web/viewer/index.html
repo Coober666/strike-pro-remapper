@@ -173,12 +173,15 @@
 </div>
 <dialog id="connection-dialog" aria-labelledby="connection-title">
   <h3 id="connection-title">Connection details</h3>
+  <p id="connection-version">Build information loads when opened.</p>
+  <p>First visit? Choose a copied or empty library, save a local kit, then try the MIDI demo. Pair your iPad/iPhone over Wi-Fi when ready.</p>
   <div class="connection-row"><strong>Computer</strong><p id="connection-computer-detail">Checking connection…</p></div>
   <div class="connection-row"><strong>Library on computer</strong><p id="connection-library-detail">Checking library…</p></div>
   <div class="connection-row"><strong>User card · deployment destination</strong><p id="connection-user-detail">Checking card…</p></div>
   <div class="connection-row"><strong>Factory card · read-only sounds</strong><p id="connection-factory-detail">Checking card…</p></div>
   <div class="connection-actions">
     <button class="btn-secondary" type="button" onclick="checkStatus()">Refresh connection</button>
+    <button class="btn-secondary" type="button" onclick="exportSupportReport()">Export troubleshooting report</button>
     <button id="connection-activate" class="btn-secondary" data-factory-card type="button" onclick="document.getElementById('connection-dialog').close();showFactoryCard()">Activate factory card</button>
     <button class="btn-primary" type="button" onclick="document.getElementById('connection-dialog').close()">Done</button>
   </div>

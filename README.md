@@ -427,3 +427,5 @@ stabilization and decomposition roadmap.
 [MIT](LICENSE)
 
 Setlist Builder now checks local sample WAV headers, reports missing/ambiguous assets, and exports a batch preview with shared files counted once. Factory sample sizes and destination card contents remain unverified; batch writes are disabled.
+
+Connection details shows the source revision and exports an allowlisted troubleshooting report without library paths, names, network addresses or credentials. Passing CI builds a source-beta ZIP and SHA-256 checksum as downloadable run artifacts (30-day retention).
