@@ -70,3 +70,25 @@ test('support report and collection preview download with phone-sized controls',
   await page.evaluate(()=>openBalance());
   expect(await page.locator('#balance-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
 });
+
+test('lost balance response pauses paired editing without replaying the write',async({page})=>{
+  await page.goto('http://127.0.0.1:8768/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{await openKit(file);closeStartScreen();openBalance();},path.resolve('tests/fixtures/balance.skt'));
+  await page.locator('#balance-analyze').click();
+  await expect(page.locator('#balance-status')).toContainText('Nothing changed');
+  await page.locator('#balance-rows input').first().check();
+  await page.route('**/wifi/editor',route=>route.request().method()==='GET' ? route.abort() : route.continue());
+  let writes=0;
+  await page.route('**/api/balance',async route=>{
+    if(route.request().postDataJSON()?.action==='apply') {writes++;await route.fetch();await route.abort();}
+    else await route.continue();
+  });
+  await page.locator('#balance-apply').click();
+  await expect(page.locator('#balance-status')).toContainText('unconfirmed request is never retried');
+  await expect(page.locator('#wifi-access-status')).toContainText('Connection needs checking');
+  await expect(page.locator('#balance-analyze')).toBeDisabled();
+  await expect(page.locator('#balance-apply')).toBeDisabled();
+  expect(writes).toBe(1);
+  await page.evaluate(()=>fetch('/wifi/logout',{method:'POST'}));
+});

@@ -2257,12 +2257,14 @@ async function balanceApply() {
   const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
   if(!selected.length) return;
   balanceBusy=true; balanceControls();
+  let responseReceived=false;
   try {
     const data=await api('/balance',{action:'apply',token:balanceReport.token,selected});
+    responseReceived=true;
     if(data.error) throw new Error(data.error);
     pads=data.pads; setDirtyState(data.dirty,data.undo_count,data.history_labels); renderDrumMap(); renderPadDetail();
     balanceReport=null; document.getElementById('balance-rows').textContent=''; balanceStatus(data.message); setMsg(data.message);
-  } catch(error) {balanceReport=null; balanceStatus(error.message+' Re-analyze before another attempt; an unconfirmed request is never retried.');}
+  } catch(error) {balanceReport=null; if(!responseReceived) pauseWifiEditing(); balanceStatus(error.message+' Re-analyze before another attempt; an unconfirmed request is never retried.');}
   finally {balanceBusy=false; balanceControls();}
 }
 function slExportPreview() {
