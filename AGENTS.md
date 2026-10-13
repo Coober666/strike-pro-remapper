@@ -396,6 +396,19 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   factory activation uses the native host controller, while local Web MIDI is unchanged.
   `tools/test_wifi_editor.py` checks auth boundaries; `tests/browser/wifi-editor.spec.js`
   checks actual editing/saving on an isolated library in Chromium and iPad WebKit.
+  **Editing ownership:** `make_handler` holds a process-local token bound to a paired
+  session. `/wifi/editor` acquires/resumes or explicitly transfers it. Every full-editor
+  POST must carry `X-Strike-Editor`; checking ownership and the complete handler run
+  share a lock with transfer/logout. Reload rotates the per-tab resume token; the
+  frontend reloads host state before enabling edits on takeover. Other pages are
+  view-only snapshots, not collaborative clients. The separate fixed `/api/activate`
+  command still uses pairing auth. Localhost behavior is unchanged. Never infer UI
+  disabling alone protects writes; keep the host checks and stale-token tests.
+  **Connection/save polish:** `/api/status` also returns `library_path`. Connection
+  details refresh card discovery explicitly, not on a card-polling loop. Save confirms
+  the library copy; Deploy success asks for a module kit reload, and failure preserves
+  uncertainty about partially completed writes. New tests are in
+  `tests/browser/workflow-polish.spec.js` and `tools/test_wifi_editor.py`.
   **Physical iPad → Intel Mac → Strike verified October 12, 2026:** user changed
   SEVENzREC snare Layer A from BJ DWMaple Center to BJ DWBallad Center, saved on the
   Mac, deployed from iPad, and confirmed playback. Independent reads verified Save

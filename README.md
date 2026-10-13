@@ -215,6 +215,15 @@ double-click.
   have hardware-confirmed names; the rest show as "Type N" until enumerated
 
 **Library & workflow**
+- **Connection details** — shows the computer connection, library location, user card,
+  and read-only factory card, with refresh and recovery guidance. A lost computer
+  connection is shown as unknown card status, rather than as missing cards.
+- **Clear save and deploy states** — Save to library confirms the computer copy;
+  verified deployment prompts you to reload the kit on the Strike. A lost deployment
+  response never claims that no files were copied.
+- **One Wi-Fi editing page at a time** — additional pages are view-only. Take editing
+  control explicitly to load the current kit and its unsaved changes on another device;
+  writes from the previous page are rejected by the host.
 - One-click full library sync from SD card (background, with progress)
 - **Deploy to Module** — a guided SD-card transfer with a readable preflight, explicit
   destination and asset plan, conflict blocking, backup of a replaced kit, progress, and

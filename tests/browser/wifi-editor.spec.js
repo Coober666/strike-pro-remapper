@@ -28,6 +28,7 @@ test('paired Wi-Fi editor loads, edits, saves and revokes its session', async ({
   const saved = page.waitForResponse(r => r.url() === host + '/api/save');
   await page.locator('#save-lib-btn').click();
   expect((await (await saved).json()).error).toBeUndefined();
+  await expect(page.locator('#save-state')).toHaveText('Saved to library · Deploy to update the module');
   await page.evaluate(p => openKit(p), kitPath);
   await expect(page.locator('input[onchange*="la_level"]').first()).toHaveValue(newLevel);
   await page.reload();
@@ -47,4 +48,49 @@ test('paired Wi-Fi editor loads, edits, saves and revokes its session', async ({
   await expect(page.getByRole('heading', {name:'Your kit. On your iPad.'})).toBeVisible();
   expect((await context.request.get(host + '/api/session')).status()).toBe(401);
   expect(errors).toEqual([]);
+});
+
+test('another device is view-only until an explicit handover reloads the current kit', async ({page, browser}) => {
+  const secondContext = await browser.newContext();
+  const second = await secondContext.newPage();
+  try {
+    await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+    await expect(page.locator('#boot-screen')).toBeHidden();
+    await page.evaluate(async () => { await api('/new_kit', {name:'Handover Kit'}); });
+    await page.reload();
+    await expect(page.locator('#kit-name')).toContainText('Handover Kit');
+    await second.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+    await expect(second.locator('#boot-screen')).toBeHidden();
+    await expect(second.locator('#wifi-access-status')).toContainText('View only');
+    await expect(second.locator('#save-lib-btn')).toBeDisabled();
+    const blocked = await second.evaluate(async () => {
+      const r = await fetch('/api/new_kit', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:'Must not load'})});
+      return r.status;
+    });
+    expect(blocked).toBe(409);
+    // Unsaved edits must survive moving editing to the other device.
+    const changed = await page.evaluate(() => api('/set_param', {pad_id:'S1H', param:'la_level', value:73}));
+    expect(changed.error).toBeUndefined();
+    await second.locator('#wifi-take-control').click();
+    await second.locator('#confirm-ok').click();
+    await expect(second.locator('#boot-screen')).toBeHidden();
+    await expect(second.locator('#wifi-access-status')).toContainText('Editing here');
+    await expect(second.locator('#kit-name')).toContainText('Handover Kit');
+    await expect(second.locator('#dirty-badge')).toBeVisible();
+    const session = await second.evaluate(() => api('/session'));
+    expect(session.pads.find(p => p.id === 'S1H').la_level).toBe(73);
+    await expect(page.locator('#wifi-access-status')).toContainText('View only');
+    // A stale page cannot reclaim ownership simply by refreshing.
+    await page.reload();
+    await expect(page.locator('#boot-screen')).toBeHidden();
+    await expect(page.locator('#wifi-access-status')).toContainText('View only');
+    await expect(page.locator('#save-lib-btn')).toBeDisabled();
+    await second.reload();
+    await expect(second.locator('#boot-screen')).toBeHidden();
+    await expect(second.locator('#wifi-access-status')).toContainText('Editing here');
+  } finally {
+    await second.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
+    await page.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
+    await secondContext.close();
+  }
 });

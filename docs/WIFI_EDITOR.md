@@ -33,7 +33,20 @@ This does not make kit edits live on the module; deploy and reload the kit there
 
 ## Session and platform limits
 
-- Use one editing browser at a time: all browsers share one active kit and undo history.
+- One page holds editing control. Additional pages open **view-only** because the host
+  has one active kit and undo history. Choose **Take editing control** and confirm to
+  move editing: the receiving page reloads the current kit, including unsaved changes,
+  before enabling writes. Old page requests are rejected by the host, including imports,
+  tool execution, saves, and deployment. Switching never saves or deploys automatically.
+- A reload resumes control using a per-tab token, which is rotated to invalidate the old
+  page. Opening a separate tab without that token starts view-only; duplicating a tab
+  that copies session storage moves control to the duplicate and revokes the old page.
+  Closing a page does not silently release unsaved work: take control on another page.
+  Disconnecting or the pairing session expiring releases its control. A browser with
+  session storage disabled can use the initial editing page but cannot resume on reload.
+- View-only pages show the state loaded when they opened, not a live collaborative view.
+  The fixed factory-activation controller remains available to paired browsers; editing
+  ownership protects full-editor POST routes. The default localhost service is unchanged.
 - **Disconnect** revokes that browser's session. Sessions expire after 12 hours; reopening
   the pairing link pairs again. Stopping the host process revokes every session and link.
 - Keep the computer awake and connected. This command does not install an auto-start service.
@@ -46,6 +59,12 @@ This does not make kit edits live on the module; deploy and reload the kit there
   and Linux adapters remain hardware-unverified. The physical iPad-to-Mac workflow below
   is verified separately from automated tests. Chromium and simulated iPad WebKit tests
   cover pairing, actual synthetic-kit edit/save/reload, logout, and host activation routing.
+- The connection strip distinguishes an unreachable computer from an undetected card.
+  Open **Connection details** and **Refresh connection** after reconnecting USB or mounting
+  cards. Card discovery is not continuously polled. **Save to library** updates the host
+  copy; **Deploy to Module** copies to the user card and verifies it. Reload the kit on
+  the Strike after a successful deployment. These UI and handover changes are covered by
+  simulated browser/API tests; they have not yet had another physical hardware pass.
 - Direct USB from iPad to Strike needs the paused native iPad app and is not included here.
 
 The earlier “Read-only factory library detected” result confirms the host found a mounted,

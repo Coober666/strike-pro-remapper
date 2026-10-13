@@ -522,6 +522,26 @@ body.viewer-mode #boot-screen { display:none !important; }
 #factory-card-status { min-height:3em; color:var(--text); }
 .wifi-session { display:none; }
 html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 14px; background:#283127; color:#d1d7c7; font-size:.75rem; }
+.wifi-session.view-only { background:#332a1b; color:#f0d7a1; }
+.wifi-session-actions { display:flex; gap:8px; flex-shrink:0; }
+.connection-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; padding:7px 14px; border-bottom:1px solid var(--border); background:var(--bg-deep); font-size:.75rem; color:var(--text-2); }
+.connection-bar button { min-height:32px; }
+.connection-bar span { display:inline-flex; align-items:center; gap:6px; }
+.connection-bar span::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--text-3); }
+.connection-bar span[data-state="ready"]::before { background:var(--ok); }
+.connection-bar span[data-state="missing"]::before { background:var(--accent); }
+#connection-details-btn { margin-left:auto; }
+#save-state { grid-column:1 / -1; color:var(--text-2); font-size:.72rem; line-height:1.4; }
+#connection-dialog { width:min(560px,92vw); max-height:85vh; overflow:auto; margin:auto; padding:24px; color:var(--text); background:var(--raised); border:1px solid var(--border); border-radius:8px; }
+#connection-dialog::backdrop { background:#050706b8; }
+#connection-dialog h3 { margin-bottom:16px; }
+.connection-row { padding:12px 0; border-top:1px solid var(--border); }
+.connection-row strong { display:block; font-size:.85rem; }
+.connection-row p { margin-top:5px; color:var(--text-2); font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
+.connection-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.connection-actions button, .wifi-session button { min-height:36px; }
+body.viewer-mode .connection-bar, body.viewer-mode #save-state { display:none; }
+@media(max-width:620px) { .wifi-session { flex-wrap:wrap; } .connection-bar { gap:6px 12px; padding:6px 10px; } #connection-details-btn { margin-left:0; } }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
@@ -1117,6 +1137,10 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .primary-actions .tb-group:first-child { flex: 1; }
   .primary-actions .tb-group:first-child > button { width: 100%; }
   .primary-actions .deploy-btn { flex: 1; }
+  .primary-actions .tb-btn { min-height:36px; }
+  .utility-strip { flex-wrap:wrap; overflow:visible; }
+  .utility-strip #msg { order:10; flex:1 0 100%; white-space:normal; overflow-wrap:anywhere; }
+  .utility-strip #msg:empty { display:none; }
   .main { display: block !important; min-height: 0; }
   .workspace-rail {
     position: sticky; top: 0; z-index: 30; height: 51px; padding: 4px 5px; flex-direction: row;
@@ -1135,6 +1159,12 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .input-bay-note { margin-left: auto; }
   .layer-rack { grid-template-columns: 1fr 1fr; }
   .rack-blend { grid-column: 1 / -1; grid-row: 2; min-height: 112px; }
+}
+
+@media(min-width:901px) {
+  body:not(.viewer-mode) { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  body:not(.viewer-mode) > .main { flex:1; min-height:0; height:auto; }
+  .app-topbar, .wifi-session, .connection-bar { flex-shrink:0; }
 }
 
 /* ── viewer-mode overrides (added, not extracted) ── */

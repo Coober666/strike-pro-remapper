@@ -1,5 +1,31 @@
 # Planned Features
 
+## Current release priority (2026-10-12)
+
+The user has chosen to polish the existing Strike editor and add general drum-MIDI
+utilities, with a future universal iPhone/iPad app. This supersedes the older
+viewer-first/pure-web distribution priorities below; those sections remain historical
+research, not prerequisites for shipping the working editor. Native app implementation
+and direct mobile USB/card access remain paused.
+
+1. **First polish pass:** connection/library/card status and recovery guidance, clear
+   library-save versus module-deploy feedback, and enforced Wi-Fi editing ownership
+   with explicit handover. Implemented in the current change; physical acceptance pending.
+2. **Workflow review:** pad/zone and A/B assignment, search/audition, touch and keyboard
+   access, loading/error states, plus a physical iPhone/iPad usability pass.
+3. **Recovery validation:** exercise existing snapshots, crash recovery, replacement
+   backups, and deployment verification; test interruptions on disposable media first.
+4. **Distribution:** package the existing host for Mac and Windows with persistent
+   library storage, visible start/stop/pairing, diagnostics, and documented upgrades.
+   Validate actual supported hardware/OS combinations and Wi-Fi transport before release.
+5. **Small outside beta:** new users independently install, edit, deploy, and restore.
+   Expand the general MIDI toolkit only after the central Strike workflow is reliable.
+
+The 2026-10-12 physical iPad → Mac → Strike edit/save/deploy/playback verification is
+recorded in `docs/WIFI_EDITOR.md`. Automated browser simulations do not expand that
+hardware support claim. iPhone/iPad native development needs a newer supported Mac;
+the existing Monterey laptop can continue hosting the editor.
+
 Features are grouped by theme. Items marked **[easy]** are low-effort / mostly UI wiring;
 **[medium]** need moderate new code; **[hard]** need reverse-engineering or significant architecture.
 

@@ -23,7 +23,7 @@
     </div>
   </div>
 </div>
-<div class="wifi-session"><span>Wi-Fi editor · Files stay on the USB computer</span><button class="btn-secondary" type="button" onclick="wifiDisconnect()">Disconnect</button></div>
+<div class="wifi-session"><span id="wifi-access-status" role="status">Connecting to the editor…</span><div class="wifi-session-actions"><button id="wifi-take-control" class="btn-primary" type="button" onclick="wifiTakeControl()" hidden>Take editing control</button><button class="btn-secondary" type="button" onclick="wifiDisconnect()">Disconnect</button></div></div>
 <header class="app-topbar">
   <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
        style="cursor:pointer;" onclick="openStartScreen()"
@@ -36,6 +36,7 @@
     <span class="kit-eyebrow">Editing kit</span>
     <span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit">No kit loaded</span>
     <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+    <span id="save-state" role="status">Open a kit to begin</span>
   </div>
 
   <div class="primary-actions">
@@ -94,7 +95,8 @@
   <div class="tb-group">
     <div style="display:flex;gap:0;">
       <button class="btn-primary tb-btn" id="save-lib-btn" onclick="saveToLibrary()" disabled
-              style="border-radius:4px 0 0 4px;">Save</button>
+              title="Save this kit in the computer's library. Deploy separately to update the module."
+              style="border-radius:4px 0 0 4px;">Save to library</button>
       <button class="btn-primary tb-btn" onclick="menuToggle('save-menu')"
               style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
     </div>
@@ -161,6 +163,24 @@
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
   </div><!-- /utility-strip -->
 </header>
+<div class="connection-bar" aria-label="Editor connection">
+  <span id="connection-host">Checking computer…</span>
+  <span id="connection-user">User card: checking…</span>
+  <span id="connection-factory">Factory card: checking…</span>
+  <button id="connection-details-btn" class="btn-secondary" type="button" onclick="openConnectionDetails()">Connection details</button>
+</div>
+<dialog id="connection-dialog" aria-labelledby="connection-title">
+  <h3 id="connection-title">Connection details</h3>
+  <div class="connection-row"><strong>Computer</strong><p id="connection-computer-detail">Checking connection…</p></div>
+  <div class="connection-row"><strong>Library on computer</strong><p id="connection-library-detail">Checking library…</p></div>
+  <div class="connection-row"><strong>User card · deployment destination</strong><p id="connection-user-detail">Checking card…</p></div>
+  <div class="connection-row"><strong>Factory card · read-only sounds</strong><p id="connection-factory-detail">Checking card…</p></div>
+  <div class="connection-actions">
+    <button class="btn-secondary" type="button" onclick="checkStatus()">Refresh connection</button>
+    <button id="connection-activate" class="btn-secondary" data-factory-card type="button" onclick="document.getElementById('connection-dialog').close();showFactoryCard()">Activate factory card</button>
+    <button class="btn-primary" type="button" onclick="document.getElementById('connection-dialog').close()">Done</button>
+  </div>
+</dialog>
 <div class="main">
 
   <nav id="workspace-rail" class="workspace-rail" aria-label="Editor workspaces">

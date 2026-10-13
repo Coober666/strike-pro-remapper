@@ -3234,6 +3234,7 @@ def volume_status():
         'preset_mounted': preset is not None,
         'user_path':      str(user) if user else '',
         'preset_path':    str(preset) if preset else '',
+        'library_path':   str(LIBRARY_DIR),
     }
 
 
@@ -3844,6 +3845,26 @@ body.viewer-mode #boot-screen { display:none !important; }
 #factory-card-status { min-height:3em; color:var(--text); }
 .wifi-session { display:none; }
 html[data-wifi-editor="true"] .wifi-session { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 14px; background:#283127; color:#d1d7c7; font-size:.75rem; }
+.wifi-session.view-only { background:#332a1b; color:#f0d7a1; }
+.wifi-session-actions { display:flex; gap:8px; flex-shrink:0; }
+.connection-bar { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; padding:7px 14px; border-bottom:1px solid var(--border); background:var(--bg-deep); font-size:.75rem; color:var(--text-2); }
+.connection-bar button { min-height:32px; }
+.connection-bar span { display:inline-flex; align-items:center; gap:6px; }
+.connection-bar span::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--text-3); }
+.connection-bar span[data-state="ready"]::before { background:var(--ok); }
+.connection-bar span[data-state="missing"]::before { background:var(--accent); }
+#connection-details-btn { margin-left:auto; }
+#save-state { grid-column:1 / -1; color:var(--text-2); font-size:.72rem; line-height:1.4; }
+#connection-dialog { width:min(560px,92vw); max-height:85vh; overflow:auto; margin:auto; padding:24px; color:var(--text); background:var(--raised); border:1px solid var(--border); border-radius:8px; }
+#connection-dialog::backdrop { background:#050706b8; }
+#connection-dialog h3 { margin-bottom:16px; }
+.connection-row { padding:12px 0; border-top:1px solid var(--border); }
+.connection-row strong { display:block; font-size:.85rem; }
+.connection-row p { margin-top:5px; color:var(--text-2); font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
+.connection-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.connection-actions button, .wifi-session button { min-height:36px; }
+body.viewer-mode .connection-bar, body.viewer-mode #save-state { display:none; }
+@media(max-width:620px) { .wifi-session { flex-wrap:wrap; } .connection-bar { gap:6px 12px; padding:6px 10px; } #connection-details-btn { margin-left:0; } }
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
@@ -4439,6 +4460,10 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .primary-actions .tb-group:first-child { flex: 1; }
   .primary-actions .tb-group:first-child > button { width: 100%; }
   .primary-actions .deploy-btn { flex: 1; }
+  .primary-actions .tb-btn { min-height:36px; }
+  .utility-strip { flex-wrap:wrap; overflow:visible; }
+  .utility-strip #msg { order:10; flex:1 0 100%; white-space:normal; overflow-wrap:anywhere; }
+  .utility-strip #msg:empty { display:none; }
   .main { display: block !important; min-height: 0; }
   .workspace-rail {
     position: sticky; top: 0; z-index: 30; height: 51px; padding: 4px 5px; flex-direction: row;
@@ -4459,7 +4484,11 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   .rack-blend { grid-column: 1 / -1; grid-row: 2; min-height: 112px; }
 }
 
-
+@media(min-width:901px) {
+  body:not(.viewer-mode) { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  body:not(.viewer-mode) > .main { flex:1; min-height:0; height:auto; }
+  .app-topbar, .wifi-session, .connection-bar { flex-shrink:0; }
+}
 </style>
 </head>
 <body data-workspace="pad">
@@ -4475,7 +4504,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     </div>
   </div>
 </div>
-<div class="wifi-session"><span>Wi-Fi editor · Files stay on the USB computer</span><button class="btn-secondary" type="button" onclick="wifiDisconnect()">Disconnect</button></div>
+<div class="wifi-session"><span id="wifi-access-status" role="status">Connecting to the editor…</span><div class="wifi-session-actions"><button id="wifi-take-control" class="btn-primary" type="button" onclick="wifiTakeControl()" hidden>Take editing control</button><button class="btn-secondary" type="button" onclick="wifiDisconnect()">Disconnect</button></div></div>
 <header class="app-topbar">
   <div class="brand-lockup" role="button" tabindex="0" title="Back to the start screen"
        style="cursor:pointer;" onclick="openStartScreen()"
@@ -4488,6 +4517,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
     <span class="kit-eyebrow">Editing kit</span>
     <span id="kit-name" class="center-hdr-kit" contenteditable="false" spellcheck="false" title="Click to rename kit">No kit loaded</span>
     <span id="parse-warn" style="display:none;" title="This kit file has bytes the parser doesn't fully understand. It loaded fine, but saving may not reproduce the original exactly. Check the server console for details.">&#9888; parser</span>
+    <span id="save-state" role="status">Open a kit to begin</span>
   </div>
 
   <div class="primary-actions">
@@ -4546,7 +4576,8 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   <div class="tb-group">
     <div style="display:flex;gap:0;">
       <button class="btn-primary tb-btn" id="save-lib-btn" onclick="saveToLibrary()" disabled
-              style="border-radius:4px 0 0 4px;">Save</button>
+              title="Save this kit in the computer's library. Deploy separately to update the module."
+              style="border-radius:4px 0 0 4px;">Save to library</button>
       <button class="btn-primary tb-btn" onclick="menuToggle('save-menu')"
               style="border-radius:0 4px 4px 0;padding:5px 7px;font-size:.7rem;border-left:1px solid #c03050;">&#9660;</button>
     </div>
@@ -4613,6 +4644,24 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
   <span id="vol-status" style="font-size:.75rem;color:#888;flex-shrink:0;"></span>
   </div><!-- /utility-strip -->
 </header>
+<div class="connection-bar" aria-label="Editor connection">
+  <span id="connection-host">Checking computer…</span>
+  <span id="connection-user">User card: checking…</span>
+  <span id="connection-factory">Factory card: checking…</span>
+  <button id="connection-details-btn" class="btn-secondary" type="button" onclick="openConnectionDetails()">Connection details</button>
+</div>
+<dialog id="connection-dialog" aria-labelledby="connection-title">
+  <h3 id="connection-title">Connection details</h3>
+  <div class="connection-row"><strong>Computer</strong><p id="connection-computer-detail">Checking connection…</p></div>
+  <div class="connection-row"><strong>Library on computer</strong><p id="connection-library-detail">Checking library…</p></div>
+  <div class="connection-row"><strong>User card · deployment destination</strong><p id="connection-user-detail">Checking card…</p></div>
+  <div class="connection-row"><strong>Factory card · read-only sounds</strong><p id="connection-factory-detail">Checking card…</p></div>
+  <div class="connection-actions">
+    <button class="btn-secondary" type="button" onclick="checkStatus()">Refresh connection</button>
+    <button id="connection-activate" class="btn-secondary" data-factory-card type="button" onclick="document.getElementById('connection-dialog').close();showFactoryCard()">Activate factory card</button>
+    <button class="btn-primary" type="button" onclick="document.getElementById('connection-dialog').close()">Done</button>
+  </div>
+</dialog>
 <div class="main">
 
   <nav id="workspace-rail" class="workspace-rail" aria-label="Editor workspaces">
@@ -6712,13 +6761,89 @@ function svgMouseUp(e) {
   }
 }
 
+const wifiMode = document.documentElement.dataset.wifiEditor === 'true';
+let wifiEditorToken = '';
+let wifiEditing = !wifiMode;
+let wifiAccessChecking = false;
+let connectionInfo = null;
+let kitDirty = false;
+let saveFeedback = '';
+
+function updateWifiAccess(data) {
+  wifiEditing = !!data.editing;
+  document.querySelector('.wifi-session').classList.toggle('view-only', !wifiEditing);
+  document.getElementById('wifi-access-status').textContent = wifiEditing
+    ? 'Editing here. Files stay on the USB computer.'
+    : 'View only. Take editing control to refresh the kit and make changes.';
+  document.getElementById('wifi-take-control').hidden = wifiEditing;
+  updateSaveState();
+}
+
+async function initWifiEditor() {
+  if (!wifiMode) return;
+  let resume = '';
+  try { resume = sessionStorage.getItem('strike_editor_resume') || ''; } catch {}
+  const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resume})});
+  if (response.status === 401) { location.replace('/wifi/pair'); throw new Error('Pairing required'); }
+  if (!response.ok) throw new Error('Could not connect to the editor. Reload to try again.');
+  const data = await response.json();
+  wifiEditorToken = data.token || '';
+  try { sessionStorage.setItem('strike_editor_resume', wifiEditorToken); } catch {}
+  updateWifiAccess(data);
+}
+
+async function wifiTakeControl() {
+  if (!await appConfirm('Move editing to this page? The other page becomes view-only. The current kit and unsaved edits stay on the computer and will be loaded here.', 'Take editing control')) return;
+  try {
+    const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({takeover:true})});
+    if (!response.ok) throw new Error('Could not take control. Check the connection and try again.');
+    const data = await response.json();
+    // Reload before enabling writes, so stale controls cannot edit a different kit.
+    sessionStorage.setItem('strike_editor_resume', data.token);
+    location.reload();
+  } catch (err) { setMsg(err.message, true); }
+}
+
+async function checkWifiAccess() {
+  if (!wifiMode || wifiAccessChecking || deployBusy) return;
+  wifiAccessChecking = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch('/wifi/editor', {signal:controller.signal, headers:{'X-Strike-Editor':wifiEditorToken}});
+    if (response.status === 401) { location.replace('/wifi/pair'); return; }
+    if (!response.ok) throw new Error('Editor connection unavailable');
+    updateWifiAccess(await response.json());
+  } finally {
+    clearTimeout(timeout);
+    wifiAccessChecking = false;
+  }
+}
+
+function updateSaveState() {
+  const el = document.getElementById('save-state');
+  if (!el) return;
+  el.textContent = !pads.length ? 'Open a kit to begin' : kitDirty
+    ? 'Changes not saved to library' : saveFeedback || 'Save to library, then deploy when ready';
+  document.getElementById('save-lib-btn').disabled = !libSavePath || !wifiEditing;
+  document.getElementById('save-sd-btn').disabled = !pads.length || !wifiEditing;
+  document.getElementById('kit-name').contentEditable = pads.length && wifiEditing ? 'true' : 'false';
+}
+
 async function api(path, body) {
+  if (body && !wifiEditing) {
+    const error = 'This page is view-only. Take editing control to refresh the kit before making changes.';
+    setMsg(error, true);
+    return {error};
+  }
   const opts = body
-    ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }
+    ? { method: 'POST', headers: {'Content-Type':'application/json', ...(wifiMode ? {'X-Strike-Editor':wifiEditorToken} : {})}, body: JSON.stringify(body) }
     : {};
   const r = await fetch('/api' + path, opts);
   if (r.status === 401 && document.documentElement.dataset.wifiEditor === 'true') location.assign('/wifi/pair');
-  return r.json();
+  const data = await r.json();
+  if (data.code === 'editor_read_only') updateWifiAccess({editing:false});
+  return data;
 }
 
 async function wifiDisconnect() {
@@ -6770,14 +6895,15 @@ function _confirmDone(ok) {
 let _extSel = null, _extRev = -1;
 
 function postSelect() {
+  if (!wifiEditing) return;
   const id = selectedMapPad || null;
   if (id === _extSel) return;
   _extSel = id;
-  fetch('/api/select', {method:'POST', headers:{'Content-Type':'application/json'},
-                        body: JSON.stringify({pad_id: id})}).catch(() => {});
+  api('/select', {pad_id:id}).catch(() => {});
 }
 
 setInterval(async () => {
+  if (!wifiEditing) return;
   try {
     const s = await (await fetch('/api/selected')).json();
     if (vmActive && s.rev !== vmRev) { vmRev = s.rev; vmRefreshManifest(); }
@@ -6806,6 +6932,9 @@ function setMsg(txt, err=false) {
 }
 
 function setDirtyState(dirty, cnt, labels) {
+  kitDirty = !!dirty;
+  if (dirty) saveFeedback = '';
+  updateSaveState();
   undoCount = cnt != null ? cnt : undoCount;
   if (labels !== undefined) undoLabels = labels;
   const badge = document.getElementById('dirty-badge');
@@ -7031,6 +7160,7 @@ async function loadKitList() {
 // Shared post-load state application: used by openKit, drag-drop .skt loading,
 // and boot-time rehydration from /api/session.
 function applyKitData(data, path, opts) {
+  saveFeedback = '';
   const {dirty = false, undoCount = 0, historyLabels = []} = opts || {};
   kitName       = data.name;
   pads          = data.pads;
@@ -8967,6 +9097,7 @@ let _autoSnapTimer = null;
 function scheduleAutoSnapshot() {
   if (_autoSnapTimer) clearTimeout(_autoSnapTimer);
   _autoSnapTimer = setTimeout(() => {
+    if (!wifiEditing) return;
     _autoSnapTimer = null;
     api('/snapshot', {kind: 'auto'}).then(() => {
       if (document.getElementById('tm-modal').classList.contains('open')) loadTimeMachine();
@@ -9480,6 +9611,7 @@ async function runTemplate(name) {
   setMsg(`Running template ${name}…`);
   const data = await api('/run_template', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kitName       = data.name;
   pads          = data.pads;
   libSavePath   = data.lib_save_path || '';
@@ -9963,12 +10095,7 @@ async function createInstrument() {
     }
 
     prog.textContent = 'Creating instrument…';
-    const resp = await fetch('/api/import_instrument', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({category, name, mode, normalize, auto_map, wavs}),
-    });
-    const data = await resp.json();
+    const data = await api('/import_instrument', {category, name, mode, normalize, auto_map, wavs});
     if (data.error) {
       prog.style.color  = '#e08080';
       prog.textContent  = 'Error: ' + data.error;
@@ -9994,7 +10121,13 @@ async function createInstrument() {
 // ── Save ──────────────────────────────────────────────────────────────────────
 async function _doSave(path) {
   if (!path) { setMsg('No kit loaded', true); return; }
-  const data = await api('/save', {path});
+  const savingToLibrary = path === libSavePath;
+  let data;
+  try { data = await api('/save', {path}); }
+  catch {
+    setMsg('Save could not be confirmed. Check the computer connection before trying again.', true);
+    return;
+  }
   if (data.error) { setMsg(data.error, true); return; }
   if (data.kits) {
     kits = data.kits;
@@ -10003,8 +10136,9 @@ async function _doSave(path) {
     if (data.sd_save_path)  sdSavePath  = data.sd_save_path;
     renderKitList();
   }
+  saveFeedback = savingToLibrary ? 'Saved to library · Deploy to update the module' : 'Saved to selected path';
   setDirtyState(false, null);
-  setMsg(data.message);
+  setMsg(savingToLibrary ? 'Saved to the computer library. The module has not been updated.' : data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
 async function saveCustom() {
@@ -10139,7 +10273,7 @@ async function runDeploy() {
     const data = await api('/deploy', {});
     if (data.error) throw new Error(data.error);
     setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
-    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+    body.innerHTML = `<div class="deploy-result"><strong>Copied to user card and verified</strong><p>Reload this kit on the Strike to hear your changes.</p><p>${escHtml(data.message)}<br>`
       + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
       + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
     kits = data.kits || kits;
@@ -10147,6 +10281,7 @@ async function runDeploy() {
     sdSavePath = data.sd_save_path || sdSavePath;
     state_kitPath = libSavePath;
     document.getElementById('save-path').value = libSavePath;
+    saveFeedback = 'Deployed and verified · Reload the kit on the Strike';
     setDirtyState(false, null);
     renderKitList();
     setMsg(data.message);
@@ -10156,7 +10291,7 @@ async function runDeploy() {
   } catch (err) {
     setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
     body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
-    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+    document.getElementById('deploy-action-note').textContent = 'Deployment could not be confirmed. Some files may have been copied. Check the connection and run preflight again before retrying.';
   } finally {
     deployBusy = false;
     refresh.disabled = false; cancel.disabled = false;
@@ -10178,6 +10313,7 @@ async function confirmNewKit() {
   cancelNewKit();
   const data = await api('/new_kit', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kits          = data.kits;
   kitName       = data.name;
   pads          = data.pads;
@@ -10207,25 +10343,51 @@ async function confirmNewKit() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function checkStatus() {
-  const s = await api('/status');
-  const parts = [];
-  if (s.user_mounted)   parts.push('&#x1F4BE; User: ' + s.user_path);
-  else                  parts.push('&#x26A0; User card NOT mounted');
-  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path + ' (read-only)');
-  const volEl = document.getElementById('vol-status');
-  volEl.innerHTML = parts.join(' \xB7 ');
-  volEl.title = 'Cards are identified by their content, not their name. '
-    + 'Saves only ever go to the user card; the factory preset card is never written.';
-  const hint = document.getElementById('save-hint');
-  if (hint) {
-    const sep = (s.user_path || '').includes('\\') ? '\\' : '/';
-    hint.textContent = s.user_mounted
-      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card. Factory presets are never touched.`
-      : 'Mount the user card to save back to SD.';
+  if (window.VIEWER) return;
+  try {
+    const s = await api('/status');
+    if (s.error) throw new Error(s.error);
+    connectionInfo = s;
+    renderConnectionStatus();
+  } catch {
+    connectionInfo = null;
+    renderConnectionStatus();
   }
+  const hint = document.getElementById('save-hint');
+  if (hint) hint.textContent = 'Save to library keeps a copy on the computer. Deploy to Module checks and copies the kit to the user card. A custom path is on the computer, even when using an iPad.';
+}
+
+function renderConnectionStatus() {
+  const s = connectionInfo;
+  const host = document.getElementById('connection-host');
+  host.textContent = s ? (wifiMode ? 'Computer connected over Wi-Fi' : 'Local editor connected') : 'Computer connection lost';
+  host.dataset.state = s ? 'ready' : 'missing';
+  for (const [id, label, mounted] of [['user', 'User card', s?.user_mounted], ['factory', 'Factory card', s?.preset_mounted]]) {
+    const el = document.getElementById('connection-' + id);
+    el.textContent = label + ': ' + (!s ? 'unknown' : mounted ? (id === 'factory' ? 'read-only' : 'available') : 'not detected');
+    el.dataset.state = !s ? '' : mounted ? 'ready' : 'missing';
+  }
+  document.getElementById('connection-computer-detail').textContent = s
+    ? (wifiMode ? 'Your browser is connected to ' + location.host + '. USB and files stay on that computer.' : 'The editor and library are on this computer.')
+    : 'Keep the editor running on the USB computer. Reconnect to the same network, then choose Refresh connection.';
+  document.getElementById('connection-library-detail').textContent = s?.library_path || 'Library location unavailable until the computer reconnects.';
+  document.getElementById('connection-user-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.user_mounted
+    ? 'Available at ' + s.user_path + '. Deploy checks the destination before copying.'
+    : 'Connect the powered-on Strike by USB with its user card inserted. If the module sees the card but the computer does not, check the computer’s mounted disks. You can keep editing the library.';
+  document.getElementById('connection-factory-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.preset_mounted
+    ? 'Available at ' + s.preset_path + '. Factory content is never written by the editor.'
+    : 'Factory sounds may still work from your saved library. Use Activate factory card to expose the card, then refresh.';
+  document.getElementById('connection-activate').hidden = !s || !!s.preset_mounted;
+  document.getElementById('vol-status').textContent = '';
+}
+
+async function openConnectionDetails() {
+  document.getElementById('connection-dialog').showModal();
+  await checkStatus();
 }
 
 (async () => {
+  await initWifiEditor();
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
@@ -10294,12 +10456,7 @@ async function checkStatus() {
       const u8   = new Uint8Array(buf);
       let bin = '';
       for (let j = 0; j < u8.length; j += 8192) bin += String.fromCharCode(...u8.subarray(j, j + 8192));
-      const resp = await fetch('/api/load_bytes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify({filename: file.name, data: btoa(bin)}),
-      });
-      const data = await resp.json();
+      const data = await api('/load_bytes', {filename:file.name, data:btoa(bin)});
       if (data.error) { setMsg(data.error, true); return; }
       applyKitData(data, '', {dirty: true});
       setMsg(data.message);
@@ -10441,6 +10598,7 @@ async function checkStatus() {
       document.getElementById('save-lib-btn').disabled = false;
       document.getElementById('save-path').value = libSavePath;
     }
+    setDirtyState(true);
     setMsg(`Kit name set to ${kitName} — save to apply`);
   });
 
@@ -10480,9 +10638,17 @@ async function checkStatus() {
   renderPatchPanel();
   renderDrumMap();
 
+  // Poll ownership cheaply; card discovery is explicit to avoid repeatedly
+  // probing the Strike's intermittently slow storage.
+  if (wifiMode) setInterval(() => checkWifiAccess().catch(() => {
+    updateWifiAccess({editing:false});
+    connectionInfo = null;
+    renderConnectionStatus();
+  }), 3000);
+
   // Auto-save every 60 s while there are unsaved changes
   setInterval(async () => {
-    if (undoCount > 0) await api('/autosave', {});
+    if (wifiEditing && undoCount > 0) await api('/autosave', {});
   }, 60000);
 
   // Check for crash-recovery autosaves from previous sessions

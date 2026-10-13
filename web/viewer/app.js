@@ -1865,13 +1865,89 @@ function svgMouseUp(e) {
   }
 }
 
+const wifiMode = document.documentElement.dataset.wifiEditor === 'true';
+let wifiEditorToken = '';
+let wifiEditing = !wifiMode;
+let wifiAccessChecking = false;
+let connectionInfo = null;
+let kitDirty = false;
+let saveFeedback = '';
+
+function updateWifiAccess(data) {
+  wifiEditing = !!data.editing;
+  document.querySelector('.wifi-session').classList.toggle('view-only', !wifiEditing);
+  document.getElementById('wifi-access-status').textContent = wifiEditing
+    ? 'Editing here. Files stay on the USB computer.'
+    : 'View only. Take editing control to refresh the kit and make changes.';
+  document.getElementById('wifi-take-control').hidden = wifiEditing;
+  updateSaveState();
+}
+
+async function initWifiEditor() {
+  if (!wifiMode) return;
+  let resume = '';
+  try { resume = sessionStorage.getItem('strike_editor_resume') || ''; } catch {}
+  const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resume})});
+  if (response.status === 401) { location.replace('/wifi/pair'); throw new Error('Pairing required'); }
+  if (!response.ok) throw new Error('Could not connect to the editor. Reload to try again.');
+  const data = await response.json();
+  wifiEditorToken = data.token || '';
+  try { sessionStorage.setItem('strike_editor_resume', wifiEditorToken); } catch {}
+  updateWifiAccess(data);
+}
+
+async function wifiTakeControl() {
+  if (!await appConfirm('Move editing to this page? The other page becomes view-only. The current kit and unsaved edits stay on the computer and will be loaded here.', 'Take editing control')) return;
+  try {
+    const response = await fetch('/wifi/editor', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({takeover:true})});
+    if (!response.ok) throw new Error('Could not take control. Check the connection and try again.');
+    const data = await response.json();
+    // Reload before enabling writes, so stale controls cannot edit a different kit.
+    sessionStorage.setItem('strike_editor_resume', data.token);
+    location.reload();
+  } catch (err) { setMsg(err.message, true); }
+}
+
+async function checkWifiAccess() {
+  if (!wifiMode || wifiAccessChecking || deployBusy) return;
+  wifiAccessChecking = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch('/wifi/editor', {signal:controller.signal, headers:{'X-Strike-Editor':wifiEditorToken}});
+    if (response.status === 401) { location.replace('/wifi/pair'); return; }
+    if (!response.ok) throw new Error('Editor connection unavailable');
+    updateWifiAccess(await response.json());
+  } finally {
+    clearTimeout(timeout);
+    wifiAccessChecking = false;
+  }
+}
+
+function updateSaveState() {
+  const el = document.getElementById('save-state');
+  if (!el) return;
+  el.textContent = !pads.length ? 'Open a kit to begin' : kitDirty
+    ? 'Changes not saved to library' : saveFeedback || 'Save to library, then deploy when ready';
+  document.getElementById('save-lib-btn').disabled = !libSavePath || !wifiEditing;
+  document.getElementById('save-sd-btn').disabled = !pads.length || !wifiEditing;
+  document.getElementById('kit-name').contentEditable = pads.length && wifiEditing ? 'true' : 'false';
+}
+
 async function api(path, body) {
+  if (body && !wifiEditing) {
+    const error = 'This page is view-only. Take editing control to refresh the kit before making changes.';
+    setMsg(error, true);
+    return {error};
+  }
   const opts = body
-    ? { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }
+    ? { method: 'POST', headers: {'Content-Type':'application/json', ...(wifiMode ? {'X-Strike-Editor':wifiEditorToken} : {})}, body: JSON.stringify(body) }
     : {};
   const r = await fetch('/api' + path, opts);
   if (r.status === 401 && document.documentElement.dataset.wifiEditor === 'true') location.assign('/wifi/pair');
-  return r.json();
+  const data = await r.json();
+  if (data.code === 'editor_read_only') updateWifiAccess({editing:false});
+  return data;
 }
 
 async function wifiDisconnect() {
@@ -1923,14 +1999,15 @@ function _confirmDone(ok) {
 let _extSel = null, _extRev = -1;
 
 function postSelect() {
+  if (!wifiEditing) return;
   const id = selectedMapPad || null;
   if (id === _extSel) return;
   _extSel = id;
-  fetch('/api/select', {method:'POST', headers:{'Content-Type':'application/json'},
-                        body: JSON.stringify({pad_id: id})}).catch(() => {});
+  api('/select', {pad_id:id}).catch(() => {});
 }
 
 setInterval(async () => {
+  if (!wifiEditing) return;
   try {
     const s = await (await fetch('/api/selected')).json();
     if (vmActive && s.rev !== vmRev) { vmRev = s.rev; vmRefreshManifest(); }
@@ -1959,6 +2036,9 @@ function setMsg(txt, err=false) {
 }
 
 function setDirtyState(dirty, cnt, labels) {
+  kitDirty = !!dirty;
+  if (dirty) saveFeedback = '';
+  updateSaveState();
   undoCount = cnt != null ? cnt : undoCount;
   if (labels !== undefined) undoLabels = labels;
   const badge = document.getElementById('dirty-badge');
@@ -2184,6 +2264,7 @@ async function loadKitList() {
 // Shared post-load state application: used by openKit, drag-drop .skt loading,
 // and boot-time rehydration from /api/session.
 function applyKitData(data, path, opts) {
+  saveFeedback = '';
   const {dirty = false, undoCount = 0, historyLabels = []} = opts || {};
   kitName       = data.name;
   pads          = data.pads;
@@ -4123,6 +4204,7 @@ let _autoSnapTimer = null;
 function scheduleAutoSnapshot() {
   if (_autoSnapTimer) clearTimeout(_autoSnapTimer);
   _autoSnapTimer = setTimeout(() => {
+    if (!wifiEditing) return;
     _autoSnapTimer = null;
     api('/snapshot', {kind: 'auto'}).then(() => {
       if (document.getElementById('tm-modal').classList.contains('open')) loadTimeMachine();
@@ -4636,6 +4718,7 @@ async function runTemplate(name) {
   setMsg(`Running template ${name}…`);
   const data = await api('/run_template', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kitName       = data.name;
   pads          = data.pads;
   libSavePath   = data.lib_save_path || '';
@@ -5119,12 +5202,7 @@ async function createInstrument() {
     }
 
     prog.textContent = 'Creating instrument…';
-    const resp = await fetch('/api/import_instrument', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({category, name, mode, normalize, auto_map, wavs}),
-    });
-    const data = await resp.json();
+    const data = await api('/import_instrument', {category, name, mode, normalize, auto_map, wavs});
     if (data.error) {
       prog.style.color  = '#e08080';
       prog.textContent  = 'Error: ' + data.error;
@@ -5150,7 +5228,13 @@ async function createInstrument() {
 // ── Save ──────────────────────────────────────────────────────────────────────
 async function _doSave(path) {
   if (!path) { setMsg('No kit loaded', true); return; }
-  const data = await api('/save', {path});
+  const savingToLibrary = path === libSavePath;
+  let data;
+  try { data = await api('/save', {path}); }
+  catch {
+    setMsg('Save could not be confirmed. Check the computer connection before trying again.', true);
+    return;
+  }
   if (data.error) { setMsg(data.error, true); return; }
   if (data.kits) {
     kits = data.kits;
@@ -5159,8 +5243,9 @@ async function _doSave(path) {
     if (data.sd_save_path)  sdSavePath  = data.sd_save_path;
     renderKitList();
   }
+  saveFeedback = savingToLibrary ? 'Saved to library · Deploy to update the module' : 'Saved to selected path';
   setDirtyState(false, null);
-  setMsg(data.message);
+  setMsg(savingToLibrary ? 'Saved to the computer library. The module has not been updated.' : data.message);
 }
 async function saveToLibrary() { await _doSave(libSavePath); }
 async function saveCustom() {
@@ -5295,7 +5380,7 @@ async function runDeploy() {
     const data = await api('/deploy', {});
     if (data.error) throw new Error(data.error);
     setDeployStage('transfer', 'done'); setDeployStage('verify', 'done');
-    body.innerHTML = `<div class="deploy-result"><strong>Module deployment verified</strong><p>${escHtml(data.message)}<br>`
+    body.innerHTML = `<div class="deploy-result"><strong>Copied to user card and verified</strong><p>Reload this kit on the Strike to hear your changes.</p><p>${escHtml(data.message)}<br>`
       + `${data.copied_files} custom asset${data.copied_files === 1 ? '' : 's'} copied (${formatDeployBytes(data.copied_bytes)}).`
       + (data.backup_path ? `<br>Previous module copy backed up locally: ${escHtml(data.backup_path)}` : '') + '</p></div>';
     kits = data.kits || kits;
@@ -5303,6 +5388,7 @@ async function runDeploy() {
     sdSavePath = data.sd_save_path || sdSavePath;
     state_kitPath = libSavePath;
     document.getElementById('save-path').value = libSavePath;
+    saveFeedback = 'Deployed and verified · Reload the kit on the Strike';
     setDirtyState(false, null);
     renderKitList();
     setMsg(data.message);
@@ -5312,7 +5398,7 @@ async function runDeploy() {
   } catch (err) {
     setDeployStage('transfer', 'failed'); setDeployStage('verify', '');
     body.innerHTML = `<div class="deploy-issues"><div class="deploy-issue blocker"><i></i><div><strong>Deployment stopped</strong><span>${escHtml(err.message)}</span></div></div></div>`;
-    document.getElementById('deploy-action-note').textContent = 'The kit was not published. Reconnect the card and run preflight again.';
+    document.getElementById('deploy-action-note').textContent = 'Deployment could not be confirmed. Some files may have been copied. Check the connection and run preflight again before retrying.';
   } finally {
     deployBusy = false;
     refresh.disabled = false; cancel.disabled = false;
@@ -5334,6 +5420,7 @@ async function confirmNewKit() {
   cancelNewKit();
   const data = await api('/new_kit', {name});
   if (data.error) { setMsg(data.error, true); return; }
+  saveFeedback = '';
   kits          = data.kits;
   kitName       = data.name;
   pads          = data.pads;
@@ -5363,25 +5450,51 @@ async function confirmNewKit() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function checkStatus() {
-  const s = await api('/status');
-  const parts = [];
-  if (s.user_mounted)   parts.push('&#x1F4BE; User: ' + s.user_path);
-  else                  parts.push('&#x26A0; User card NOT mounted');
-  if (s.preset_mounted) parts.push('&#x1F4C0; Preset: ' + s.preset_path + ' (read-only)');
-  const volEl = document.getElementById('vol-status');
-  volEl.innerHTML = parts.join(' \xB7 ');
-  volEl.title = 'Cards are identified by their content, not their name. '
-    + 'Saves only ever go to the user card; the factory preset card is never written.';
-  const hint = document.getElementById('save-hint');
-  if (hint) {
-    const sep = (s.user_path || '').includes('\\') ? '\\' : '/';
-    hint.textContent = s.user_mounted
-      ? `Save to ${s.user_path}${sep}Kits${sep} to write back to the user card. Factory presets are never touched.`
-      : 'Mount the user card to save back to SD.';
+  if (window.VIEWER) return;
+  try {
+    const s = await api('/status');
+    if (s.error) throw new Error(s.error);
+    connectionInfo = s;
+    renderConnectionStatus();
+  } catch {
+    connectionInfo = null;
+    renderConnectionStatus();
   }
+  const hint = document.getElementById('save-hint');
+  if (hint) hint.textContent = 'Save to library keeps a copy on the computer. Deploy to Module checks and copies the kit to the user card. A custom path is on the computer, even when using an iPad.';
+}
+
+function renderConnectionStatus() {
+  const s = connectionInfo;
+  const host = document.getElementById('connection-host');
+  host.textContent = s ? (wifiMode ? 'Computer connected over Wi-Fi' : 'Local editor connected') : 'Computer connection lost';
+  host.dataset.state = s ? 'ready' : 'missing';
+  for (const [id, label, mounted] of [['user', 'User card', s?.user_mounted], ['factory', 'Factory card', s?.preset_mounted]]) {
+    const el = document.getElementById('connection-' + id);
+    el.textContent = label + ': ' + (!s ? 'unknown' : mounted ? (id === 'factory' ? 'read-only' : 'available') : 'not detected');
+    el.dataset.state = !s ? '' : mounted ? 'ready' : 'missing';
+  }
+  document.getElementById('connection-computer-detail').textContent = s
+    ? (wifiMode ? 'Your browser is connected to ' + location.host + '. USB and files stay on that computer.' : 'The editor and library are on this computer.')
+    : 'Keep the editor running on the USB computer. Reconnect to the same network, then choose Refresh connection.';
+  document.getElementById('connection-library-detail').textContent = s?.library_path || 'Library location unavailable until the computer reconnects.';
+  document.getElementById('connection-user-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.user_mounted
+    ? 'Available at ' + s.user_path + '. Deploy checks the destination before copying.'
+    : 'Connect the powered-on Strike by USB with its user card inserted. If the module sees the card but the computer does not, check the computer’s mounted disks. You can keep editing the library.';
+  document.getElementById('connection-factory-detail').textContent = !s ? 'Card status is unknown while the computer is unreachable.' : s.preset_mounted
+    ? 'Available at ' + s.preset_path + '. Factory content is never written by the editor.'
+    : 'Factory sounds may still work from your saved library. Use Activate factory card to expose the card, then refresh.';
+  document.getElementById('connection-activate').hidden = !s || !!s.preset_mounted;
+  document.getElementById('vol-status').textContent = '';
+}
+
+async function openConnectionDetails() {
+  document.getElementById('connection-dialog').showModal();
+  await checkStatus();
 }
 
 (async () => {
+  await initWifiEditor();
 
   // Wire up SVG drag listeners once (they survive innerHTML replacements)
   const svgEl = document.getElementById('drum-svg');
@@ -5450,12 +5563,7 @@ async function checkStatus() {
       const u8   = new Uint8Array(buf);
       let bin = '';
       for (let j = 0; j < u8.length; j += 8192) bin += String.fromCharCode(...u8.subarray(j, j + 8192));
-      const resp = await fetch('/api/load_bytes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify({filename: file.name, data: btoa(bin)}),
-      });
-      const data = await resp.json();
+      const data = await api('/load_bytes', {filename:file.name, data:btoa(bin)});
       if (data.error) { setMsg(data.error, true); return; }
       applyKitData(data, '', {dirty: true});
       setMsg(data.message);
@@ -5597,6 +5705,7 @@ async function checkStatus() {
       document.getElementById('save-lib-btn').disabled = false;
       document.getElementById('save-path').value = libSavePath;
     }
+    setDirtyState(true);
     setMsg(`Kit name set to ${kitName} — save to apply`);
   });
 
@@ -5636,9 +5745,17 @@ async function checkStatus() {
   renderPatchPanel();
   renderDrumMap();
 
+  // Poll ownership cheaply; card discovery is explicit to avoid repeatedly
+  // probing the Strike's intermittently slow storage.
+  if (wifiMode) setInterval(() => checkWifiAccess().catch(() => {
+    updateWifiAccess({editing:false});
+    connectionInfo = null;
+    renderConnectionStatus();
+  }), 3000);
+
   // Auto-save every 60 s while there are unsaved changes
   setInterval(async () => {
-    if (undoCount > 0) await api('/autosave', {});
+    if (wifiEditing && undoCount > 0) await api('/autosave', {});
   }, 60000);
 
   // Check for crash-recovery autosaves from previous sessions
