@@ -11248,6 +11248,7 @@ class Handler(BaseHTTPRequestHandler):
                        '/midi/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                        '/midi/core.js': ('core.js', 'text/javascript; charset=utf-8'),
                        '/midi/storage.js': ('storage.js', 'text/javascript; charset=utf-8'),
+                       '/midi/host.js': ('host.js', 'text/javascript; charset=utf-8'),
                        '/midi/styles.css': ('styles.css', 'text/css; charset=utf-8')}
         if path in midi_assets:
             filename, content_type = midi_assets[path]
@@ -12222,6 +12223,14 @@ class _Server(ThreadingHTTPServer):
     # connection (macOS raises EADDRINUSE). Disable it there; the explicit
     # TIME_WAIT rebind it enables on POSIX doesn't apply to Windows anyway.
     allow_reuse_address = platform.system() != 'Windows'
+
+    def server_close(self):
+        try:
+            super().server_close()
+        finally:
+            close_midi = getattr(self.RequestHandlerClass, 'close_midi', None)
+            if close_midi:
+                close_midi()
 
 
 def main():

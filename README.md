@@ -26,8 +26,10 @@ everything it doesn't touch.
 MIDI input, save/import sessions, inspect velocity distributions, compare takes and
 export JSON, CSV or a report. Visual replay sends nothing to your module. Includes a
 synthetic demo; no Strike kit is needed. Sessions stay in this browser, with explicit
-Save and portable JSON export. Live capture needs Web MIDI on the USB computer;
-iPad/Wi-Fi can analyse imported sessions. [Toolkit guide and limits](docs/MIDI_TOOLKIT.md).
+Save and portable JSON export. Capture directly with Web MIDI, or use **Wi-Fi host
+computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
+and the browser receives it live. Host capture needs the optional MIDI input package;
+see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 
 Requirements: **Python 3.10+**. The application uses only the standard library, so there is
 nothing to `pip install`.

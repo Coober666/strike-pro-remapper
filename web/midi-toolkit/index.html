@@ -6,9 +6,12 @@
   <div class="intro"><div><h1>See what your drums send.</h1><p>Record a take. Inspect the notes. Compare your next one.</p></div><button id="demo">Try a demo</button></div>
   <p id="status" role="status" aria-live="polite">Choose a MIDI input to record, or import a session to explore.</p>
   <div class="workbench"><aside aria-label="Capture and saved sessions">
-    <section><h2>Capture</h2><p id="support">Checking MIDI support…</p><button id="connect">Connect MIDI input</button>
+    <section><h2>Capture</h2>
+      <label for="capture-source">USB connection</label><select id="capture-source"><option value="browser">This computer / browser</option><option value="host" id="host-option" hidden>Wi-Fi host computer</option></select>
+      <p id="support">Checking MIDI support…</p><button id="connect">Connect MIDI input</button>
       <label for="input">Input</label><select id="input" disabled><option value="">No input selected</option></select>
       <div class="buttons"><button id="record" class="primary" disabled>Record</button><button id="pause" disabled>Pause</button><button id="stop" disabled>Stop</button></div>
+      <div id="host-recovery" hidden><p class="fine">The host keeps this take for 10 minutes after stopping. Save/export on this device before releasing its host copy.</p><div class="buttons"><button id="host-recover">Recover host take</button><button id="host-release">Release host copy</button><button id="host-forget">Forget expired connection</button></div></div>
       <p class="fine">Channel messages only. No SysEx. Up to 20 active minutes or 50,000 events. Paused time is excluded.</p>
     </section>
     <section><h2>Saved sessions</h2><p class="fine">These belong to this browser and address. Export JSON for a backup or another device.</p><div id="sessions"></div>

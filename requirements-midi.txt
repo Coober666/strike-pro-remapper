@@ -1,0 +1,2 @@
+# Optional host MIDI input; the editor itself remains standard-library-only.
+python-rtmidi==1.5.8

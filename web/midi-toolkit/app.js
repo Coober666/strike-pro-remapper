@@ -1,24 +1,48 @@
 import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, summarize, compare, demoSession, exportCSV, report} from './core.js';
 import {listSessions, readSession, saveSession, deleteSession} from './storage.js';
+import {HostTake} from './host.js';
 const $ = id => document.getElementById(id);
 let current = newSession(), savedId = null, dirty = false, mode = 'ready', access = null, selected = null;
 let elapsed = 0, started = 0, playhead = 0, playing = false, playStart = 0, playFrom = 0, reference = null;
 let lastDraw = 0, drawNeeded = true, storageBusy = false;
 const setStatus = (text, error=false) => { $('status').textContent=text; $('status').classList.toggle('error', error); };
-const active = () => mode === 'recording' || mode === 'paused';
+const active = () => ['recording','paused','syncing'].includes(mode);
+const hostMode = () => $('capture-source').value === 'host';
+const hostAvailable = document.documentElement.dataset.hostMidi === 'true';
+const host = new HostTake((session, state) => {
+  if (session) {
+    const name=current.name;
+    current=session; savedId=null; dirty=true;
+    if (name !== 'Untitled capture') current.name=name;
+    $('name').value=current.name; elapsed=current.durationMs; playhead=current.durationMs;
+    $('seek').max=String(Math.max(1,current.durationMs));
+  }
+  if (state) mode=['recording','paused','syncing'].includes(state) ? state : 'ready';
+  drawNeeded=true; controls();
+  if (state && state !== 'recording') render();
+},setStatus);
 const time = () => Math.min(MAX_DURATION, elapsed + (mode === 'recording' ? performance.now()-started : 0));
 function controls() {
-  $('record').disabled = active() || !selected || selected.state !== 'connected' || storageBusy;
-  $('pause').disabled = !active(); $('pause').textContent = mode === 'paused' ? 'Resume' : 'Pause';
-  $('stop').disabled = !active(); $('connect').disabled = active() || storageBusy;
-  $('input').disabled = active() || !access || storageBusy;
-  for (const id of ['demo','import']) $(id).disabled = active() || storageBusy;
-  for (const id of ['save','json','csv','report','play','seek']) $(id).disabled = active() || !current.events.length || storageBusy;
+  const busy=storageBusy || host.busy, held=hostMode() && !!host.id;
+  $('record').disabled = active() || !selected || selected.state !== 'connected' || busy || held;
+  $('pause').disabled = !['recording','paused'].includes(mode) || busy;
+  const pauseLabel=mode === 'paused' ? 'Resume' : 'Pause';
+  if ($('pause').textContent !== pauseLabel) $('pause').textContent=pauseLabel;
+  $('stop').disabled = !active() || busy; $('connect').disabled = active() || busy || held;
+  $('input').disabled = active() || (!hostMode() && !access) || busy || held;
+  $('capture-source').disabled=active() || busy || held;
+  for (const id of ['demo','import']) $(id).disabled = active() || busy || held;
+  for (const id of ['save','json','csv','report','play','seek']) $(id).disabled = active() || !current.events.length || busy;
   $('compare').disabled = active() || storageBusy;
   $('name').disabled = storageBusy;
-  $('state').textContent = mode === 'recording' ? 'Recording' : mode === 'paused' ? 'Paused' : dirty ? 'Not saved' : savedId ? 'Saved in this browser' : 'Ready';
-  $('play').textContent = playing ? 'Pause replay' : 'Replay visually';
-  for (const b of $('sessions').querySelectorAll('button')) b.disabled = active() || storageBusy;
+  $('state').textContent = mode === 'syncing' ? 'Receiving host take' : mode === 'recording' ? 'Recording' : mode === 'paused' ? 'Paused' : dirty ? 'Not saved' : savedId ? 'Saved in this browser' : 'Ready';
+  const playLabel=playing ? 'Pause replay' : 'Replay visually';
+  if ($('play').textContent !== playLabel) $('play').textContent=playLabel;
+  for (const b of $('sessions').querySelectorAll('button')) b.disabled = active() || busy || held;
+  $('host-recovery').hidden=!held;
+  $('host-recover').disabled=busy || active();
+  $('host-release').disabled=busy || active() || !host.connected;
+  $('host-forget').disabled=busy || active() || host.connected;
 }
 async function confirmAction(text, title='Replace this session?') {
   $('confirm-title').textContent=title;
@@ -59,6 +83,7 @@ function stopCapture(reason='Capture stopped. Save this session or export a copy
   drawNeeded=true; controls(); render(); setStatus(reason);
 }
 function inputsChanged() {
+  if (hostMode()) return;
   let disconnected = false;
   if (selected && selected.state === 'disconnected') {
     disconnected = true;
@@ -72,27 +97,43 @@ function inputsChanged() {
   if (!active() && !disconnected) setStatus($('input').options.length > 1 ? 'Choose an input, then Record. Capture stays in this browser.' : 'No MIDI inputs found. Connect a module or MIDI interface; this list updates automatically.');
 }
 $('connect').onclick=async () => {
+  if (storageBusy) return;
+  storageBusy=true; controls();
   $('connect').disabled=true;
   try {
+    if (hostMode()) {
+      const inputs=await host.inputs();
+      $('input').replaceChildren(new Option('Choose a host MIDI input',''));
+      for (const port of inputs) $('input').add(new Option(port.name,port.id));
+      selected=null;
+      setStatus(inputs.length ? 'Choose the input plugged into the Wi-Fi host, then Record.' : 'No host MIDI inputs found. Connect the module to the host, then refresh inputs.');
+      return;
+    }
     if (!navigator.requestMIDIAccess || !window.isSecureContext) throw new Error('Live MIDI is unavailable here. Use a supporting browser on the USB computer at localhost. Import JSON or try the demo on this device.');
     if (!access) { access=await navigator.requestMIDIAccess({sysex:false}); access.addEventListener('statechange',inputsChanged); }
     inputsChanged();
   } catch (e) { setStatus('MIDI connection failed: '+e.message, true); }
-  finally { controls(); }
+  finally { storageBusy=false; controls(); }
 };
 $('input').onchange=() => {
-  if (selected) selected.removeEventListener('midimessage',onMessage);
+  if (selected?.removeEventListener) selected.removeEventListener('midimessage',onMessage);
+  if (hostMode()) { selected=$('input').value ? {id:$('input').value,state:'connected'} : null; controls(); return; }
   selected=access?.inputs.get($('input').value) || null;
   if (selected) selected.addEventListener('midimessage',onMessage);
   controls();
 };
 $('record').onclick=async () => {
   if (!selected || selected.state !== 'connected' || !await canReplace()) return;
+  if (hostMode()) {
+    current=newSession(); savedId=null; dirty=true; reference=null; playing=false; $('compare').value='';
+    await host.start(selected.id); return;
+  }
   current=newSession('Capture '+new Date().toLocaleTimeString(),(selected.name || 'Unnamed MIDI input').slice(0,160));
   savedId=null; dirty=true; reference=null; $('compare').value=''; elapsed=0; started=performance.now(); mode='recording'; playing=false; playhead=0;
   $('name').value=current.name; drawNeeded=true; controls(); render(); setStatus('Recording channel messages. Hit a pad to see its note and velocity.');
 };
 $('pause').onclick=() => {
+  if (hostMode()) { void host.command(mode === 'paused' ? 'resume' : 'pause'); return; }
   if (mode === 'recording') { elapsed=time(); mode='paused'; current.durationMs=Math.max(elapsed,current.events.at(-1)?.t || 0); setStatus('Paused. Incoming MIDI is ignored until you resume.'); }
   else if (mode === 'paused') {
     if (current.segments.at(-1) !== current.events.length) current.segments.push(current.events.length);
@@ -100,7 +141,25 @@ $('pause').onclick=() => {
   }
   controls(); drawNeeded=true;
 };
-$('stop').onclick=() => stopCapture();
+$('stop').onclick=() => hostMode() ? void host.command('stop') : stopCapture();
+$('host-recover').onclick=() => { playing=false; void host.command('poll'); };
+$('host-release').onclick=async () => {
+  if (await confirmAction('Release the temporary copy on the host? Events received in this page remain available to save or export.', 'Release host copy?')) await host.command('discard');
+};
+$('host-forget').onclick=async () => {
+  if (await confirmAction('Forget this connection? Keep the received events here. An unreachable host may still hold its take until it expires; this does not stop or delete it remotely.', 'Forget host connection?')) host.forget();
+};
+function captureSupport() {
+  const liveAvailable=!!navigator.requestMIDIAccess && window.isSecureContext;
+  $('support').textContent=hostMode() ? 'Plug the module into the host computer. Host timestamps keep Wi-Fi delay out of the measurements. Hiding this page stops capture; recover it when you return.' :
+    liveAvailable ? 'Connect a MIDI input on this computer. No kit needs to be loaded.' : 'Live MIDI is unavailable in this browser/context. Use the Wi-Fi host option on a paired page, or import JSON here.';
+  $('connect').hidden=!hostMode() && !liveAvailable;
+  $('connect').textContent=hostMode() ? 'Refresh host inputs' : 'Connect MIDI input';
+}
+$('capture-source').onchange=() => {
+  if (selected?.removeEventListener) selected.removeEventListener('midimessage',onMessage);
+  selected=null; $('input').replaceChildren(new Option('No input selected','')); captureSupport(); controls();
+};
 $('name').oninput=() => { current.name=$('name').value.trim() || 'Untitled capture'; dirty=true; controls(); };
 $('demo').onclick=() => replaceSession(demoSession,null,'Synthetic demo loaded. Save it to compare with another session.');
 $('import').onchange=async () => {
@@ -118,7 +177,7 @@ async function refreshSaved() {
       const row=document.createElement('div'); row.className='session';
       const open=document.createElement('button'); open.textContent=item.name;
       open.onclick=() => replaceSession(() => readSession(item.id),item.id,'Saved session loaded.');
-      const meta=document.createElement('small'); meta.textContent=`${item.count.toLocaleString()} messages${item.synthetic ? ' · Synthetic demo' : ''}`;
+      const meta=document.createElement('small'); meta.textContent=`${item.count.toLocaleString()} messages${item.synthetic ? ' · Synthetic demo' : ''}${item.captureStatus === 'partial' ? ' · Partial take' : ''}`;
       const remove=document.createElement('button'); remove.className='delete'; remove.textContent='Delete'; remove.setAttribute('aria-label','Delete '+item.name);
       remove.onclick=async () => {
         if (!await confirmAction(`Delete “${item.name}” from this browser? Export it first if you need a backup.`, 'Delete saved session?')) return;
@@ -163,7 +222,7 @@ function renderComparison() {
   $('comparison').replaceChildren();
   if (!reference) { $('comparison').textContent='Save another capture to compare the same channel and note.'; return; }
   const table=document.createElement('table'), caption=document.createElement('caption');
-  caption.textContent=`Reference: ${reference.name} · ${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ' · Synthetic demo' : ''}`; table.append(caption);
+  caption.textContent=`Reference: ${reference.name} · ${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ' · Synthetic demo' : ''}${reference.captureStatus === 'partial' ? ' · Partial take' : ''}`; table.append(caption);
   const head=document.createElement('tr'); ['Channel / note','Current hits','Reference hits','Mean velocity change'].forEach(t => cell(head,t,'th')); table.append(head);
   const pairs=compare(current,reference);
   for (const r of pairs.slice(0,128)) {
@@ -186,7 +245,7 @@ function render() {
   const stats=summarize(current);
   $('hits').textContent=stats.hits.toLocaleString(); $('events').textContent=current.events.length.toLocaleString();
   $('notes').textContent=String(stats.notes.length); $('duration').textContent=(current.durationMs/1000).toFixed(2)+' s';
-  $('origin').textContent=current.events.length ? `${current.synthetic ? 'Synthetic demo · ' : ''}${current.source} · ${current.createdAt}` : 'No events yet. Record an input, import a JSON session, or try the demo.';
+  $('origin').textContent=current.events.length ? `${current.captureStatus === 'partial' ? 'Partial take · ' : ''}${current.synthetic ? 'Synthetic demo · ' : ''}${current.source} · ${current.createdAt}` : 'No events yet. Record an input, import a JSON session, or try the demo.';
   const svg=$('timeline'); svg.replaceChildren(); const ns='http://www.w3.org/2000/svg';
   const width=Math.max(260,svg.clientWidth), right=width-20;
   svg.setAttribute('viewBox',`0 0 ${width} 180`);
@@ -215,13 +274,16 @@ function render() {
 }
 setInterval(() => {
   const now=performance.now();
-  if (mode === 'recording') { current.durationMs=time(); playhead=current.durationMs; drawNeeded=true; if (current.durationMs >= MAX_DURATION) stopCapture('20-minute capture limit reached. Save or export this session.'); }
+  if (mode === 'recording' && !hostMode()) { current.durationMs=time(); playhead=current.durationMs; drawNeeded=true; if (current.durationMs >= MAX_DURATION) stopCapture('20-minute capture limit reached. Save or export this session.'); }
   if (playing) { playhead=Math.min(current.durationMs,playFrom+(now-playStart)*Number($('speed').value)); renderPlayhead(); if (playhead >= current.durationMs) stopReplay(); }
   if (drawNeeded && now-lastDraw >= 500) { lastDraw=now; render(); }
 },100);
 window.addEventListener('resize',() => { drawNeeded=true; });
 window.addEventListener('beforeunload',e => { if (dirty || active()) { e.preventDefault(); e.returnValue=''; } });
-const liveAvailable=!!navigator.requestMIDIAccess && window.isSecureContext;
-$('support').textContent=liveAvailable ? 'Connect a MIDI input on this computer. No kit needs to be loaded.' : 'Live MIDI is unavailable in this browser/context. Capture on the USB computer using a supporting browser at localhost; import JSON here to inspect it. Wi-Fi does not forward host MIDI.';
-$('connect').hidden=!liveAvailable;
+$('host-option').hidden=!hostAvailable;
+if (hostAvailable) $('capture-source').value='host';
+document.addEventListener('visibilitychange',() => { if (document.hidden && hostMode()) host.suspend(); });
+window.addEventListener('pagehide',() => { if (hostMode()) host.suspend(); });
+captureSupport();
 render(); void refreshSaved();
+if (hostAvailable && host.id) setStatus('A host take may be available from this tab. Choose Recover host take to retrieve it.');

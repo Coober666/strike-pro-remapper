@@ -5,6 +5,7 @@ import argparse
 import shutil
 import sys
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,10 +39,28 @@ def main():
     # The paired service shares this synthetic library/session but never native MIDI.
     from strike_remapper.wifi_editor import Pairing, make_handler
     from strike_remapper.factory_bridge import Controller
+    from strike_remapper.midi_capture import MidiCapture
+    from strike_remapper.midi_input import ports_snapshot
+    class TestInput:
+        def inputs(self):
+            return ports_snapshot(['Simulated host drums'])
+
+        def open(self, port, receive, failed):
+            stopped = threading.Event()
+            def stream():
+                while not stopped.wait(.04):
+                    receive([0x99, 38, 84], time.monotonic())
+            thread = threading.Thread(target=stream, daemon=True)
+            thread.start()
+            class Reader:
+                def close(self):
+                    stopped.set()
+                    thread.join(timeout=1)
+            return Reader()
     wifi_port = args.port + 1
     pairing = Pairing('browser-wifi-pairing', f'127.0.0.1:{wifi_port}')
     controller = Controller(lambda selected=None: {'outputs': [{'id':'b' * 24, 'name':'Alesis Strike'}]}, lambda: True)
-    wifi = app._Server(('127.0.0.1', wifi_port), make_handler(app, pairing, controller))
+    wifi = app._Server(('127.0.0.1', wifi_port), make_handler(app, pairing, controller, MidiCapture(TestInput())))
     threading.Thread(target=wifi.serve_forever, daemon=True).start()
     print(f'browser test server listening on http://127.0.0.1:{args.port}', flush=True)
     try:

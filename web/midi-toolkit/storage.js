@@ -43,7 +43,7 @@ export async function saveSession(session, id) {
       existing.onsuccess = () => {
         if (!existing.result && count.result >= 25) { tx.abort(); return; }
         tx.objectStore('sessions').put({id, session:clean});
-        store.put({id, name:clean.name, synthetic:clean.synthetic, savedAt:new Date().toISOString(), count:clean.events.length});
+        store.put({id, name:clean.name, synthetic:clean.synthetic, captureStatus:clean.captureStatus, savedAt:new Date().toISOString(), count:clean.events.length});
       };
     };
   });

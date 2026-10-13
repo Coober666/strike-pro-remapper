@@ -15,7 +15,7 @@ export function message(data) {
 }
 export function newSession(name='Untitled capture', source='Unknown input', synthetic=false) {
   return {format:'drum-midi-session', version:1, name, source, synthetic,
-    createdAt:new Date().toISOString(), durationMs:0, segments:[0], events:[]};
+    createdAt:new Date().toISOString(), durationMs:0, segments:[0], captureStatus:'complete', events:[]};
 }
 export function validateSession(value) {
   const fail = reason => { throw new Error('Invalid session: ' + reason); };
@@ -25,6 +25,7 @@ export function validateSession(value) {
   }
   if (!Number.isFinite(Date.parse(value.createdAt))) fail('bad creation date.');
   if (typeof value.synthetic !== 'boolean') fail('missing demo/source marker.');
+  if (value.captureStatus !== undefined && !['complete','partial'].includes(value.captureStatus)) fail('bad capture status.');
   if (!Number.isFinite(value.durationMs) || value.durationMs < 0 || value.durationMs > MAX_DURATION) fail('duration exceeds 20 minutes.');
   if (!Array.isArray(value.events) || value.events.length > MAX_EVENTS) fail('too many events (maximum 50,000).');
   const segments=value.segments ?? [0];
@@ -39,7 +40,7 @@ export function validateSession(value) {
     return {t:e.t, data:parsed.bytes};
   });
   return {...newSession(value.name.trim(), value.source.trim(), value.synthetic), createdAt:value.createdAt,
-    durationMs:value.durationMs, segments:[...segments], events};
+    durationMs:value.durationMs, segments:[...segments], captureStatus:value.captureStatus || 'complete', events};
 }
 export function summarize(session, until=Infinity) {
   const groups = new Map(), histogram = Array(16).fill(0), controllers = new Map();
@@ -86,12 +87,12 @@ function csvCell(value) {
   return '"' + text.replaceAll('"', '""') + '"';
 }
 export function exportCSV(session) {
-  const rows = [['time_ms', 'segment', 'type', 'channel', 'data_1', 'data_2', 'input', 'synthetic']];
+  const rows = [['time_ms', 'segment', 'type', 'channel', 'data_1', 'data_2', 'input', 'synthetic', 'capture_status']];
   let segment=0;
   for (const [index,e] of session.events.entries()) {
     while (index >= (session.segments?.[segment+1] ?? Infinity)) segment++;
     const m = message(e.data);
-    rows.push([e.t, segment+1, m.type, m.channel, e.data[1], e.data[2] ?? '', session.source, session.synthetic]);
+    rows.push([e.t, segment+1, m.type, m.channel, e.data[1], e.data[2] ?? '', session.source, session.synthetic, session.captureStatus || 'complete']);
   }
   return rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 }
@@ -99,11 +100,12 @@ export function report(session, reference=null) {
   const s = summarize(session);
   const lines = ['Drum MIDI session report', session.name, `Input: ${session.source}`, `Created: ${session.createdAt}`,
     `Source: ${session.synthetic ? 'Synthetic demo' : 'Recorded/imported MIDI'}`, `Active duration: ${(session.durationMs/1000).toFixed(2)} s`,
+    `Capture status: ${session.captureStatus || 'complete'} (partial takes may be missing host events)`,
     `Channel messages: ${s.count}; note-on hits: ${s.hits}`, '', 'Channel / note: hits, mean velocity, range, standard deviation, shortest repeated-note interval'];
   for (const n of s.notes) lines.push(`Ch ${n.channel} / ${n.note}: ${n.hits}, ${n.mean.toFixed(1)}, ${n.min}–${n.max}, ${n.std.toFixed(1)}, ${n.minGapMs === null ? 'n/a' : n.minGapMs.toFixed(1)+' ms'}`);
   for (const c of s.controllers) lines.push(`Ch ${c.channel} CC ${c.controller}: ${c.count} messages, range ${c.min}–${c.max}, last ${c.last}`);
   if (reference) {
-    lines.push('', `Comparison with: ${reference.name} (${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ', synthetic demo' : ''})`, 'Channel:note — mean velocity change (current minus reference)');
+    lines.push('', `Comparison with: ${reference.name} (${(reference.durationMs/1000).toFixed(2)} s${reference.synthetic ? ', synthetic demo' : ''}${reference.captureStatus === 'partial' ? ', partial take' : ''})`, 'Channel:note — mean velocity change (current minus reference)');
     for (const r of compare(session, reference)) lines.push(`${r.key}: ${r.current && r.reference ? (r.current.mean-r.reference.mean).toFixed(1) : 'not present in both captures'}`);
   }
   lines.push('', 'Velocity is MIDI data, not measured audio loudness. Pause gaps are excluded from captured time.',
