@@ -163,11 +163,15 @@ class SetlistTests(unittest.TestCase):
             conn.request(method, route, json.dumps(data) if data is not None else None, headers or {})
             response = conn.getresponse(); return response.status, json.loads(response.read())
         self.assertEqual(request('GET')[0], 401)
+        self.assertEqual(request('GET', route='/api/support_report')[0], 401)
+        self.assertEqual(request('POST', {'action':'analyze'}, headers={'Origin':'http://'+pairing.authority}, route='/api/balance')[0], 401)
         cookie = pairing.pair('test-setlist-token').split(';')[0]
         headers = {'Cookie':cookie, 'Origin':'http://'+pairing.authority, 'Content-Type':'application/json'}
         self.assertEqual(request('GET', headers=headers)[0], 200)
         draft = {'action':'save', 'document':document('Original.skt')}
         self.assertEqual(request('POST', draft, headers)[0], 409)
+        self.assertEqual(request('POST', {'action':'apply'}, headers, '/api/balance')[0], 409)
+        self.assertEqual(request('GET', headers=headers, route='/api/support_report')[0], 200)
         token = request('POST', {}, headers, '/wifi/editor')[1]['token']
         headers['X-Strike-Editor'] = token
         self.assertEqual(request('POST', [], headers)[0], 400)

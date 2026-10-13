@@ -28,8 +28,8 @@ def wav_info(path):
     with wave.open(str(path), 'rb') as audio:
         channels, width, rate, frames = (audio.getnchannels(), audio.getsampwidth(),
                                          audio.getframerate(), audio.getnframes())
-        if channels not in (1, 2) or width not in (2, 3) or not 8000 <= rate <= 192000 or frames < 1:
-            raise ValueError('Expected nonempty mono/stereo 16/24-bit PCM WAV')
+        if channels not in (1, 2) or width not in (2, 3) or rate not in (44100, 48000, 96000) or frames < 1:
+            raise ValueError('Expected nonempty mono/stereo 16/24-bit PCM WAV at 44.1, 48 or 96 kHz')
         # Seek to the last declared frame to detect truncation without loading audio.
         audio.setpos(frames - 1)
         if len(audio.readframes(1)) != channels * width:

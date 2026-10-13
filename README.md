@@ -422,10 +422,14 @@ The browser suite runs the real embedded application against a throwaway library
 [`docs/ARCHITECTURE_STABILIZATION.md`](docs/ARCHITECTURE_STABILIZATION.md) for the phased
 stabilization and decomposition roadmap.
 
-## License
-
-[MIT](LICENSE)
+## Release preparation tools
 
 Setlist Builder now checks local sample WAV headers, reports missing/ambiguous assets, and exports a batch preview with shared files counted once. Factory sample sizes and destination card contents remain unverified; batch writes are disabled.
 
 Connection details shows the source revision and exports an allowlisted troubleshooting report without library paths, names, network addresses or credentials. Passing CI builds a source-beta ZIP and SHA-256 checksum as downloadable run artifacts (30-day retention).
+
+Kit Balance Assistant compares bounded local sample windows, flags relative same-group and A/B differences plus possible stacked-layer peak risk, and auditions current/proposed levels. Check individual suggestions to apply them as one Undo step. It never changes WAVs; estimates do not reproduce the module mixer. See [Kit Balance](docs/KIT_BALANCE.md).
+
+## License
+
+[MIT](LICENSE)

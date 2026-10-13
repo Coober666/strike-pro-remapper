@@ -46,3 +46,10 @@ For each candidate, also run the packaged-source smoke test and follow the
 
 Signed installers, automatic updates, and native mobile/direct-USB apps are not included
 in this beta. Do not describe simulated browser tests as device acceptance.
+
+## New remote preparation tools
+
+- [ ] On real iPad/iPhone, download a collection preview and troubleshooting report; confirm both can be found in Files.
+- [ ] Listen to representative real Strike kits before/after selected Kit Balance changes. Check missing local factory samples, mute behavior, A/B transitions and one-step Undo. Compare module playback after normal individual-kit deployment.
+- [ ] Download a successful CI source-beta artifact, verify its checksum, extract to a new folder and follow the first-run walkthrough on a separate library.
+- [ ] Batch deployment remains disabled until actual destination preflight and disposable-media interruption/restore acceptance are implemented.

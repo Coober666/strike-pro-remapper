@@ -28,6 +28,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
+from strike_remapper.balance import analyze as analyze_balance, selected_changes as balance_changes, preview as balance_preview
 from strike_remapper.support import report as support_report
 from strike_remapper.setlists import Store as SetlistStore, Conflict as SetlistConflict, MAX_BYTES as SETLIST_MAX_BYTES
 
@@ -1803,6 +1804,17 @@ def swap_pads(pad_id_a: str, pad_id_b: str):
     pad_a['layer_b'], pad_b['layer_b'] = pad_b['layer_b'], pad_a['layer_b']
     state['dirty']   = True
     state['message'] = f'Swapped {pad_id_a} ⇔ {pad_id_b}'
+
+
+def apply_balance(token, selected):
+    report = analyze_balance(LIBRARY_DIR, state)
+    changes = balance_changes(report, token, selected)
+    _push_history(f'Kit Balance: {len(changes)} selected layer adjustments')
+    for row in changes:
+        pad = next(p for p in state['pads'] if p['id'] == row['pad'])
+        pad['payload'][LA_LEVEL_OFF if row['layer'] == 'a' else LB_LEVEL_OFF] = row['suggested']
+    state['dirty'] = True
+    state['message'] = f'Applied {len(changes)} balance adjustments. Undo restores all of them; Save keeps the kit.'
 
 
 def batch_set_param(pad_ids: list, param: str, value: int):
@@ -4608,6 +4620,20 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 @media(max-width:700px) { .sl-layout { grid-template-columns:minmax(0,1fr); }.sl-shelf { border-right:0; border-bottom:1px solid #424a40; }.sl-shelf #sl-saved { flex-direction:row; flex-wrap:wrap; margin:8px 0; }.sl-main,.sl-head { padding:18px 14px; }.sl-row-fields { grid-template-columns:minmax(0,1fr); }.sl-row { grid-template-columns:34px minmax(0,1fr); gap:8px; }#sl-status { padding:12px 14px; } }
 body.viewer-mode .setlist-link { display:none !important; }
 
+#balance-dialog { width:min(900px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); margin:auto; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:20px; font-size:.85rem; line-height:1.5; }
+#balance-dialog h2 { font-size:1.35rem; margin-bottom:8px; }
+#balance-dialog button { min-height:44px; padding:8px 12px; font-size:.78rem; }
+#balance-status { margin:12px 0; padding:10px 12px; background:var(--raised); border-left:3px solid #b79a59; }
+.balance-method { color:var(--text-2); margin:12px 0; }
+.balance-method summary { cursor:pointer; min-height:36px; }
+.balance-actions { position:sticky; bottom:-20px; background:var(--panel); padding:12px 0; border-top:1px solid var(--border); }
+body:has(#balance-dialog[open]) { overflow:hidden; }
+.balance-row { border-top:1px solid var(--border); padding:14px 0; overflow-wrap:anywhere; }
+.balance-row p { margin:4px 0 8px; color:var(--text-2); }
+.balance-row small { display:block; margin-top:6px; color:var(--text-2); }
+.balance-row label { display:block; min-height:44px; }
+.balance-row input { width:20px; height:20px; vertical-align:middle; }
+#balance-dialog::backdrop { background:#0009; }
 </style>
 </head>
 <body data-workspace="pad">
@@ -4838,6 +4864,7 @@ body.viewer-mode .setlist-link { display:none !important; }
       <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
+      <button class="btn-secondary setlist-link" id="balance-open" onclick="openBalance()">Kit Balance</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
       <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
@@ -5025,6 +5052,16 @@ body.viewer-mode .setlist-link { display:none !important; }
   </section>
 
 </div>
+<dialog id="balance-dialog" aria-labelledby="balance-title">
+  <h2 id="balance-title">Kit Balance Assistant</h2>
+  <p>Check local samples for uneven layers. Listen first, then select the adjustments you want. This changes kit levels only.</p>
+  <p id="balance-status" role="status"></p><details class="balance-method"><summary>How these estimates work</summary><p id="balance-scope"></p></details><div id="balance-rows"></div>
+  <div class="sl-actions balance-actions">
+    <button class="btn-secondary" id="balance-analyze" onclick="balanceAnalyze()">Analyze local samples</button>
+    <button class="btn-primary" id="balance-apply" onclick="balanceApply()" disabled>Apply selected · one Undo</button>
+    <button class="btn-secondary" onclick="closeBalance()">Done</button>
+  </div>
+</dialog>
 <dialog id="setlist-dialog" aria-labelledby="sl-title">
   <header class="sl-head"><div><h2 id="sl-title">Setlist Builder</h2><p>Plan the show using saved library kits.</p></div><button type="button" onclick="slClose()" aria-label="Close Setlist Builder">Close</button></header>
   <div class="sl-layout">
@@ -6976,6 +7013,7 @@ function updateWifiAccess(data) {
   document.getElementById('wifi-take-control').hidden = wifiEditing;
   updateSaveState();
   if (document.getElementById('setlist-dialog')?.open) slControls();
+  if (document.getElementById('balance-dialog')?.open) balanceControls();
 }
 
 async function initWifiEditor() {
@@ -7205,6 +7243,7 @@ function slControls() {
   slEl('save').disabled=sl.busy || !wifiEditing;
   slEl('check').disabled=sl.busy || !wifiEditing || !sl.document?.entries.length;
   slEl('print').disabled=sl.busy || !sl.report;
+  slEl('export-preview').disabled=sl.busy || !sl.report;
   document.querySelectorAll('#sl-rows [data-move]').forEach(el => { const target=Number(el.dataset.row)+Number(el.dataset.move); el.disabled=sl.busy || target<0 || target>=sl.document.entries.length; });
 }
 async function slRequest(action, values={}) {
@@ -7245,6 +7284,70 @@ function slRows() {
     <button data-row="${i}" data-move="-1" aria-label="Move song ${i+1} up">Up</button><button data-row="${i}" data-move="1" aria-label="Move song ${i+1} down">Down</button>
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
+}
+let balanceReport=null, balanceBusy=false, balanceVoice=null;
+document.getElementById('balance-dialog').addEventListener('cancel',()=>{if(balanceVoice){balanceVoice.stop();balanceVoice=null;}});
+function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
+function balanceControls() {
+  document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
+  document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
+  document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
+}
+function closeBalance() { if(balanceVoice) {balanceVoice.stop(); balanceVoice=null;} document.getElementById('balance-dialog').close(); }
+function openBalance() {
+  if(window.VIEWER) return;
+  balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
+  balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
+  document.getElementById('balance-dialog').showModal();
+}
+async function balanceAnalyze() {
+  if(balanceBusy) return;
+  balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
+  try {
+    const report=await api('/balance',{action:'analyze'});
+    if(report.error) throw new Error(report.error);
+    balanceReport=report; document.getElementById('balance-scope').textContent=report.scope;
+    document.getElementById('balance-rows').innerHTML=report.rows.map((r,i)=>`<section class="balance-row">
+      <strong>${escHtml(r.label)} · Layer ${r.layer.toUpperCase()}</strong>
+      <p>${r.rms_db==null ? 'No audible measurement' : `RMS ${r.rms_db.toFixed(1)} dBFS · window peak ${r.peak_db.toFixed(1)} dBFS · ${r.sample_count} sample(s), highest velocity ${r.velocity}`} · Current level ${r.level}</p>
+      ${r.reasons.map(reason=>`<p>${escHtml(reason)}</p>`).join('')}
+      ${r.suggested!=null ? `<label><input type="checkbox" value="${i}" onchange="balanceControls()"> Apply level ${r.level} → ${r.suggested}</label>` : '<p>No adjustment suggested.</p>'}
+      ${r.sample ? `<button class="btn-secondary" onclick="balanceAudition(${i},false)">Listen current</button> ${r.suggested!=null ? `<button class="btn-secondary" onclick="balanceAudition(${i},true)">Listen proposed</button>` : ''}<small> First representative sample, 0.5-second window.</small>` : ''}
+      </section>`).join('')+report.notes.map(n=>`<p>${escHtml(n)}</p>`).join('');
+    balanceStatus(`${report.rows.length} assigned layers reviewed. Nothing changed. Select suggestions to apply.`);
+  } catch(error) {balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}
+  finally {balanceBusy=false; balanceControls();}
+}
+async function balanceAudition(index, proposed) {
+  const row=balanceReport?.rows[index]; if(!row) return;
+  try {
+    const AudioEngine=window.AudioContext || window.webkitAudioContext;
+    if(!AudioEngine) throw new Error('Audio preview is not supported by this browser. Audition on another browser before applying.');
+    if(!_blendCtx) _blendCtx=new AudioEngine();
+    if(_blendCtx.state==='suspended') await _blendCtx.resume();
+    const response=await fetch('/api/balance_preview?sample='+encodeURIComponent(row.sample));
+    if(!response.ok) throw new Error('Sample unavailable; analyze again.');
+    const buffer=await _blendCtx.decodeAudioData(await response.arrayBuffer());
+    if(!document.getElementById('balance-dialog').open) return;
+    if(balanceVoice) balanceVoice.stop();
+    const gain=_blendCtx.createGain(); gain.gain.value=previewVol*(proposed ? row.suggested : row.level)/127*row.instrument_level/127; gain.connect(_blendCtx.destination);
+    const voice=_blendCtx.createBufferSource(); voice.buffer=buffer; voice.connect(gain); balanceVoice=voice;
+    voice.onended=()=>{gain.disconnect();if(balanceVoice===voice) balanceVoice=null;}; voice.start();
+    balanceStatus(`Listening ${proposed ? 'proposed' : 'current'}: ${row.label}, Layer ${row.layer.toUpperCase()}. Kit unchanged.`);
+  } catch(error) {balanceStatus('Preview unavailable: '+error.message);}
+}
+async function balanceApply() {
+  if(balanceBusy || !balanceReport) return;
+  const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
+  if(!selected.length) return;
+  balanceBusy=true; balanceControls();
+  try {
+    const data=await api('/balance',{action:'apply',token:balanceReport.token,selected});
+    if(data.error) throw new Error(data.error);
+    pads=data.pads; setDirtyState(data.dirty,data.undo_count,data.history_labels); renderDrumMap(); renderPadDetail();
+    balanceReport=null; document.getElementById('balance-rows').textContent=''; balanceStatus(data.message); setMsg(data.message);
+  } catch(error) {balanceReport=null; balanceStatus(error.message+' Re-analyze before another attempt; an unconfirmed request is never retried.');}
+  finally {balanceBusy=false; balanceControls();}
 }
 function slExportPreview() {
   if(!sl.report) { slStatus('Run Check saved kits first.'); return; }
@@ -11483,6 +11586,19 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        if path == '/api/balance_preview':
+            try:
+                reference = parse_qs(parsed.query).get('sample', [''])[0]
+                data = balance_preview(LIBRARY_DIR, reference)
+                self.send_response(200)
+                self.send_header('Content-Type', 'audio/wav')
+                self.send_header('Content-Length', len(data))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception:
+                self.send_json({'error': 'Local preview unavailable'}, 400)
+            return
+
         if path == '/api/support_report':
             with STATE_LOCK:
                 self.send_json(support_report(Path(__file__).parent, state))
@@ -11869,6 +11985,24 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         path = urlparse(self.path).path
+        if path == '/api/balance':
+            try:
+                if not 0 < int(self.headers.get('Content-Length', 0)) <= 8192:
+                    raise ValueError('Balance request exceeds 8 KB')
+                body = self.read_json()
+                if not isinstance(body, dict):
+                    raise ValueError('Invalid balance request')
+                if body.get('action') == 'analyze':
+                    self.send_json(analyze_balance(LIBRARY_DIR, state))
+                elif body.get('action') == 'apply':
+                    apply_balance(body.get('token'), body.get('selected'))
+                    self.send_json({'message': state['message'], 'pads': self._pad_view(state['pads'], state['instruments']),
+                                    'dirty': state['dirty'], 'undo_count': len(state['history']), 'history_labels': _history_labels()})
+                else:
+                    raise ValueError('Unknown balance action')
+            except Exception as e:
+                self.send_json({'error': _friendly_error(e)}, 400)
+            return
         if path == '/api/setlists':
             try:
                 if not 0 < int(self.headers.get('Content-Length', 0)) <= SETLIST_MAX_BYTES:

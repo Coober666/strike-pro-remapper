@@ -238,6 +238,7 @@
       <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
+      <button class="btn-secondary setlist-link" id="balance-open" onclick="openBalance()">Kit Balance</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
       <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
@@ -425,6 +426,16 @@
   </section>
 
 </div>
+<dialog id="balance-dialog" aria-labelledby="balance-title">
+  <h2 id="balance-title">Kit Balance Assistant</h2>
+  <p>Check local samples for uneven layers. Listen first, then select the adjustments you want. This changes kit levels only.</p>
+  <p id="balance-status" role="status"></p><details class="balance-method"><summary>How these estimates work</summary><p id="balance-scope"></p></details><div id="balance-rows"></div>
+  <div class="sl-actions balance-actions">
+    <button class="btn-secondary" id="balance-analyze" onclick="balanceAnalyze()">Analyze local samples</button>
+    <button class="btn-primary" id="balance-apply" onclick="balanceApply()" disabled>Apply selected · one Undo</button>
+    <button class="btn-secondary" onclick="closeBalance()">Done</button>
+  </div>
+</dialog>
 <dialog id="setlist-dialog" aria-labelledby="sl-title">
   <header class="sl-head"><div><h2 id="sl-title">Setlist Builder</h2><p>Plan the show using saved library kits.</p></div><button type="button" onclick="slClose()" aria-label="Close Setlist Builder">Close</button></header>
   <div class="sl-layout">

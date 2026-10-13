@@ -103,6 +103,23 @@ def main():
     (OUT / 'synthetic_kit.skt').write_bytes(
         sr.build_skt(sr._KIT_BLOCK_TEMPLATE, pads, instruments))
 
+    # Distinct balance outliers with otherwise identical waveform shape.
+    balance_pads = []
+    balance_instruments = []
+    for index, amplitude in enumerate((12000, 12000, 1200, 30000)):
+        sample = f'Balance/{index}.wav'
+        (OUT / 'Balance').mkdir(exist_ok=True)
+        with wave.open(str(OUT / sample), 'wb') as audio:
+            audio.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+            audio.writeframes(b''.join(struct.pack('<h', amplitude if i % 2 else -amplitude) for i in range(24000)))
+        (OUT / f'Balance/{index}.sin').write_bytes(sr._build_sin([(sample, 1, 127, 1)]))
+        pid = sr.PAD_ORDER[index]
+        payload = sr._blank_payload(pid)
+        struct.pack_into('<H', payload, 4, index)
+        balance_pads.append({'id':pid, 'payload':payload, 'layer_a':index, 'layer_b':sr.NO_INSTRUMENT})
+        balance_instruments.append(f'Balance/{index}.sin')
+    (OUT / 'balance.skt').write_bytes(sr.build_skt(sr._KIT_BLOCK_TEMPLATE, balance_pads, balance_instruments))
+
     print(f'wrote {len(list(OUT.iterdir()))} fixtures to {OUT}')
 
 

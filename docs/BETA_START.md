@@ -93,3 +93,5 @@ Open Connection details to see the source revision. Export troubleshooting repor
 For a module-free editor check, create and save a blank kit, add it to a new Setlist, check saved kits and export its batch preview. An empty kit correctly asks for review. No deployment is expected. For a full sound check use a copied library.
 
 On GitHub, open a successful CI run and download its source-beta artifact. Extract the artifact wrapper and then the application ZIP. A pull-request artifact identifies its tested merge revision, not a release tag. The adjacent SHA-256 file verifies the ZIP; BETA-MANIFEST identifies the application inside. Artifacts expire after 30 days.
+
+With a copied local sound library, open a kit and Kit Balance. Analyze local samples, compare Listen current/Listen proposed, select one suggestion and Apply. Undo should restore it. Save remains a separate decision. Missing local samples should be reported without preventing other layers from being measured. [Measurement details](KIT_BALANCE.md).

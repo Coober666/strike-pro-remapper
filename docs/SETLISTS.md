@@ -35,9 +35,10 @@ plus `.skt`. Existing names, including case-only variants, cannot be overwritten
   and avoid reserved device names. Unsupported characters are removed in the preview;
   duplicate names after shortening/sanitizing are flagged. Numbering uses 001–128.
 
-Checks never read a card, enumerate devices, read WAV samples or replace the active kit.
-They do not verify sample completeness, total sample size, card space, existing card
-files or actual module playback. A local pass is not deployment approval. Printing shows
+Checks never read a card, enumerate devices or replace the active kit. Local WAV headers
+and declared audio lengths are checked; shared local file sizes are counted once.
+Factory sample completeness and sizes, card space, existing card files and actual module
+playback remain unverified. A local pass is not deployment approval. Printing shows
 the last check snapshot; run checks again after editing or copying kit files elsewhere.
 
 **Batch setlist deployment is not included.** Deploy individual kits through the normal
