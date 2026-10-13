@@ -96,7 +96,7 @@ class HostTests(unittest.TestCase):
         with patch.object(app, 'autosave_kit', side_effect=OSError('Disk full')):
             with self.assertRaises(OSError):
                 self.host.start(Path(self.tmp.name) / 'other', port=0)
-        self.assertEqual(self.host.library, Path(self.tmp.name))
+        self.assertEqual(self.host.library, Path(self.tmp.name).resolve())
         self.assertFalse((Path(self.tmp.name) / 'other').exists())
         self.host.stop()
         self.assertFalse(self.host.recovery_pending)

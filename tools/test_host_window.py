@@ -37,7 +37,7 @@ class WindowTests(unittest.TestCase):
         self.root.withdraw()
         self.root.attributes('-alpha', 0)
         self.tmp = tempfile.TemporaryDirectory()
-        self.library = Path(self.tmp.name) / 'library'
+        self.library = (Path(self.tmp.name) / 'library').resolve()
         self.config = Path(self.tmp.name) / 'StrikeRemapper/launcher.json'
         self.config.parent.mkdir()
         self.config.write_text(json.dumps({'library': str(self.library), 'address':'127.0.0.1'}))
