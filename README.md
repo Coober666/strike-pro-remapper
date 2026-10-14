@@ -40,6 +40,8 @@ see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 **Host setup check** reports missing MIDI support, driver errors and visible inputs.
 The launcher demo retains host MIDI access after Wi-Fi pairing; the host accepts
 parallel toolkit asset loads over the LAN.
+[Mac + Strike acceptance](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md) verifies live
+CoreMIDI capture and factory/user-card discovery; Windows hardware acceptance remains open.
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
