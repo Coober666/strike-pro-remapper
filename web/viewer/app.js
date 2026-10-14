@@ -4307,11 +4307,35 @@ function renderKitFx(d) {
 }
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
-function exportBundle() {
+let bundleExportBusy=false;
+async function exportBundle() {
   closeAllPopovers();
+  if(bundleExportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
+  bundleExportBusy=true;
   setMsg('Building bundle… (kit + instruments + samples)');
-  window.location = '/api/export_bundle';
+  try {
+    const response=await fetch('/api/export_bundle',{cache:'no-store'});
+    if(!response.ok) {
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error || `Export request failed (${response.status})`);
+    }
+    if(!response.headers.get('Content-Type')?.includes('application/zip')) throw new Error('Host did not return a ZIP bundle');
+    const blob=await response.blob();
+    const expected=Number(response.headers.get('Content-Length'));
+    if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
+    const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
+    const url=URL.createObjectURL(blob), link=document.createElement('a');
+    link.href=url; link.download=filename;
+    document.body.appendChild(link);
+    try { link.click(); }
+    finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+    const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
+    setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
+  } catch(error) {
+    setMsg(`Bundle export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { bundleExportBusy=false; }
 }
 
 let bundleImportBusy=false;

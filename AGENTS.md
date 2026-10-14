@@ -441,6 +441,16 @@ partial file; earlier completed files stay and ImportStopped reports the count. 
 is not a crash-atomic multi-file transaction. Cleanup failures identify the incomplete
 file; listing failures must not hide completed imports. Never auto-retry uploads.
 Tests: `tools/test_bundle_import.py` and bundle browser cases use disposable libraries.
+Export holds STATE_LOCK through archive construction, then releases it before network
+transfer. This serializes editor mutations, not changes made by external programs.
+Populate lazy inventory and prefer local edited SINs over shadow card inventory.
+Validate portable source references and reject linked children/case-ambiguous ZIP names;
+reuse importer size limits so completed exports can be imported. Card reads use
+read_card_bytes. Missing assets remain explicit in manifest.json and the HTTP warning
+count; never label an incomplete bundle a self-contained backup. The browser fetches
+the full ZIP before requesting a download, keeps errors in-page, suppresses duplicate
+clicks and never retries automatically. Use RFC 5987 UTF-8 download filenames and
+no-store responses. Tests: tools/test_bundle_export.py and browser bundle export cases.
 
 Editing: `sin_detail()/sin_update()/sin_revert()` + `/api/sin_detail|sin_update|sin_revert`.
 Edits always target the library copy (`_sin_abs` prefers `library/instruments/` because a

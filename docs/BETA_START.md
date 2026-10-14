@@ -70,6 +70,26 @@ open until each item has evidence. A passing automated test is not hardware acce
 Use [the hands-on sessions](HANDS_ON_ACCEPTANCE.md) to test one device/workflow at a
 time and record actual results.
 
+## Exporting a kit bundle
+
+Choose **Export kit bundle (.zip)** in the editor to download the current kit, including unsaved
+edits, with the instruments and samples the host can find. Building the ZIP briefly
+queues editor changes; network transfer does not hold the editor lock. Edited library
+instruments take priority over matching card copies.
+
+The editor stays open if building or downloading fails. Read the error, fix the missing
+connection or unreadable file, then retry Export. Repeated clicks during a pending export
+do not start extra requests. The download message means the browser was asked to save
+the file: check its Downloads list (or Files on iPad/iPhone) for completion.
+
+A missing-assets warning means the ZIP is incomplete. Open its `manifest.json` for the
+missing instrument/sample references, make those assets available, and export again.
+Keep the original library backup until you have imported into a separate library and
+checked the result. Bundles do not contain your full library, snapshots or MIDI sessions.
+Exports use the same 512 MiB ZIP/file, 16 MiB instrument, 2 GiB total and 10,000-entry
+limits as imports. Files changed by another program during export are not a consistent
+filesystem snapshot; avoid editing the library externally during export.
+
 ## Importing a kit bundle
 
 Use a copied library for your first import. The importer accepts kit bundles and

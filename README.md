@@ -260,8 +260,11 @@ double-click.
 - Edits write to your local library only; factory presets stay read-only; one-click revert
 
 **Sharing & repair**
-- **Kit bundles** — export any kit as a self-contained `.zip` (kit + every referenced
-  instrument + every sample + manifest). Import contained assets into another local
+- **Kit bundles** — export the current kit, including unsaved edits, plus available
+  instruments and samples in a `.zip`. Missing assets are listed in the manifest and
+  reported beside the download; an incomplete bundle is not a complete backup.
+  Export uses a consistent editor state and prefers edited library instruments.
+  Download errors keep the editor open for retry. Import contained assets into another local
   library, then review missing dependencies and conflicts before deployment. Existing
   library files are never overwritten. Supported assets are validated and staged before
   copying; corrupt archives and unsafe paths fail before import. A later disk failure

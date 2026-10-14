@@ -233,3 +233,35 @@ preservation, disk-full/cleanup/listing failures and repeat imports. Four focuse
 Chromium/WebKit cases passed, including successful host import with its response lost.
 Lint and standalone viewer checks passed. All libraries and ZIPs were disposable;
 the live Mac, module and cards were untouched.
+
+## Bundle export and download recovery
+
+All ten 6cfe2d6 checks passed, including Linux's actual-symlink import regression.
+Export review reproduced omitted assets before lazy inventory loaded, old inventory
+copies shadowing edited library instruments, and a competing editor mutation entering
+between kit serialization and dependency collection. A traversal sample reference also
+escaped its source directory in the disposable fixture.
+
+Export now holds the editor state lock through archive construction, prefers local SIN
+edits and validates source references. It reuses import size limits and rejects ambiguous
+archive names. File reads use the existing transient-media retry helper. Network transfer
+occurs after releasing the lock. This is consistency against editor mutations, not an
+atomic filesystem snapshot against external programs changing library files.
+
+The browser fetches the ZIP without navigating away, catches HTTP/body/network failures,
+checks response type and length, suppresses duplicate clicks and permits explicit retry.
+UTF-8 filenames survive the download. Missing dependencies remain in manifest.json and
+now produce an in-page warning. Download requested means browser handoff, not proof that
+the user saved it to Files or completed a backup.
+
+Seven Python cases passed: exact unsaved-kit/SIN/WAV restoration into a fresh library,
+repeat import, lazy inventory, edited-copy priority, deterministic concurrent editing,
+missing dependencies/read failures, unsafe references, limits/case collisions, and a
+real loopback HTTP disconnect during an 8 MiB response. That disconnect left the lock
+available and a subsequent session request usable without changing the kit.
+Six focused Chromium/WebKit cases passed for errors, partial body, duplicate requests,
+retry, paired Unicode downloads and missing-assets warnings; downloaded bytes matched
+the host response. The first paired assertion expected one no-store directive, but the
+Wi-Fi wrapper also adds it; corrected the assertion to check directive membership.
+Import regression tests, lint, viewer extraction and standalone viewer validation passed.
+These browser results do not establish physical iPad/iPhone Files acceptance.

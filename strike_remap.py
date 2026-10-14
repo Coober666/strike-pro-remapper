@@ -1626,18 +1626,40 @@ def kit_fx_view() -> dict:
 # .sin internal WAV strings keep resolving via _sin_search_roots().
 
 def export_bundle() -> tuple:
+    # Keep kit bytes and referenced assets consistent with editor mutations. Release
+    # before the handler sends bytes: a slow/disconnected client must not hold edits.
+    with STATE_LOCK:
+        return _export_bundle_locked()
+
+
+def _export_bundle_locked() -> tuple:
     """Bundle the current kit (incl. unsaved edits) → (zip_bytes, filename)."""
     import zipfile, datetime
+    from strike_remapper import bundle_import as limits
     if not state.get('kit_path'):
         raise ValueError('No kit loaded')
     kit_name = Path(state['kit_path']).name
+    def portable(reference):
+        try:
+            return '/'.join(limits.parts(reference))
+        except ValueError:
+            raise ValueError(f'Unsafe or non-portable bundle reference: {reference}') from None
+
+    def source(root, reference):
+        try:
+            return limits.destination(root, '', reference)
+        except ValueError:
+            raise ValueError(f'Unsafe or linked bundle source: {reference}') from None
+
+    portable(kit_name)
+    _ensure_avail()
     kit_raw  = build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail'])
 
     used = []
     for pad in state['pads']:
         for key in ('layer_a', 'layer_b'):
             idx = pad.get(key)
-            if idx is not None and idx != NO_INSTRUMENT and idx < len(state['instruments']):
+            if idx is not None and idx != NO_INSTRUMENT and 0 <= idx < len(state['instruments']):
                 rel = state['instruments'][idx]
                 if rel not in used:
                     used.append(rel)
@@ -1645,16 +1667,30 @@ def export_bundle() -> tuple:
     roots = _sin_search_roots()
     sins, wavs, missing_sins, missing_wavs = {}, {}, [], []
     for rel in used:
-        p = state['avail'].get(rel)
+        normalized = portable(rel)
+        local = source(LIBRARY_DIR / 'instruments', normalized)
+        p = local if local.is_file() else state['avail'].get(rel)
         if not p:
             missing_sins.append(rel)
             continue
-        data = Path(p).read_bytes()
-        sins[rel] = data
+        p = Path(p)
+        p = source(p.parents[len(normalized.split('/')) - 1], normalized)
+        if p.stat().st_size > limits.MAX_SIN_BYTES:
+            raise ValueError('Instrument exceeds the 16 MiB bundle limit')
+        data = read_card_bytes(p)
+        if len(data) > limits.MAX_SIN_BYTES:
+            raise ValueError('Instrument exceeds the 16 MiB bundle limit')
+        sins[normalized] = data
         for wav_rel in parse_sin_all_wavs(data):
+            wav_rel = portable(wav_rel)
             if wav_rel in wavs or wav_rel in missing_wavs:
                 continue
-            wp = _resolve_wav(wav_rel, roots)
+            wp = None
+            for root in roots:
+                candidate = source(root, wav_rel)
+                if candidate.is_file():
+                    wp = candidate
+                    break
             if wp:
                 wavs[wav_rel] = wp
             else:
@@ -1668,13 +1704,30 @@ def export_bundle() -> tuple:
         'missing': {'instruments': missing_sins, 'samples': missing_wavs},
     }
     buf = io.BytesIO()
+    total = 0
+    names = set()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr('manifest.json', json.dumps(manifest, indent=2))
-        zf.writestr(f'kit/{kit_name}', kit_raw)
+        def add(name, data):
+            nonlocal total
+            total += len(data)
+            if name.casefold() in names:
+                raise ValueError('Case-ambiguous paths in bundle')
+            names.add(name.casefold())
+            if len(data) > limits.MAX_FILE_BYTES or total > limits.MAX_TOTAL_BYTES or len(names) > limits.MAX_ENTRIES:
+                raise ValueError('Bundle exceeds import limits. Export a smaller kit.')
+            zf.writestr(name, data)
+            if buf.tell() > limits.MAX_ZIP_BYTES:
+                raise ValueError('Bundle exceeds the 512 MiB ZIP limit. Export a smaller kit.')
+        add('manifest.json', json.dumps(manifest, indent=2).encode('utf-8'))
+        add(f'kit/{kit_name}', kit_raw)
         for rel, data in sins.items():
-            zf.writestr(f'instruments/{rel}', data)
+            add(f'instruments/{rel}', data)
         for wav_rel, wp in wavs.items():
-            zf.write(wp, f'samples/{wav_rel}')
+            if wp.stat().st_size > limits.MAX_FILE_BYTES:
+                raise ValueError('Sample exceeds the 512 MiB bundle limit')
+            add(f'samples/{wav_rel}', read_card_bytes(wp))
+    if len(buf.getvalue()) > limits.MAX_ZIP_BYTES:
+        raise ValueError('Bundle exceeds the 512 MiB ZIP limit. Export a smaller kit.')
     fname = kit_name.rsplit('.', 1)[0] + '.strike-bundle.zip'
     return buf.getvalue(), fname
 
@@ -9350,11 +9403,35 @@ function renderKitFx(d) {
 }
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
-function exportBundle() {
+let bundleExportBusy=false;
+async function exportBundle() {
   closeAllPopovers();
+  if(bundleExportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
+  bundleExportBusy=true;
   setMsg('Building bundle… (kit + instruments + samples)');
-  window.location = '/api/export_bundle';
+  try {
+    const response=await fetch('/api/export_bundle',{cache:'no-store'});
+    if(!response.ok) {
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error || `Export request failed (${response.status})`);
+    }
+    if(!response.headers.get('Content-Type')?.includes('application/zip')) throw new Error('Host did not return a ZIP bundle');
+    const blob=await response.blob();
+    const expected=Number(response.headers.get('Content-Length'));
+    if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
+    const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
+    const url=URL.createObjectURL(blob), link=document.createElement('a');
+    link.href=url; link.download=filename;
+    document.body.appendChild(link);
+    try { link.click(); }
+    finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+    const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
+    setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
+  } catch(error) {
+    setMsg(`Bundle export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { bundleExportBusy=false; }
 }
 
 let bundleImportBusy=false;
@@ -11797,15 +11874,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/export_bundle':
             try:
                 zip_bytes, fname = export_bundle()
+                import zipfile
+                from urllib.parse import quote
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+                    missing = json.loads(archive.read('manifest.json'))['missing']
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
                 return
             self.send_response(200)
             self.send_header('Content-Type', 'application/zip')
-            self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+            self.send_header('Content-Disposition', "attachment; filename=\"kit.strike-bundle.zip\"; filename*=UTF-8''" + quote(fname, safe=''))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Strike-Missing-Assets', str(sum(len(items) for items in missing.values())))
             self.send_header('Content-Length', len(zip_bytes))
             self.end_headers()
-            self.wfile.write(zip_bytes)
+            try:
+                self.wfile.write(zip_bytes)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Client cancelled; export has not changed the library or kit.
             return
 
         if path == '/api/export_kits':
