@@ -24,6 +24,12 @@ remaining feature issues. This records software integration, not new hardware ev
 
 ## Next gates
 
+The [October 14 candidate review](docs/RELEASE_REVIEW_2026-10-14.md) reconciles all eight
+open issues and the #66 → #67 → #68 stack. Runtime candidate `d56baec` passed all ten
+CI checks and verification of the actual CI downloads. The [beta handoff](docs/BETA_CANDIDATE_2026-10-14.md)
+pins its downloads, hashes and first test. Merge/release integration and the physical
+acceptance sessions remain distinct gates.
+
 The integrated MIDI toolkit adds local generic MIDI capture, saved browser sessions,
 visual replay, velocity/controller measurements, session comparison and portable exports.
 It is the measurement foundation for #30, not Trigger Coach advice. Real Mac/Strike
@@ -52,14 +58,15 @@ and physical module/mobile acceptance remain separate gates.
    the copied kit and both layers on the Strike.
 4. Finish distribution/signing after the launch and storage paths pass acceptance.
    PR #67 supplies a tested unsigned Windows ZIP with Python/Tk/MIDI bundled; PRs #66
-   and #67 remain open. Test upgrades while preserving an external library.
+   and #67 remain open, with #68 adding saved-work and import/export hardening.
+   Test upgrades while preserving an external library.
 5. Invite a small outside beta to independently install, edit, save, deploy and restore.
 6. Add a focused general MIDI utility once the Strike workflow is dependable; do not
    broaden into an unverified universal module editor.
 
 ## Open issue mapping
 
-- #28: local Setlist Builder implemented in the follow-on PR: host-persisted lists, song
+- #28: local Setlist Builder merged in #65; #66 extends local checks: host-persisted lists, song
   notes, touch/drag ordering, exact kit copies, portable JSON, local saved-kit checks,
   deterministic filename plans and printable show sheets. Batch deployment through the
   existing deploy pipeline, card collision/space checks and physical acceptance remain.

@@ -6,6 +6,9 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 
 Use [the prepared hands-on sessions and result form](HANDS_ON_ACCEPTANCE.md) for
 device, playing, listening, reconnect, media, Windows, Pi and outside-beta checks.
+For the pinned October 14 candidate, see the [completed automated gate record](RELEASE_REVIEW_2026-10-14.md#verified-candidate-gates)
+and [exact download/first-test handoff](BETA_CANDIDATE_2026-10-14.md). The boxes below
+remain a reusable checklist for the eventual release revision.
 
 ## Automated gates
 

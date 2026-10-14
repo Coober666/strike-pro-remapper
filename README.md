@@ -22,6 +22,11 @@ everything it doesn't touch.
 
 ## Quick start
 
+**Start with the [October 14 tested beta](docs/BETA_CANDIDATE_2026-10-14.md):** exact
+Windows/source downloads, checksums, what to open, and a ten-minute first test.
+The pinned CI artifacts require GitHub sign-in and expire November 13; they are
+controlled beta downloads, not a published stable release.
+
 **Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
 in show order, add song notes, make song-specific kit copies, preview numbered filenames,
 and print a show sheet. Keyboard focus stays near the song after removal or cancelling
