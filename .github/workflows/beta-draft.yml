@@ -1,0 +1,77 @@
+name: Prepare beta draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful main push CI run ID to promote unchanged
+        required: true
+        type: string
+      tag:
+        description: New beta tag (beta-YYYYMMDD.N)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: beta-draft
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate successful CI and prepare unchanged downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.run_id }}
+          BETA_TAG: ${{ inputs.tag }}
+        run: python tools/prepare_release.py --run-id "$CI_RUN_ID" --tag "$BETA_TAG" --output "$RUNNER_TEMP/beta-delivery"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta-delivery
+          path: ${{ runner.temp }}/beta-delivery/*
+          if-no-files-found: error
+          retention-days: 30
+  draft:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: beta-delivery
+          path: delivery
+      - name: Create a new draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          root = pathlib.Path('delivery')
+          build = json.loads((root / 'BUILD.json').read_text())
+          import os
+          refs = json.loads(subprocess.check_output(['gh', 'api',
+              'repos/' + os.environ['GH_REPO'] + '/git/matching-refs/tags/' + build['tag']], text=True))
+          if any(ref['ref'] == 'refs/tags/' + build['tag'] for ref in refs):
+              raise SystemExit('Tag already exists. Use a new beta tag; never relabel an existing build.')
+          assets = [str(root / p['file']) for p in build['packages']]
+          assets += [str(root / p) for p in ('SHA256SUMS.txt', 'START-HERE.txt', 'BUILD.json')]
+          subprocess.run(['gh', 'release', 'create', build['tag'], '--draft', '--prerelease',
+                          '--latest=false', '--target', build['revision'],
+                          '--title', 'Strike Remapper ' + build['tag'],
+                          '--notes-file', str(root / 'RELEASE-NOTES.md'), *assets], check=True)
+          PY
