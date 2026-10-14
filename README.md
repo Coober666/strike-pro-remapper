@@ -269,6 +269,9 @@ double-click.
   library files are never overwritten. Supported assets are validated and staged before
   copying; corrupt archives and unsafe paths fail before import. A later disk failure
   reports completed files and recovery steps. See [bundle import recovery](docs/BETA_START.md#importing-a-kit-bundle).
+- **Kit JSON report** — export saved library kit assignments and selected pad parameters.
+  Unreadable or malformed files appear in `warnings`; autosaves and unsaved edits are
+  excluded. This is a report, not an importable kit backup.
 - **Official editor & commercial pack zips** — the importer also accepts official
   Strike Editor kit/instrument exports and commercial pack zips (eDrumWorkshop,
   drum-tec, …): any zip carrying `Kits/`/`Instruments/`/`Samples/` folders (even nested

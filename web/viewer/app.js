@@ -4308,6 +4308,14 @@ function renderKitFx(d) {
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
 let bundleExportBusy=false;
+function requestBlobDownload(blob,filename) {
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=filename;
+  document.body.appendChild(link);
+  try { link.click(); }
+  finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+}
+
 async function exportBundle() {
   closeAllPopovers();
   if(bundleExportBusy) return;
@@ -4326,11 +4334,7 @@ async function exportBundle() {
     if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
     const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
-    const url=URL.createObjectURL(blob), link=document.createElement('a');
-    link.href=url; link.download=filename;
-    document.body.appendChild(link);
-    try { link.click(); }
-    finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+    requestBlobDownload(blob,filename);
     const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
     setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
   } catch(error) {
@@ -5138,11 +5142,22 @@ function printMidiMap() {
   window.open('/api/midi_map_html', '_blank');
 }
 
+let kitsExportBusy=false;
 async function exportKits() {
-  const a = document.createElement('a');
-  a.href = '/api/export_kits';
-  a.download = 'strike_kits_export.json';
-  a.click();
+  closeAllPopovers();
+  if(kitsExportBusy) return;
+  kitsExportBusy=true;
+  setMsg('Building saved-kit JSON report…');
+  try {
+    const response=await fetch('/api/export_kits',{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok || data.error) throw new Error(data.error || `Export request failed (${response.status})`);
+    if(!Array.isArray(data.kits) || !Array.isArray(data.warnings)) throw new Error('Invalid kit report from host');
+    requestBlobDownload(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'strike_kits_export.json');
+    setMsg(`Download requested: ${data.kits.length} saved kit(s). Check your browser Downloads. This JSON report excludes unsaved edits and is not a kit backup.${data.warnings.length ? ` Warning: ${data.warnings.length} skipped file(s); see warnings in the report.` : ''}`,data.warnings.length>0);
+  } catch(error) {
+    setMsg(`Kit report export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { kitsExportBusy=false; }
 }
 
 // ── SD sync ───────────────────────────────────────────────────────────────────

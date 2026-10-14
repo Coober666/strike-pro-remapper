@@ -265,3 +265,18 @@ the host response. The first paired assertion expected one no-store directive, b
 Wi-Fi wrapper also adds it; corrected the assertion to check directive membership.
 Import regression tests, lint, viewer extraction and standalone viewer validation passed.
 These browser results do not establish physical iPad/iPhone Files acceptance.
+
+## Saved kit JSON report
+
+The final export-path review reproduced a separate existing bug: the JSON report used
+the obsolete two-part parser return and tuple pads, swallowed every resulting exception,
+and returned an empty kit list for a valid saved library. It now uses the current parser
+and pad dictionaries, checks round-trip validity, excludes autosaves and lists skipped
+files in warnings. The report reads saved bytes under the editor lock and does not
+replace the active kit. Its UI explicitly distinguishes a saved-kit report from an
+importable backup and catches read/network failures without leaving the editor.
+
+All eight export Python cases and eight focused Chromium/WebKit cases passed after this
+fix. The new regression verifies a real valid saved kit, malformed-file warning,
+autosave exclusion, saved-versus-unsaved levels and unchanged editor state. Browser
+tests download the report, inspect its contents and exercise HTTP/network failure.

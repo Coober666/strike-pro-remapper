@@ -143,6 +143,10 @@ def check(root):
                 expected = app.build_skt(app.state['kit_raw'], app.state['pads'], app.state['instruments'], app.state['tail'])
                 if archive.testzip() is not None or archive.read('kit/Packaged check.skt') != expected or archive.read('samples/Package/check.wav') != sample.getvalue():
                     raise RuntimeError('Packaged bundle lost unsaved edits or sample bytes')
+            report = app.export_kits_report()
+            saved_report = next(kit for kit in report['kits'] if kit['name'] == 'Packaged check.skt')
+            if report['warnings'] or next(pad for pad in saved_report['pads'] if pad['id'] == 'S1H')['la_level'] != 31:
+                raise RuntimeError('Packaged JSON report did not preserve saved-kit scope')
             inputs = NativeInput().inputs()  # Enumerates only; never opens any port.
             outputs = native_midi()['outputs']  # No selected output: no send.
         finally:
@@ -170,5 +174,5 @@ def check(root):
             connection.close()
         finally:
             host.stop()
-    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True, 'bundle_import': True, 'bundle_export': True,
+    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True, 'bundle_import': True, 'bundle_export': True, 'kit_report': True,
             'midi_inputs': len(inputs), 'identity': identity(Path(app.__file__).parent)}

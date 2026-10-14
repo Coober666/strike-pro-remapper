@@ -1625,6 +1625,44 @@ def kit_fx_view() -> dict:
 # Rel paths inside the zip mirror the library layout, so import needs no path rewriting:
 # .sin internal WAV strings keep resolving via _sin_search_roots().
 
+def export_kits_report() -> dict:
+    """Summarize saved library kits, reporting skipped files; not an editable backup."""
+    with STATE_LOCK:
+        import datetime
+        kits_dir  = LIBRARY_DIR / 'kits'
+        kit_files = sorted(kits_dir.glob('*.skt')) if kits_dir.is_dir() else []
+        out = {'exported_at': datetime.datetime.now().isoformat(), 'scope': 'saved-library-kits', 'kits': [], 'warnings': []}
+        for kf in kit_files:
+            if kf.name.lower().endswith('.autosave.skt'):
+                continue
+            try:
+                from strike_remapper.bundle_import import destination
+                raw = destination(LIBRARY_DIR, 'kits', kf.name).read_bytes()
+                header, pads_data, insts, tail = parse_skt(raw)
+                if not pads_data or build_skt(header, pads_data, insts, tail) != raw:
+                    raise ValueError('Kit is incomplete or does not round-trip exactly')
+                kit_entry = {'name': kf.name, 'pads': []}
+                for pad in pads_data:
+                    pad_id, payload = pad['id'], pad['payload']
+                    la_idx = struct.unpack_from('<H', payload, 4)[0]
+                    lb_idx = struct.unpack_from('<H', payload, 24)[0]
+                    def _u8(o): return payload[o] if o < len(payload) else 0
+                    def _i8(o): v = _u8(o); return v if v < 128 else v - 256
+                    kit_entry['pads'].append({
+                        'id':       pad_id,
+                        'midi':     _u8(52),
+                        'layer_a':  insts[la_idx] if la_idx != 0xFFFF and la_idx < len(insts) else None,
+                        'layer_b':  insts[lb_idx] if lb_idx != 0xFFFF and lb_idx < len(insts) else None,
+                        'la_level': _u8(LA_LEVEL_OFF), 'la_pan': _i8(LA_PAN_OFF), 'la_pitch': _i8(LA_PITCH_OFF),
+                        'la_fine':  _i8(LA_FINE_OFF),  'la_decay': _u8(LA_DECAY_OFF),
+                        'la_fcut':  _u8(LA_FCUT_OFF),  'la_fflag': _u8(LA_FFLAG_OFF),
+                    })
+                out['kits'].append(kit_entry)
+            except Exception as exc:
+                out['warnings'].append({'name': kf.name, 'error': str(exc)[:200] or 'Could not read or parse kit'})
+        return out
+
+
 def export_bundle() -> tuple:
     # Keep kit bytes and referenced assets consistent with editor mutations. Release
     # before the handler sends bytes: a slow/disconnected client must not hold edits.
@@ -9404,6 +9442,14 @@ function renderKitFx(d) {
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
 let bundleExportBusy=false;
+function requestBlobDownload(blob,filename) {
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=filename;
+  document.body.appendChild(link);
+  try { link.click(); }
+  finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+}
+
 async function exportBundle() {
   closeAllPopovers();
   if(bundleExportBusy) return;
@@ -9422,11 +9468,7 @@ async function exportBundle() {
     if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
     const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
     const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
-    const url=URL.createObjectURL(blob), link=document.createElement('a');
-    link.href=url; link.download=filename;
-    document.body.appendChild(link);
-    try { link.click(); }
-    finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
+    requestBlobDownload(blob,filename);
     const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
     setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
   } catch(error) {
@@ -10234,11 +10276,22 @@ function printMidiMap() {
   window.open('/api/midi_map_html', '_blank');
 }
 
+let kitsExportBusy=false;
 async function exportKits() {
-  const a = document.createElement('a');
-  a.href = '/api/export_kits';
-  a.download = 'strike_kits_export.json';
-  a.click();
+  closeAllPopovers();
+  if(kitsExportBusy) return;
+  kitsExportBusy=true;
+  setMsg('Building saved-kit JSON report…');
+  try {
+    const response=await fetch('/api/export_kits',{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok || data.error) throw new Error(data.error || `Export request failed (${response.status})`);
+    if(!Array.isArray(data.kits) || !Array.isArray(data.warnings)) throw new Error('Invalid kit report from host');
+    requestBlobDownload(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'strike_kits_export.json');
+    setMsg(`Download requested: ${data.kits.length} saved kit(s). Check your browser Downloads. This JSON report excludes unsaved edits and is not a kit backup.${data.warnings.length ? ` Warning: ${data.warnings.length} skipped file(s); see warnings in the report.` : ''}`,data.warnings.length>0);
+  } catch(error) {
+    setMsg(`Kit report export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { kitsExportBusy=false; }
 }
 
 // ── SD sync ───────────────────────────────────────────────────────────────────
@@ -11895,39 +11948,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == '/api/export_kits':
-            import datetime
-            kits_dir  = LIBRARY_DIR / 'kits'
-            kit_files = sorted(kits_dir.glob('*.skt')) if kits_dir.is_dir() else []
-            out = {'exported_at': datetime.datetime.now().isoformat(), 'kits': []}
-            for kf in kit_files:
-                try:
-                    raw = kf.read_bytes()
-                    pads_data, insts = parse_skt(raw)
-                    kit_entry = {'name': kf.name, 'pads': []}
-                    for pad_id, payload in pads_data:
-                        la_idx = struct.unpack_from('<H', payload, 4)[0]
-                        lb_idx = struct.unpack_from('<H', payload, 24)[0]
-                        def _u8(o): return payload[o] if o < len(payload) else 0
-                        def _i8(o): v = _u8(o); return v if v < 128 else v - 256
-                        kit_entry['pads'].append({
-                            'id':       pad_id,
-                            'midi':     _u8(52),
-                            'layer_a':  insts[la_idx] if la_idx != 0xFFFF and la_idx < len(insts) else None,
-                            'layer_b':  insts[lb_idx] if lb_idx != 0xFFFF and lb_idx < len(insts) else None,
-                            'la_level': _u8(LA_LEVEL_OFF), 'la_pan': _i8(LA_PAN_OFF), 'la_pitch': _i8(LA_PITCH_OFF),
-                            'la_fine':  _i8(LA_FINE_OFF),  'la_decay': _u8(LA_DECAY_OFF),
-                            'la_fcut':  _u8(LA_FCUT_OFF),  'la_fflag': _u8(LA_FFLAG_OFF),
-                        })
-                    out['kits'].append(kit_entry)
-                except Exception:
-                    pass
-            body = json.dumps(out, indent=2).encode()
+            try:
+                body = json.dumps(export_kits_report(), indent=2).encode()
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, 400)
+                return
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Disposition', 'attachment; filename="strike_kits_export.json"')
             self.send_header('Content-Length', len(body))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
 
         if path == '/api/midi_map_html':

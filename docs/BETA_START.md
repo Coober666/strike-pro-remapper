@@ -90,6 +90,11 @@ Exports use the same 512 MiB ZIP/file, 16 MiB instrument, 2 GiB total and 10,000
 limits as imports. Files changed by another program during export are not a consistent
 filesystem snapshot; avoid editing the library externally during export.
 
+**Export kits to JSON** is a separate report of saved library kits, assignments and
+selected pad parameters. It excludes unsaved edits and recovery autosaves, and cannot
+be imported to restore a kit. Any unreadable or malformed kit is listed in `warnings`
+instead of silently omitted. Use a bundle or full library copy for backup.
+
 ## Importing a kit bundle
 
 Use a copied library for your first import. The importer accepts kit bundles and

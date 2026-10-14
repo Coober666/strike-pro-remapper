@@ -1,6 +1,33 @@
-import {copyFile, mkdir, readFile} from 'node:fs/promises';
+import {copyFile, mkdir, readFile, writeFile, unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
+
+test('kit JSON export downloads real saved kits with skipped-file warnings and survives failure',async({page},info)=>{
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(()=>closeStartScreen());
+  const bad=path.resolve('.build/browser-library/kits',`Broken-${info.project.name}.skt`);
+  await writeFile(bad,'not a kit');
+  try {
+    const before=await page.evaluate(()=>({pads,kitDirty,undoCount}));
+    const downloadPromise=page.waitForEvent('download');
+    await page.evaluate(()=>exportKits());
+    const download=await downloadPromise;
+    const report=JSON.parse(await readFile(await download.path(),'utf8'));
+    expect(report.kits.some(kit=>kit.name==="John's Test Kit.skt" && kit.pads.length>0)).toBe(true);
+    expect(report.warnings.some(warning=>warning.name===path.basename(bad))).toBe(true);
+    expect(report.scope).toBe('saved-library-kits');
+    await expect(page.locator('#msg')).toContainText('skipped file(s)');
+    await expect(page.locator('#msg')).toContainText('not a kit backup');
+    await page.route('**/api/export_kits',route=>route.fulfill({status:400,json:{error:'Read failed fixture'}}));
+    await page.evaluate(()=>exportKits());
+    await expect(page.locator('#msg')).toContainText('Read failed fixture');
+    await page.unroute('**/api/export_kits');
+    await page.route('**/api/export_kits',route=>route.abort());
+    await page.evaluate(()=>exportKits());
+    await expect(page.locator('#msg')).toContainText('Your edits are unchanged');
+    expect(await page.evaluate(()=>({pads,kitDirty,undoCount}))).toEqual(before);
+  } finally {await unlink(bad);}
+});
 
 test('bundle export keeps edits after HTTP and interrupted download failures, then retries once',async({page})=>{
   await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();

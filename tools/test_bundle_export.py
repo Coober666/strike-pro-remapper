@@ -157,6 +157,30 @@ class ExportTests(unittest.TestCase):
         finally:
             connection.close(); server.shutdown(); server.server_close(); thread.join(3)
 
+    def test_json_report_contains_saved_kits_and_reports_bad_files(self):
+        saved = self.library / 'kits/Good.skt'
+        app.save_kit(str(saved))
+        (saved.parent / 'Broken.skt').write_bytes(b'not a kit')
+        (saved.parent / 'Good.autosave.skt').write_bytes(saved.read_bytes())
+        app.set_pad_param(app.state['pads'][0]['id'], 'la_level', 73)
+        before = copy.deepcopy(app.state)
+        server = app._Server(('127.0.0.1', 0), app.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+        connection = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+        try:
+            connection.request('GET', '/api/export_kits')
+            response = connection.getresponse(); report = json.loads(response.read())
+            self.assertEqual(response.status, 200)
+            self.assertEqual([kit['name'] for kit in report['kits']], ['Export fixture.skt', 'Good.skt'])
+            good = next(kit for kit in report['kits'] if kit['name'] == 'Good.skt')
+            self.assertEqual(good['pads'][0]['layer_a'], self.ref)
+            self.assertNotEqual(good['pads'][0]['la_level'], 73)
+            self.assertEqual(report['scope'], 'saved-library-kits')
+            self.assertEqual([warning['name'] for warning in report['warnings']], ['Broken.skt'])
+            self.assertEqual(app.state, before)
+        finally:
+            connection.close(); server.shutdown(); server.server_close(); thread.join(3)
+
 
 if __name__ == '__main__':
     unittest.main()

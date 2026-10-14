@@ -451,6 +451,11 @@ count; never label an incomplete bundle a self-contained backup. The browser fet
 the full ZIP before requesting a download, keeps errors in-page, suppresses duplicate
 clicks and never retries automatically. Use RFC 5987 UTF-8 download filenames and
 no-store responses. Tests: tools/test_bundle_export.py and browser bundle export cases.
+`export_kits_report()` reads saved library kits under STATE_LOCK using the current
+four-part parser and pad dictionaries. Preserve report fields, exclude autosaves and
+record unreadable/malformed files in warnings instead of silently dropping them.
+The JSON report is not an importable backup and excludes unsaved edits; state that in
+download feedback. Both export UIs keep failures in-page and require explicit retry.
 
 Editing: `sin_detail()/sin_update()/sin_revert()` + `/api/sin_detail|sin_update|sin_revert`.
 Edits always target the library copy (`_sin_abs` prefers `library/instruments/` because a
