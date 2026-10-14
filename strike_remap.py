@@ -12604,6 +12604,10 @@ def _port_in_use(port: int) -> bool:
 
 
 class _Server(ThreadingHTTPServer):
+    # Browsers fetch the toolkit module graph in parallel. The default backlog
+    # of five can reset connections during LAN bursts, especially on macOS.
+    request_queue_size = 64
+
     # On Windows SO_REUSEADDR lets a second process bind an already-bound
     # port, silently creating a zombie instance that never receives a
     # connection (macOS raises EADDRINUSE). Disable it there; the explicit

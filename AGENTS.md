@@ -869,3 +869,6 @@ Manual updates only. Source entry points remain supported. No automatic activati
 
 Wi-Fi toolkit HTML matching uses the parsed URL path, so /midi?demo=1 keeps its
 data-host-midi marker and host input/setup controls. Query strings do not bypass pairing.
+
+_Server uses a backlog of 64 for parallel toolkit module loads over the LAN;
+macOS with the default five showed connection resets during real browser checks.
