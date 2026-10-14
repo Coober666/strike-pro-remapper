@@ -24,6 +24,11 @@ support. Preserve the existing verified iPad → Intel Mac → Strike record sep
 
 ## Hands-on gates still required
 
+Partial evidence: [October 14 Mac/Strike checks](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md)
+verify real capture, idle input lifecycle and card discovery. They do not complete
+the physical disconnect, newest mobile UI, listening or Windows USB gates below.
+The current Mac uses browser-launch shortcuts because its Python lacks Tk.
+
 For each candidate, also run the packaged-source smoke test and follow the
 [beta first-run walkthrough](BETA_START.md). Record the manifest revision.
 

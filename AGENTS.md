@@ -137,7 +137,9 @@ remains stdlib-only unless the user installs `requirements-midi.txt` for this fe
 Session v1 has optional `captureStatus` (complete/partial); preserve it in saves/exports
 and show partial copies after network/driver failure. Recover retained events explicitly;
 never automatically start a new take or reacquire after host restart. Native driver
-behavior remains hardware-unverified. Tests inject drivers: `test_midi_capture.py`,
+behavior has limited Mac/Strike acceptance: real capture plus idle pause/resume,
+lease expiry, ownership and reopen checks (see `docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md`).
+Other hosts and physical disconnect behavior remain unverified. Tests inject drivers: `test_midi_capture.py`,
 `test_wifi_editor.py`, and `tests/browser/wifi-midi.spec.js`.
 `midi_setup.py` checks optional package metadata and input enumeration without opening
 a port or installing anything. The paired `/wifi/midi/setup` route and optional CLI

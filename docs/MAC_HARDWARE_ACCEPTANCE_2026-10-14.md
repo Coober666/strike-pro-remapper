@@ -26,6 +26,23 @@ environment (CoreMIDI backend). System Python and Homebrew packages were not upg
   toolkit navigations passed after the connection-queue fix. This is browser-engine
   coverage, not acceptance on a physical iPad/iPhone.
 
+## Unattended input lifecycle follow-up
+
+At 16:44–16:45 UTC, the same deployed host and real Strike CoreMIDI input passed:
+
+- A second paired browser was denied both reading another browser's take (403)
+  and replacing it with a new take (409).
+- Pause held the active duration constant; Resume continued recording.
+- Leaving the capture unpolled for 18 seconds triggered the 15-second lease:
+  recording stopped, and the original browser could recover the retained take.
+- Discard allowed a fresh capture. Logout released that capture, after which the
+  second browser could start, stop and discard its own take.
+
+These were idle captures with zero received events, so this checks real-driver
+lifecycle and retained metadata, not event recovery during playing or physical
+USB disconnection. Both test pairings were logged out, and the editor stayed up.
+No MIDI output, card API, kit mutation or factory activation was invoked.
+
 ## Defects found and fixed
 
 The /midi?demo=1 route lost its host-MIDI marker because the Wi-Fi wrapper matched
