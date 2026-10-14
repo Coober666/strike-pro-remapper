@@ -31,6 +31,7 @@ export class PadProfiles {
         const existing=readProfiles();
         if (existing.some(p => p.name === value.name) && !await this.confirm(`Replace the saved profile “${value.name}”? Captures already saved keep their own pad names.`,'Replace saved profile?')) return;
         const latest=readProfiles();
+        this.checkSaved(latest,value.name,existing.find(p => p.name === value.name));
         const next=[...latest.filter(p => p.name !== value.name),value];
         writeProfiles(next); this.profiles=next; this.unsaved=false; this.list();
         this.notice('Profile saved in this browser. Export it for another device.');
@@ -43,8 +44,12 @@ export class PadProfiles {
     $('profile-new').onclick=async () => { if (await this.replaceAllowed()) { this.set(emptyProfile()); this.notice('Blank profile. Name it for your module, then learn or enter each pad.'); } };
     $('profile-delete').onclick=async () => {
       const name=$('profile-select').value;
+      const expected=this.profiles.find(p => p.name === name);
       if (!name || !await this.confirm(`Delete saved profile “${name}” from this browser? Current and saved captures keep their pad names.`,'Delete profile?')) return;
-      try { const next=readProfiles().filter(p => p.name !== name); writeProfiles(next); this.profiles=next; this.list(); this.notice('Saved profile deleted.'); }
+      try {
+        const latest=readProfiles(); this.checkSaved(latest,name,expected);
+        const next=latest.filter(p => p.name !== name); writeProfiles(next); this.profiles=next; this.list(); this.notice('Saved profile deleted.');
+      }
       catch (e) { this.notice('Profile was not deleted. '+e.message); }
     };
     $('profile-export').onclick=() => {
@@ -64,6 +69,12 @@ export class PadProfiles {
     this.list(); this.refresh();
   }
   value() { return this.session().padMap || emptyProfile(); }
+  checkSaved(latest,name,expected) {
+    if (JSON.stringify(latest.find(p => p.name === name)) !== JSON.stringify(expected)) {
+      this.profiles=latest; this.list();
+      throw new Error('The saved profile changed in another tab. Your current pad names are kept; export them or use a different profile name before reviewing the saved version.');
+    }
+  }
   notice(text) { $('profile-status').textContent=text; }
   async replaceAllowed() { return !this.unsaved || this.confirm('Replace the current pad names? Save or export the profile first if you want to reuse them.','Replace pad profile?'); }
   set(value, unsaved=true) { this.unsaved=unsaved; this.cancel(); this.changed(validateProfile(value)); this.refresh(); }

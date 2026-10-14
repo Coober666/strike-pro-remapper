@@ -128,6 +128,20 @@ class HostTests(unittest.TestCase):
             self.host.start(kit, port=0)
         self.assertFalse(self.host.running)
 
+    def test_fresh_source_application_folder_cannot_be_selected_as_library(self):
+        root = Path(self.tmp.name) / 'Extracted application'
+        root.mkdir()
+        (root / 'strike_remap.py').write_text('# application marker', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'application folder'):
+            self.host.start(root, port=0)
+        self.assertFalse(self.host.running)
+        self.assertEqual([p.name for p in root.iterdir()], ['strike_remap.py'])
+        (root / 'library').mkdir()
+        (root / 'library' / 'keep.bin').write_bytes(b'untouched')
+        with self.assertRaisesRegex(ValueError, 'existing library'):
+            self.host.start(root, port=0)
+        self.assertEqual((root / 'library' / 'keep.bin').read_bytes(), b'untouched')
+
 
 if __name__ == '__main__':
     unittest.main()

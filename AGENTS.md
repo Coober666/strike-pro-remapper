@@ -113,6 +113,8 @@ optional three-digit ordering, at most 26 characters including .skt, reserved-na
 and case-insensitive duplicate detection. Source names never change. Printing uses the
 last local-check snapshot, escaped text and an explicit limitation statement.
 Tests: tools/test_setlists.py and tests/browser/zz-setlists.spec.js (Chromium/iPad WebKit).
+Removing a song restores focus to the adjacent Remove button (or the kit selector
+when empty); cancelling a kit copy returns focus to that song's Copy button.
 
 ## General MIDI toolkit
 
@@ -135,7 +137,9 @@ filters to complete channel messages, bounds its callback queue, and timestamps 
 the host monotonic clock. Close/join outside the recorder lock. The Python application
 remains stdlib-only unless the user installs `requirements-midi.txt` for this feature.
 Session v1 has optional `captureStatus` (complete/partial); preserve it in saves/exports
-and show partial copies after network/driver failure. Recover retained events explicitly;
+and mark active browser captures partial on MIDI disconnection, including while paused.
+Disconnection after normal Stop must not downgrade a completed take. Show partial copies
+after network/driver failure. Recover retained events explicitly;
 never automatically start a new take or reacquire after host restart. Native driver
 behavior has limited Mac/Strike acceptance: real capture plus idle pause/resume,
 lease expiry, ownership and reopen checks (see `docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md`).
@@ -156,6 +160,9 @@ of the profile store and retained across host polling; names do not affect stati
 `drum-midi-profiles-v1` localStorage is bounded to 25 profiles / 128 KB, with 128 unique
 channel/note pairs per profile. Invalid imports/storage cannot replace current data;
 failed saves leave export available. Profile names/labels render only as text.
+Profile overwrite/delete confirmations re-read saved content before writing and reject
+changes made while the dialog was open, preserving the current profile for export.
+This localStorage check is not an atomic multi-tab transaction like session storage.
 Session v1 also accepts bounded `tags`, `notesText` and an `exercise` key defined in
 `metadata.js`; old sessions default to empty values. Preserve annotations across host
 polling. Exercises are user-selected instructions, never scored or marked completed.
@@ -164,6 +171,12 @@ polling. Exercises are user-selected instructions, never scored or marked comple
 count guard; never overwrite existing sessions or commit a partial batch. Metadata
 and session records stay in sync. Search uses saved metadata, and backups use saved
 records from one readonly transaction. Browser-local unsaved work is separate.
+Saved MIDI sessions carry a local revision in both IndexedDB stores. Read the session
+and revision together; compare revisions inside the same readwrite transaction as
+save/delete. Reject stale or deleted targets, retain current edits, and offer Save as
+new copy. Legacy records without a revision start at zero; portable session JSON is
+unchanged. Copy/restore use new IDs and preserve the 25-session limit. Browser tests
+cover two-tab conflicts, concurrent transactions, legacy records and aborted retries.
 Analysis focus is a channel/note view, never event deletion: filters in summarize,
 compare, charts/replay/report retain original pause boundaries and duration. JSON/CSV,
 overview totals and controller list always retain the full take. Reset focus on a
@@ -187,6 +200,9 @@ WebKit MIDI is simulated and does not establish physical mobile compatibility.
 `launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
 It starts only one service, defaults to localhost, and uses the existing paired handler
 when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
+Reject the source application's root as a library even on a fresh extraction with no
+library child. Existing source checkouts still point users to their library subfolder;
+the frozen Windows package continues to reject all libraries inside its app folder.
 Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
 encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
 No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.
@@ -415,6 +431,31 @@ rewrites strings in `state['instruments']` (the kit str table), one undo entry.
 Bundles: `export_bundle()/import_bundle()` + GET `/api/export_bundle`, POST
 `/api/import_bundle` (base64 zip) — zip mirrors library layout (kit/, instruments/<rel>,
 samples/<wav_rel>) so no path rewriting; import never overwrites existing files.
+`bundle_import.py` preflights portable paths, links, duplicate/case-ambiguous names,
+supported-entry CRC/decompression and limits in temporary staging before publication.
+Limits: 512 MiB ZIP/file, 16 MiB SIN, 2 GiB total and 10,000 ZIP entries. Destinations
+must remain in the library with no symlink/reparse components; validate again before
+exclusive creation. Existing kits get numbered copies, identical assets skip, other
+conflicts keep existing files. On handled copy failure remove only the newly opened
+partial file; earlier completed files stay and ImportStopped reports the count. This
+is not a crash-atomic multi-file transaction. Cleanup failures identify the incomplete
+file; listing failures must not hide completed imports. Never auto-retry uploads.
+Tests: `tools/test_bundle_import.py` and bundle browser cases use disposable libraries.
+Export holds STATE_LOCK through archive construction, then releases it before network
+transfer. This serializes editor mutations, not changes made by external programs.
+Populate lazy inventory and prefer local edited SINs over shadow card inventory.
+Validate portable source references and reject linked children/case-ambiguous ZIP names;
+reuse importer size limits so completed exports can be imported. Card reads use
+read_card_bytes. Missing assets remain explicit in manifest.json and the HTTP warning
+count; never label an incomplete bundle a self-contained backup. The browser fetches
+the full ZIP before requesting a download, keeps errors in-page, suppresses duplicate
+clicks and never retries automatically. Use RFC 5987 UTF-8 download filenames and
+no-store responses. Tests: tools/test_bundle_export.py and browser bundle export cases.
+`export_kits_report()` reads saved library kits under STATE_LOCK using the current
+four-part parser and pad dictionaries. Preserve report fields, exclude autosaves and
+record unreadable/malformed files in warnings instead of silently dropping them.
+The JSON report is not an importable backup and excludes unsaved edits; state that in
+download feedback. Both export UIs keep failures in-page and require explicit retry.
 
 Editing: `sin_detail()/sin_update()/sin_revert()` + `/api/sin_detail|sin_update|sin_revert`.
 Edits always target the library copy (`_sin_abs` prefers `library/instruments/` because a
@@ -462,6 +503,13 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
 - `strike_remapper.audio.normalize_wav(wav_data)` → `(bytes, peak_db_str)` —
   peak-normalize 16/24-bit PCM WAV; `strike_remap` re-exports the audio helpers
 - `batch_assign_csv(assignments)` — assign multiple pads from `[{pad_id, layer, sin_rel}]`
+  after validating all row shapes, pad IDs and A/B layers. Missing instruments remain
+  reported skips; malformed rows reject the whole batch without state/history changes.
+  Plan final assignments before one Undo snapshot; no-op imports do not dirty the kit.
+  The browser accepts two/three comma-separated fields, rejects malformed lines before
+  POST, serializes file imports and rejects a changed pad snapshot during file reading.
+  Lost responses are not replayed; paired editing pauses until host state is refreshed.
+  Tests: `tools/test_csv_assignment.py` and CSV cases in `zzz-release-polish.spec.js`.
 - `swap_pads(pad_id_a, pad_id_b)` — swap full payloads between two pads
 - `batch_set_param(pad_ids, param, value)` — apply one param to many pads (single undo entry)
 - `diff_kit(path)` — compare another .skt against current state, returns per-pad diff.
@@ -853,6 +901,14 @@ SD volume detection searches one level deep (catches Ventoy `STORAGE/` subfolder
 
 POST /api/balance analyze/apply uses STATE_LOCK and the existing paired ownership guard with an 8 KB body bound. Apply recomputes evidence and validates a token covering kit bytes, revision, SIN bytes, measured WAV bytes/metadata and report. Only server-provided selected levels may be applied. Validate all selections before one _push_history, then change known level offsets; no audio writes. GET balance_preview serves a bounded local sample window. Native dialog UI requires unchecked explicit selection, offers current/proposed audition, and never retries failed writes. New tests: test_balance.py, zzz-release-polish.spec.js. Physical listening acceptance remains open.
 
+Balance preview callbacks check both a request generation and the analysis report.
+A newer Listen, dialog close/cancel/reopen, analysis or Apply invalidates pending audio
+and errors and stops the current voice. Browser regressions delay responses explicitly
+and use a synthetic audio context; they do not establish listening acceptance.
+Analysis success/error callbacks also check the dialog generation. Closing/reopening
+invalidates the old report without cancelling a server mutation; the busy flag remains
+held until the request settles. Apply responses still reconcile the host's kit state.
+
 ## Windows folder beta
 
 Build with Python 3.11 x64 and requirements-build-windows.txt using tools/build_windows.py.
@@ -868,6 +924,12 @@ MIDI ports or discovering cards. This is not physical hardware or clean-OS accep
 The launcher Open editor starts then opens; Try a demo starts and opens synthetic MIDI.
 Wi-Fi demo pairing uses an exact view=demo flag, never a user-provided redirect URL.
 Manual updates only. Source entry points remain supported. No automatic activation.
+Windows builds also generate Help/*.txt from an explicit public-guide allowlist in
+tools/package_help.py, copying two selected screenshots. The text keeps command blocks
+intact, points included-guide links at packaged filenames, and uses revision-specific
+repository links for omitted evidence. Do not package private captures or whole evidence
+directories. These files are covered by PACKAGE-MANIFEST hashes; package checks require
+the main help entry points. No runtime Markdown dependency is needed.
 
 Wi-Fi toolkit HTML matching uses the parsed URL path, so /midi?demo=1 keeps its
 data-host-midi marker and host input/setup controls. Query strings do not bypass pairing.

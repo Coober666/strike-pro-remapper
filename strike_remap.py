@@ -1625,19 +1625,79 @@ def kit_fx_view() -> dict:
 # Rel paths inside the zip mirror the library layout, so import needs no path rewriting:
 # .sin internal WAV strings keep resolving via _sin_search_roots().
 
+def export_kits_report() -> dict:
+    """Summarize saved library kits, reporting skipped files; not an editable backup."""
+    with STATE_LOCK:
+        import datetime
+        kits_dir  = LIBRARY_DIR / 'kits'
+        kit_files = sorted(kits_dir.glob('*.skt')) if kits_dir.is_dir() else []
+        out = {'exported_at': datetime.datetime.now().isoformat(), 'scope': 'saved-library-kits', 'kits': [], 'warnings': []}
+        for kf in kit_files:
+            if kf.name.lower().endswith('.autosave.skt'):
+                continue
+            try:
+                from strike_remapper.bundle_import import destination
+                raw = destination(LIBRARY_DIR, 'kits', kf.name).read_bytes()
+                header, pads_data, insts, tail = parse_skt(raw)
+                if not pads_data or build_skt(header, pads_data, insts, tail) != raw:
+                    raise ValueError('Kit is incomplete or does not round-trip exactly')
+                kit_entry = {'name': kf.name, 'pads': []}
+                for pad in pads_data:
+                    pad_id, payload = pad['id'], pad['payload']
+                    la_idx = struct.unpack_from('<H', payload, 4)[0]
+                    lb_idx = struct.unpack_from('<H', payload, 24)[0]
+                    def _u8(o): return payload[o] if o < len(payload) else 0
+                    def _i8(o): v = _u8(o); return v if v < 128 else v - 256
+                    kit_entry['pads'].append({
+                        'id':       pad_id,
+                        'midi':     _u8(52),
+                        'layer_a':  insts[la_idx] if la_idx != 0xFFFF and la_idx < len(insts) else None,
+                        'layer_b':  insts[lb_idx] if lb_idx != 0xFFFF and lb_idx < len(insts) else None,
+                        'la_level': _u8(LA_LEVEL_OFF), 'la_pan': _i8(LA_PAN_OFF), 'la_pitch': _i8(LA_PITCH_OFF),
+                        'la_fine':  _i8(LA_FINE_OFF),  'la_decay': _u8(LA_DECAY_OFF),
+                        'la_fcut':  _u8(LA_FCUT_OFF),  'la_fflag': _u8(LA_FFLAG_OFF),
+                    })
+                out['kits'].append(kit_entry)
+            except Exception as exc:
+                out['warnings'].append({'name': kf.name, 'error': str(exc)[:200] or 'Could not read or parse kit'})
+        return out
+
+
 def export_bundle() -> tuple:
+    # Keep kit bytes and referenced assets consistent with editor mutations. Release
+    # before the handler sends bytes: a slow/disconnected client must not hold edits.
+    with STATE_LOCK:
+        return _export_bundle_locked()
+
+
+def _export_bundle_locked() -> tuple:
     """Bundle the current kit (incl. unsaved edits) → (zip_bytes, filename)."""
     import zipfile, datetime
+    from strike_remapper import bundle_import as limits
     if not state.get('kit_path'):
         raise ValueError('No kit loaded')
     kit_name = Path(state['kit_path']).name
+    def portable(reference):
+        try:
+            return '/'.join(limits.parts(reference))
+        except ValueError:
+            raise ValueError(f'Unsafe or non-portable bundle reference: {reference}') from None
+
+    def source(root, reference):
+        try:
+            return limits.destination(root, '', reference)
+        except ValueError:
+            raise ValueError(f'Unsafe or linked bundle source: {reference}') from None
+
+    portable(kit_name)
+    _ensure_avail()
     kit_raw  = build_skt(state['kit_raw'], state['pads'], state['instruments'], state['tail'])
 
     used = []
     for pad in state['pads']:
         for key in ('layer_a', 'layer_b'):
             idx = pad.get(key)
-            if idx is not None and idx != NO_INSTRUMENT and idx < len(state['instruments']):
+            if idx is not None and idx != NO_INSTRUMENT and 0 <= idx < len(state['instruments']):
                 rel = state['instruments'][idx]
                 if rel not in used:
                     used.append(rel)
@@ -1645,16 +1705,30 @@ def export_bundle() -> tuple:
     roots = _sin_search_roots()
     sins, wavs, missing_sins, missing_wavs = {}, {}, [], []
     for rel in used:
-        p = state['avail'].get(rel)
+        normalized = portable(rel)
+        local = source(LIBRARY_DIR / 'instruments', normalized)
+        p = local if local.is_file() else state['avail'].get(rel)
         if not p:
             missing_sins.append(rel)
             continue
-        data = Path(p).read_bytes()
-        sins[rel] = data
+        p = Path(p)
+        p = source(p.parents[len(normalized.split('/')) - 1], normalized)
+        if p.stat().st_size > limits.MAX_SIN_BYTES:
+            raise ValueError('Instrument exceeds the 16 MiB bundle limit')
+        data = read_card_bytes(p)
+        if len(data) > limits.MAX_SIN_BYTES:
+            raise ValueError('Instrument exceeds the 16 MiB bundle limit')
+        sins[normalized] = data
         for wav_rel in parse_sin_all_wavs(data):
+            wav_rel = portable(wav_rel)
             if wav_rel in wavs or wav_rel in missing_wavs:
                 continue
-            wp = _resolve_wav(wav_rel, roots)
+            wp = None
+            for root in roots:
+                candidate = source(root, wav_rel)
+                if candidate.is_file():
+                    wp = candidate
+                    break
             if wp:
                 wavs[wav_rel] = wp
             else:
@@ -1668,13 +1742,30 @@ def export_bundle() -> tuple:
         'missing': {'instruments': missing_sins, 'samples': missing_wavs},
     }
     buf = io.BytesIO()
+    total = 0
+    names = set()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr('manifest.json', json.dumps(manifest, indent=2))
-        zf.writestr(f'kit/{kit_name}', kit_raw)
+        def add(name, data):
+            nonlocal total
+            total += len(data)
+            if name.casefold() in names:
+                raise ValueError('Case-ambiguous paths in bundle')
+            names.add(name.casefold())
+            if len(data) > limits.MAX_FILE_BYTES or total > limits.MAX_TOTAL_BYTES or len(names) > limits.MAX_ENTRIES:
+                raise ValueError('Bundle exceeds import limits. Export a smaller kit.')
+            zf.writestr(name, data)
+            if buf.tell() > limits.MAX_ZIP_BYTES:
+                raise ValueError('Bundle exceeds the 512 MiB ZIP limit. Export a smaller kit.')
+        add('manifest.json', json.dumps(manifest, indent=2).encode('utf-8'))
+        add(f'kit/{kit_name}', kit_raw)
         for rel, data in sins.items():
-            zf.writestr(f'instruments/{rel}', data)
+            add(f'instruments/{rel}', data)
         for wav_rel, wp in wavs.items():
-            zf.write(wp, f'samples/{wav_rel}')
+            if wp.stat().st_size > limits.MAX_FILE_BYTES:
+                raise ValueError('Sample exceeds the 512 MiB bundle limit')
+            add(f'samples/{wav_rel}', read_card_bytes(wp))
+    if len(buf.getvalue()) > limits.MAX_ZIP_BYTES:
+        raise ValueError('Bundle exceeds the 512 MiB ZIP limit. Export a smaller kit.')
     fname = kit_name.rsplit('.', 1)[0] + '.strike-bundle.zip'
     return buf.getvalue(), fname
 
@@ -1717,73 +1808,23 @@ def _classify_zip_entry(parts: tuple, sin_wav_rels: dict) -> 'tuple | None':
 
 
 def import_bundle(zip_bytes: bytes) -> dict:
-    """Unpack a kit/instrument zip into the library. Accepts strike-bundle zips,
-    official Strike Editor exports, and commercial pack zips (eDrumWorkshop etc.).
-    Existing files are never overwritten: identical ones count as skipped,
-    different ones as conflicts."""
-    import zipfile
-    from pathlib import PurePosixPath
-    zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    entries = []
-    for n in zf.namelist():
-        if n.endswith('/') or PurePosixPath(n).name in ('manifest.json', '.DS_Store'):
-            continue
-        parts = PurePosixPath(n).parts
-        if not parts or any(p in ('..', '') for p in parts) or PurePosixPath(n).is_absolute():
-            continue  # blocks zip-slip
-        entries.append((n, parts))
-
-    # Pre-scan .sin files for their referenced WAV rel paths so loose WAVs can be
-    # placed where instrument resolution expects them (basename → samples-rel).
-    sin_wav_rels = {}
-    for n, parts in entries:
-        if parts[-1].lower().endswith('.sin'):
+    """Preflight an archive, then publish new files without overwriting the library."""
+    from strike_remapper.bundle_import import import_archive, ImportStopped
+    try:
+        result = import_archive(zip_bytes, LIBRARY_DIR, _classify_zip_entry, parse_sin_all_wavs)
+    except ImportStopped as exc:
+        if exc.completed:
             try:
-                for wav_rel in parse_sin_all_wavs(zf.read(n)):
-                    base = wav_rel.replace('\\', '/').rsplit('/', 1)[-1].lower()
-                    sin_wav_rels.setdefault(base, wav_rel.replace('\\', '/'))
+                refresh_available()
             except Exception:
-                pass  # malformed .sin → fall back to path-based placement
-
-    kit_names = []
-    counts = {'kits': 0, 'instruments': 0, 'samples': 0, 'skipped': 0, 'conflicts': []}
-    for n, parts in entries:
-        classified = _classify_zip_entry(parts, sin_wav_rels)
-        if not classified:
-            continue
-        kind, rel = classified
-        if any(p in ('..', '') for p in PurePosixPath(rel).parts):
-            continue
-        dest_dir = LIBRARY_DIR / kind
-        data = zf.read(n)
-        dest = dest_dir / rel
-        if kind == 'kits':
-            # never clobber an existing kit — find a free " (n)" name instead
-            base, ext = dest.stem, dest.suffix
-            ctr = 2
-            while dest.exists() and dest.read_bytes() != data:
-                dest = dest_dir / f'{base} ({ctr}){ext}'
-                ctr += 1
-            if dest.exists():
-                counts['skipped'] += 1
-                kit_names.append(dest.name)
-                continue
-            kit_names.append(dest.name)
-        elif dest.exists():
-            if dest.read_bytes() == data:
-                counts['skipped'] += 1
-            else:
-                counts['conflicts'].append(rel)
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-        counts[kind] += 1
-
-    if not kit_names and not counts['instruments'] and not counts['samples']:
-        raise ValueError('No .skt, .sin, or .wav files found in zip — not a kit/instrument bundle')
-    refresh_available()
-    counts['kit_names'] = kit_names
-    return counts
+                pass  # Preserve the original partial-import recovery instructions.
+        raise
+    try:
+        refresh_available()
+    except Exception as exc:
+        completed = sum(result[k] for k in ('kits', 'instruments', 'samples'))
+        raise ImportStopped(completed, 'Files were processed, but the library listing could not refresh.') from exc
+    return result
 
 
 def swap_pads(pad_id_a: str, pad_id_b: str):
@@ -1876,37 +1917,47 @@ def set_instrument_tags(sin_rel: str, tags: list):
 
 
 def batch_assign_csv(assignments: list) -> dict:
-    """Assign instruments from a list of {pad_id, layer, sin_rel} dicts. Single undo entry."""
-    _push_history(f'CSV assign ({len(assignments)} rows)')
-    changed, skipped = 0, []
+    """Validate the entire batch before one undoable assignment change."""
+    if not isinstance(assignments, list) or not assignments:
+        raise ValueError('CSV assignments must be a non-empty list of rows.')
+    pads_by_id = {pad['id']: pad for pad in state['pads']}
+    planned, skipped = {}, []
     avail = state.get('avail', {})
-    for row in assignments:
-        pad_id  = str(row.get('pad_id', '')).strip().upper()
-        layer   = str(row.get('layer', 'a')).strip().lower()
-        sin_rel = str(row.get('sin_rel', '')).strip()
-        if not pad_id or not sin_rel:
-            continue
+    for number, row in enumerate(assignments, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f'CSV row {number}: expected a pad, layer and instrument.')
+        values = [row.get('pad_id'), row.get('layer', 'a'), row.get('sin_rel')]
+        if any(not isinstance(value, str) or not value.strip() for value in values):
+            raise ValueError(f'CSV row {number}: pad, layer and instrument must be non-empty text.')
+        pad_id, layer, sin_rel = values[0].strip().upper(), values[1].strip().lower(), values[2].strip()
+        if pad_id not in pads_by_id:
+            raise ValueError(f'CSV row {number}: unknown pad {pad_id}. Nothing assigned.')
+        if layer not in ('a', 'b'):
+            raise ValueError(f'CSV row {number}: layer must be A or B. Nothing assigned.')
         if sin_rel not in avail:
             skipped.append(sin_rel)
             continue
-        instruments = state['instruments']
+        planned[(pad_id, layer)] = sin_rel
+    instruments = list(state['instruments'])
+    changes = []
+    for (pad_id, layer), sin_rel in planned.items():
         if sin_rel not in instruments:
             instruments.append(sin_rel)
-        idx = instruments.index(sin_rel)
-        for pad in state['pads']:
-            if pad['id'] == pad_id:
-                if layer == 'b':
-                    pad['layer_b'] = idx
-                else:
-                    pad['layer_a'] = idx
-                changed += 1
-                break
-    state['dirty'] = True
-    msg = f'CSV assigned {changed} pads'
+        index = instruments.index(sin_rel)
+        pad = pads_by_id[pad_id]
+        if pad['layer_' + layer] != index:
+            changes.append((pad, layer, index))
+    msg = f'CSV assigned {len(changes)} layers'
     if skipped:
         msg += f' ({len(skipped)} instruments not in library)'
-    state['message'] = msg
-    return {'changed': changed, 'skipped': skipped}
+    if changes:
+        _push_history(f'CSV assign ({len(changes)} layers)')
+        state['instruments'] = instruments
+        for pad, layer, index in changes:
+            pad['layer_' + layer] = index
+        state['dirty'] = True
+        state['message'] = msg
+    return {'changed': len(changes), 'skipped': skipped, 'message': msg}
 
 
 # Per-pad fields compared by the diff engine (both kit-vs-kit and snapshot-vs-snapshot).
@@ -7287,26 +7338,33 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
-let balanceReport=null, balanceBusy=false, balanceVoice=null;
-document.getElementById('balance-dialog').addEventListener('cancel',()=>{if(balanceVoice){balanceVoice.stop();balanceVoice=null;}});
+let balanceReport=null, balanceBusy=false, balanceVoice=null, balancePreviewGeneration=0, balanceDialogGeneration=0;
+function balanceStopPreview() { balancePreviewGeneration++; if(balanceVoice){balanceVoice.stop();balanceVoice=null;} }
+document.getElementById('balance-dialog').addEventListener('cancel',()=>{balanceDialogGeneration++;balanceStopPreview();});
 function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
 function balanceControls() {
   document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
   document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
   document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
 }
-function closeBalance() { if(balanceVoice) {balanceVoice.stop(); balanceVoice=null;} document.getElementById('balance-dialog').close(); }
+function closeBalance() { balanceDialogGeneration++; balanceStopPreview(); document.getElementById('balance-dialog').close(); }
 function openBalance() {
   if(window.VIEWER) return;
+  balanceDialogGeneration++;
+  balanceStopPreview();
   balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
   balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
   document.getElementById('balance-dialog').showModal();
 }
 async function balanceAnalyze() {
   if(balanceBusy) return;
+  balanceStopPreview();
+  const generation=balanceDialogGeneration;
+  const isCurrent=()=>generation===balanceDialogGeneration && document.getElementById('balance-dialog').open;
   balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
   try {
     const report=await api('/balance',{action:'analyze'});
+    if(!isCurrent()) return;
     if(report.error) throw new Error(report.error);
     balanceReport=report; document.getElementById('balance-scope').textContent=report.scope;
     document.getElementById('balance-rows').innerHTML=report.rows.map((r,i)=>`<section class="balance-row">
@@ -7317,31 +7375,36 @@ async function balanceAnalyze() {
       ${r.sample ? `<button class="btn-secondary" onclick="balanceAudition(${i},false)">Listen current</button> ${r.suggested!=null ? `<button class="btn-secondary" onclick="balanceAudition(${i},true)">Listen proposed</button>` : ''}<small> First representative sample, 0.5-second window.</small>` : ''}
       </section>`).join('')+report.notes.map(n=>`<p>${escHtml(n)}</p>`).join('');
     balanceStatus(`${report.rows.length} assigned layers reviewed. Nothing changed. Select suggestions to apply.`);
-  } catch(error) {balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}
+  } catch(error) {if(isCurrent()){balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}}
   finally {balanceBusy=false; balanceControls();}
 }
 async function balanceAudition(index, proposed) {
-  const row=balanceReport?.rows[index]; if(!row) return;
+  const row=balanceReport?.rows[index]; if(!row || balanceBusy) return;
+  balanceStopPreview();
+  const generation=balancePreviewGeneration, report=balanceReport;
+  const isCurrent=()=>generation===balancePreviewGeneration && report===balanceReport && document.getElementById('balance-dialog').open;
+  balanceStatus(`Loading ${proposed ? 'proposed' : 'current'} preview.`);
   try {
     const AudioEngine=window.AudioContext || window.webkitAudioContext;
     if(!AudioEngine) throw new Error('Audio preview is not supported by this browser. Audition on another browser before applying.');
     if(!_blendCtx) _blendCtx=new AudioEngine();
     if(_blendCtx.state==='suspended') await _blendCtx.resume();
+    if(!isCurrent()) return;
     const response=await fetch('/api/balance_preview?sample='+encodeURIComponent(row.sample));
     if(!response.ok) throw new Error('Sample unavailable; analyze again.');
     const buffer=await _blendCtx.decodeAudioData(await response.arrayBuffer());
-    if(!document.getElementById('balance-dialog').open) return;
-    if(balanceVoice) balanceVoice.stop();
+    if(!isCurrent()) return;
     const gain=_blendCtx.createGain(); gain.gain.value=previewVol*(proposed ? row.suggested : row.level)/127*row.instrument_level/127; gain.connect(_blendCtx.destination);
     const voice=_blendCtx.createBufferSource(); voice.buffer=buffer; voice.connect(gain); balanceVoice=voice;
     voice.onended=()=>{gain.disconnect();if(balanceVoice===voice) balanceVoice=null;}; voice.start();
     balanceStatus(`Listening ${proposed ? 'proposed' : 'current'}: ${row.label}, Layer ${row.layer.toUpperCase()}. Kit unchanged.`);
-  } catch(error) {balanceStatus('Preview unavailable: '+error.message);}
+  } catch(error) {if(isCurrent()) balanceStatus('Preview unavailable: '+error.message);}
 }
 async function balanceApply() {
   if(balanceBusy || !balanceReport) return;
   const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
   if(!selected.length) return;
+  balanceStopPreview();
   balanceBusy=true; balanceControls();
   let responseReceived=false;
   try {
@@ -7393,6 +7456,12 @@ async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete thi
 async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
 function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
 function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
+function slRemove(index) {
+  if(sl.busy) return;
+  sl.document.entries.splice(index,1); slMark(); slRows();
+  const next=Math.min(index,sl.document.entries.length-1);
+  (slEl('rows').querySelector(`[data-row="${next}"][data-remove]`) || slEl('kit')).focus();
+}
 async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. Local samples checked; card and factory contents unverified. Nothing deployed.`);}); }
 function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
@@ -7405,7 +7474,7 @@ async function slImport(input) {
     sl.id=null;sl.revision=null;sl.dirty=true;sl.report=report;slRender();slStatus('Imported as a new draft. Missing kits stay visible; copy them into this library, then refresh and check again. Save setlist to keep this copy.');});
 }
 function slCopy(i) { if(sl.busy || sl.copyIndex!==null) return; sl.copyIndex=i; slEl('copy-name').value=''; slEl('copy-form').hidden=false; document.querySelector('.sl-layout').inert=true; slEl('copy-name').focus(); }
-function slCopyCancel() { if(sl.busy) return; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; }
+function slCopyCancel() { if(sl.busy) return; const index=sl.copyIndex; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slEl('rows').querySelector(`[data-row="${index}"][data-copy]`)?.focus(); }
 async function slCopySubmit() { await slRun(async()=>{const row=sl.document.entries[sl.copyIndex];const result=await slRequest('copy_kit',{kit:row.kit,name:slEl('copy-name').value}); row.kit=result.kit; row.output=''; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slMark(); await slRefreshData(); slRows(); slStatus('Kit copy created. Save the setlist to keep its new reference, then use Edit kit for song-specific changes.');}); }
 async function slEditKit(i) { if(sl.busy) return; const row=sl.document.entries[i]; const found=sl.kits.find(k=>k.kit===row.kit); if(!found) {slStatus('Kit is missing from this library. Copy it into library/kits, then Refresh kits.');return;} if(sl.dirty) {slStatus('Save or export your setlist before opening a kit.');return;} await slRun(async()=>{if(await openKit(found.path)) {document.getElementById('setlist-dialog').close(); sl.report=null;} else slStatus('Kit could not be opened. Check editing control and the library.');}); }
 function slPrint() {
@@ -7424,7 +7493,7 @@ function slInit() {
   dialog.addEventListener('keydown',e=>{e.stopPropagation();if((e.ctrlKey || e.metaKey) && e.key==='s'){e.preventDefault();if(sl.copyIndex===null) void slSave();}});
   slEl('saved').addEventListener('click',e=>{const button=e.target.closest('[data-saved]');if(button) void slLoad(Number(button.dataset.saved));});
   slEl('rows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.field || sl.busy) return;sl.document.entries[Number(el.dataset.row)][el.dataset.field]=el.value;slMark();});
-  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove){sl.document.entries.splice(i,1);slMark();slRows();}});
+  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove) slRemove(i);});
   let drag=null;
   slEl('rows').addEventListener('dragstart',e=>{if(e.target.dataset.drag===undefined || sl.busy){e.preventDefault();return;}drag=Number(e.target.dataset.drag);e.dataTransfer.setData('text/plain',String(drag));e.dataTransfer.effectAllowed='move';});
   slEl('rows').addEventListener('dragover',e=>{if(drag!==null){e.preventDefault();e.dataTransfer.dropEffect='move';}});
@@ -9372,31 +9441,68 @@ function renderKitFx(d) {
 }
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
-function exportBundle() {
-  closeAllPopovers();
-  if (!pads.length) { setMsg('Load a kit first', true); return; }
-  setMsg('Building bundle… (kit + instruments + samples)');
-  window.location = '/api/export_bundle';
+let bundleExportBusy=false;
+function requestBlobDownload(blob,filename) {
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=filename;
+  document.body.appendChild(link);
+  try { link.click(); }
+  finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 }
 
-async function importBundle(file) {
+async function exportBundle() {
   closeAllPopovers();
-  setMsg(`Importing ${file.name}…`);
-  const buf = await file.arrayBuffer();
-  let bin = '';
-  const bytes = new Uint8Array(buf);
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  const data = await api('/import_bundle', {data_b64: btoa(bin)});
-  if (data.error) { setMsg(data.error, true); return; }
-  kits = data.kits;
-  avail = data.instruments;
-  renderKitList();
-  renderInstruments();
-  await checkPaths();
-  setMsg(data.message);
+  if(bundleExportBusy) return;
+  if (!pads.length) { setMsg('Load a kit first', true); return; }
+  bundleExportBusy=true;
+  setMsg('Building bundle… (kit + instruments + samples)');
+  try {
+    const response=await fetch('/api/export_bundle',{cache:'no-store'});
+    if(!response.ok) {
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error || `Export request failed (${response.status})`);
+    }
+    if(!response.headers.get('Content-Type')?.includes('application/zip')) throw new Error('Host did not return a ZIP bundle');
+    const blob=await response.blob();
+    const expected=Number(response.headers.get('Content-Length'));
+    if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
+    const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
+    requestBlobDownload(blob,filename);
+    const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
+    setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
+  } catch(error) {
+    setMsg(`Bundle export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { bundleExportBusy=false; }
+}
+
+let bundleImportBusy=false;
+async function importBundle(file) {
+  if(!file || bundleImportBusy) return;
+  closeAllPopovers();
+  bundleImportBusy=true;
+  let sent=false, responseReceived=false;
+  try {
+    if(file.size > 512*1024*1024) throw new Error('Bundle exceeds the 512 MiB ZIP limit. Split it into smaller bundles.');
+    setMsg(`Importing ${file.name}.`);
+    const buf = await file.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buf), CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    sent=true;
+    const data = await api('/import_bundle', {data_b64: btoa(bin)});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    kits = data.kits; avail = data.instruments;
+    renderKitList(); renderInstruments();
+    await checkPaths();
+    setMsg(data.message);
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('Bundle import could not be confirmed. Some files may have been imported. Refresh the library before retrying; the request was not repeated.',true);
+    } else setMsg(error.message,true);
+  } finally {bundleImportBusy=false;}
 }
 
 // ── Kit diff ──────────────────────────────────────────────────────────────────
@@ -10129,30 +10235,40 @@ async function refreshKitSize() {
   } catch(e) { badge.style.display = 'none'; }
 }
 
+let csvImportBusy=false;
 async function importAssignCSV(file) {
+  if (!file || csvImportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
-  const text = await file.text();
-  const assignments = [];
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const cols = line.split(',').map(c => c.trim());
-    if (cols.length < 2) continue;
-    // Support: pad_id,sin_rel  OR  pad_id,layer,sin_rel
-    if (cols.length === 2) {
-      assignments.push({pad_id: cols[0], layer: 'a', sin_rel: cols[1]});
-    } else {
-      assignments.push({pad_id: cols[0], layer: cols[1].toLowerCase(), sin_rel: cols[2]});
+  csvImportBusy=true;
+  let sent=false, responseReceived=false;
+  const originalPads=pads;
+  try {
+    const text = await file.text();
+    if(pads !== originalPads) throw new Error('Kit changed while reading the CSV. Import it again for the current kit.');
+    const assignments = [];
+    for (const [index,rawLine] of text.split(/\r?\n/).entries()) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const cols = line.split(',').map(c => c.trim());
+      if (![2,3].includes(cols.length) || cols.some(c=>!c)) throw new Error(`CSV line ${index+1}: use pad_id,instrument or pad_id,A/B,instrument. Nothing assigned.`);
+      assignments.push({pad_id:cols[0],layer:cols.length===2 ? 'a' : cols[1].toLowerCase(),sin_rel:cols.at(-1)});
     }
-  }
-  if (!assignments.length) { setMsg('No valid rows found in CSV', true); return; }
-  setMsg(`Assigning ${assignments.length} pads from CSV…`);
-  const data = await api('/batch_assign_csv', {assignments});
-  if (data.error) { setMsg(data.error, true); return; }
-  pads = data.pads;
-  setDirtyState(data.dirty, data.undo_count, data.history_labels);
-  renderDrumMap(); renderPadDetail(); checkPaths();
-  setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+    if (!assignments.length) throw new Error('No assignment rows found in CSV.');
+    setMsg(`Assigning ${assignments.length} rows from CSV.`);
+    sent=true;
+    const data = await api('/batch_assign_csv', {assignments});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    pads = data.pads;
+    setDirtyState(data.dirty, data.undo_count, data.history_labels);
+    renderDrumMap(); renderPadDetail(); checkPaths();
+    setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('CSV assignment could not be confirmed. Reload the host kit before trying again; the request was not retried.',true);
+    } else setMsg(error.message,true);
+  } finally {csvImportBusy=false;}
 }
 
 function printMidiMap() {
@@ -10160,11 +10276,22 @@ function printMidiMap() {
   window.open('/api/midi_map_html', '_blank');
 }
 
+let kitsExportBusy=false;
 async function exportKits() {
-  const a = document.createElement('a');
-  a.href = '/api/export_kits';
-  a.download = 'strike_kits_export.json';
-  a.click();
+  closeAllPopovers();
+  if(kitsExportBusy) return;
+  kitsExportBusy=true;
+  setMsg('Building saved-kit JSON report…');
+  try {
+    const response=await fetch('/api/export_kits',{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok || data.error) throw new Error(data.error || `Export request failed (${response.status})`);
+    if(!Array.isArray(data.kits) || !Array.isArray(data.warnings)) throw new Error('Invalid kit report from host');
+    requestBlobDownload(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'strike_kits_export.json');
+    setMsg(`Download requested: ${data.kits.length} saved kit(s). Check your browser Downloads. This JSON report excludes unsaved edits and is not a kit backup.${data.warnings.length ? ` Warning: ${data.warnings.length} skipped file(s); see warnings in the report.` : ''}`,data.warnings.length>0);
+  } catch(error) {
+    setMsg(`Kit report export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { kitsExportBusy=false; }
 }
 
 // ── SD sync ───────────────────────────────────────────────────────────────────
@@ -11800,51 +11927,42 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/export_bundle':
             try:
                 zip_bytes, fname = export_bundle()
+                import zipfile
+                from urllib.parse import quote
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
+                    missing = json.loads(archive.read('manifest.json'))['missing']
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
                 return
             self.send_response(200)
             self.send_header('Content-Type', 'application/zip')
-            self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+            self.send_header('Content-Disposition', "attachment; filename=\"kit.strike-bundle.zip\"; filename*=UTF-8''" + quote(fname, safe=''))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Strike-Missing-Assets', str(sum(len(items) for items in missing.values())))
             self.send_header('Content-Length', len(zip_bytes))
             self.end_headers()
-            self.wfile.write(zip_bytes)
+            try:
+                self.wfile.write(zip_bytes)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Client cancelled; export has not changed the library or kit.
             return
 
         if path == '/api/export_kits':
-            import datetime
-            kits_dir  = LIBRARY_DIR / 'kits'
-            kit_files = sorted(kits_dir.glob('*.skt')) if kits_dir.is_dir() else []
-            out = {'exported_at': datetime.datetime.now().isoformat(), 'kits': []}
-            for kf in kit_files:
-                try:
-                    raw = kf.read_bytes()
-                    pads_data, insts = parse_skt(raw)
-                    kit_entry = {'name': kf.name, 'pads': []}
-                    for pad_id, payload in pads_data:
-                        la_idx = struct.unpack_from('<H', payload, 4)[0]
-                        lb_idx = struct.unpack_from('<H', payload, 24)[0]
-                        def _u8(o): return payload[o] if o < len(payload) else 0
-                        def _i8(o): v = _u8(o); return v if v < 128 else v - 256
-                        kit_entry['pads'].append({
-                            'id':       pad_id,
-                            'midi':     _u8(52),
-                            'layer_a':  insts[la_idx] if la_idx != 0xFFFF and la_idx < len(insts) else None,
-                            'layer_b':  insts[lb_idx] if lb_idx != 0xFFFF and lb_idx < len(insts) else None,
-                            'la_level': _u8(LA_LEVEL_OFF), 'la_pan': _i8(LA_PAN_OFF), 'la_pitch': _i8(LA_PITCH_OFF),
-                            'la_fine':  _i8(LA_FINE_OFF),  'la_decay': _u8(LA_DECAY_OFF),
-                            'la_fcut':  _u8(LA_FCUT_OFF),  'la_fflag': _u8(LA_FFLAG_OFF),
-                        })
-                    out['kits'].append(kit_entry)
-                except Exception:
-                    pass
-            body = json.dumps(out, indent=2).encode()
+            try:
+                body = json.dumps(export_kits_report(), indent=2).encode()
+            except Exception as exc:
+                self.send_json({'error': str(exc)}, 400)
+                return
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Disposition', 'attachment; filename="strike_kits_export.json"')
             self.send_header('Content-Length', len(body))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             return
 
         if path == '/api/midi_map_html':
@@ -12376,7 +12494,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 result = batch_assign_csv(body.get('assignments', []))
                 self.send_json({
-                    'message':        state['message'],
+                    'message':        result['message'],
                     'pads':           self._pad_view(state['pads'], state['instruments']),
                     'dirty':          state['dirty'],
                     'undo_count':     len(state['history']),

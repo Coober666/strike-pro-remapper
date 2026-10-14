@@ -1,5 +1,5 @@
 import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, matchesFocus, summarize, compare, demoSession, exportCSV, report} from './core.js';
-import {listSessions, readSession, saveSession, deleteSession, readSessions, restoreSessions} from './storage.js';
+import {listSessions, readSession, readSavedSession, saveSession, deleteSession, readSessions, restoreSessions} from './storage.js';
 import {sessionTags, matchesSearch, EXERCISES} from './metadata.js';
 import {validateArchive, archiveJSON, MAX_ARCHIVE_BYTES} from './organization.js';
 import {HostTake} from './host.js';
@@ -9,6 +9,7 @@ const $ = id => document.getElementById(id);
 let current = newSession(), savedId = null, dirty = false, mode = 'ready', access = null, selected = null;
 let elapsed = 0, started = 0, playhead = 0, playing = false, playStart = 0, playFrom = 0, reference = null;
 let lastDraw = 0, drawNeeded = true, storageBusy = false;
+let savedRevision=null;
 const setStatus = (text, error=false) => { $('status').textContent=text; $('status').classList.toggle('error', error); };
 const active = () => ['recording','paused','syncing'].includes(mode);
 const hostMode = () => $('capture-source').value === 'host';
@@ -40,12 +41,12 @@ function controls() {
   $('input').disabled = active() || (!hostMode() && !access) || busy || held;
   $('capture-source').disabled=active() || busy || held;
   for (const id of ['demo','import']) $(id).disabled = active() || busy || held;
-  for (const id of ['save','json','csv','report','play','seek']) $(id).disabled = active() || !current.events.length || busy;
+  for (const id of ['save','save-copy','json','csv','report','play','seek']) $(id).disabled = active() || !current.events.length || busy;
   $('compare').disabled = active() || storageBusy;
   for (const id of ['name','session-tags','session-notes']) $(id).disabled=storageBusy;
   $('exercise').disabled=busy || active();
   const annotationsValid=metadataValid();
-  for (const id of ['save','json','report']) $(id).disabled ||= !annotationsValid;
+  for (const id of ['save','save-copy','json','report']) $(id).disabled ||= !annotationsValid;
   $('backup-export').disabled=active() || busy || !backupSelection.size;
   $('backup-import').disabled=active() || busy;
   $('select-shown').disabled=active() || busy || !savedItems.length;
@@ -72,12 +73,13 @@ async function replaceSession(loader, id=null, notice='Session loaded.') {
   if (active() || storageBusy) return;
   storageBusy=true; controls();
   try {
-    const session=validateSession(await loader());
-    if (await canReplace()) { useSession(session,id); setStatus(notice); }
+    const loaded=await loader(), session=validateSession(id ? loaded.session : loaded);
+    if (await canReplace()) { useSession(session,id,id ? loaded.revision : null); setStatus(notice); }
   } catch (e) { setStatus(e.message,true); }
   finally { storageBusy=false; controls(); }
 }
-function useSession(session, id=null) {
+function useSession(session, id=null, revision=null) {
+  savedRevision=revision;
   current = validateSession(session); profiles.unsaved=false; profiles.refresh(); savedId=id; dirty=!id; mode='ready'; playing=false; playhead=0; elapsed=current.durationMs;
   metadataFields(); focus=''; focusSignature='';
   $('name').value=current.name; $('seek').max=String(Math.max(1,current.durationMs)); $('seek').value='0';
@@ -107,7 +109,10 @@ function inputsChanged() {
   let disconnected = false;
   if (selected && selected.state === 'disconnected') {
     disconnected = true;
-    if (active()) stopCapture('MIDI input disconnected. The captured events are kept; reconnect and start a new take.');
+    if (active()) {
+      current.captureStatus='partial';
+      stopCapture('MIDI input disconnected. This take may be incomplete; received events are kept. Save or export it before starting a new take.');
+    }
     selected.removeEventListener('midimessage', onMessage); selected=null;
   }
   const chosen = selected?.id || $('input').value;
@@ -211,7 +216,7 @@ function renderSaved() {
   for (const item of shown) {
     const row=document.createElement('div'); row.className='session';
     const open=document.createElement('button'); open.textContent=item.name;
-    open.onclick=() => replaceSession(() => readSession(item.id),item.id,'Saved session loaded.');
+    open.onclick=() => replaceSession(() => readSavedSession(item.id),item.id,'Saved session loaded.');
     const meta=document.createElement('small'); meta.textContent=`${item.count.toLocaleString()} messages${item.synthetic ? ' · Synthetic demo' : ''}${item.captureStatus === 'partial' ? ' · Partial take' : ''}${item.tags?.length ? ' · '+item.tags.join(', ') : ''}`;
     const label=document.createElement('label'), box=document.createElement('input'); box.type='checkbox'; box.checked=backupSelection.has(item.id); box.setAttribute('aria-label','Back up '+item.name);
     box.onchange=() => { if (box.checked) backupSelection.add(item.id); else backupSelection.delete(item.id); controls(); };
@@ -220,8 +225,8 @@ function renderSaved() {
     remove.onclick=async () => {
       if (!await confirmAction(`Delete “${item.name}” from this browser? Export it first if you need a backup.`, 'Delete saved session?')) return;
       storageBusy=true; controls();
-      try { await deleteSession(item.id); backupSelection.delete(item.id); if (savedId === item.id) { savedId=null; dirty=true; } if ($('compare').value === item.id) reference=null; await refreshSaved(); render(); }
-      catch (e) { setStatus('Could not delete: '+e.message,true); }
+      try { await deleteSession(item.id,item.revision ?? 0); backupSelection.delete(item.id); if (savedId === item.id) { savedId=null; savedRevision=null; dirty=true; } if ($('compare').value === item.id) reference=null; await refreshSaved(); render(); }
+      catch (e) { await refreshSaved(); setStatus('Could not delete: '+e.message,true); }
       finally { storageBusy=false; controls(); }
     };
     row.append(open,meta,label,remove); $('sessions').append(row);
@@ -261,12 +266,18 @@ $('backup-import').onchange=async () => {
   } catch (e) { setStatus('Nothing was imported. '+e.message,true); }
   finally { storageBusy=false; controls(); }
 };
-$('save').onclick=async () => {
+async function saveCurrent(asCopy=false) {
   storageBusy=true; controls();
-  try { savedId=await saveSession(current,savedId); dirty=false; await refreshSaved(); setStatus('Saved in this browser. Export JSON to keep a portable backup.'); }
-  catch (e) { setStatus('Session was not saved. Export JSON to keep it. '+e.message,true); }
+  try {
+    const result=await saveSession(current,asCopy ? null : savedId,savedRevision);
+    savedId=result.id; savedRevision=result.revision; dirty=false; await refreshSaved();
+    setStatus(asCopy ? 'Saved as a new copy in this browser. The previous saved version is unchanged.' : 'Saved in this browser. Export JSON to keep a portable backup.');
+  }
+  catch (e) { await refreshSaved(); setStatus('Session was not saved. '+e.message,true); }
   finally { storageBusy=false; controls(); }
-};
+}
+$('save').onclick=() => saveCurrent();
+$('save-copy').onclick=() => saveCurrent(true);
 $('compare').onchange=async () => {
   const id=$('compare').value;
   try { const loaded=id ? await readSession(id) : null; if ($('compare').value === id) { reference=loaded; focusSignature=''; render(); } }

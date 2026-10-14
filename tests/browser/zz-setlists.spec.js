@@ -133,3 +133,18 @@ test('phone layout keeps editing controls inside the viewport',async({page})=>{
   await page.getByRole('button',{name:'Remove song 1',exact:true}).click();
   await expect(page.locator('#sl-rows')).toContainText('Your show starts here');
 });
+
+test('keyboard removal keeps focus near the edited song and copy cancel restores its button',async({page})=>{
+  await open(page); await add(page); await add(page);
+  const copy=page.getByRole('button',{name:'Copy kit for song',exact:true}).first();
+  await copy.focus(); await page.keyboard.press('Enter');
+  await expect(page.locator('#sl-copy-name')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(copy).toBeFocused();
+  await page.getByRole('button',{name:'Remove song 1',exact:true}).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button',{name:'Remove song 1',exact:true})).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#sl-kit')).toBeFocused();
+  await expect(page.locator('#sl-rows')).toContainText('Your show starts here');
+});

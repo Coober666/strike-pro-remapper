@@ -58,8 +58,10 @@ class Host:
         if root.name.lower() in ('kits', 'instruments', 'samples', 'snapshots') and any(
                 (root.parent / name).is_dir() for name in ('kits', 'instruments', 'samples') if name != root.name.lower()):
             raise ValueError(f'Choose the library folder containing kits, instruments and samples: {root.parent}')
-        if (root / 'strike_remap.py').is_file() and (root / 'library').is_dir():
-            raise ValueError(f'This is the application folder. Your existing library is in: {root / "library"}')
+        if (root / 'strike_remap.py').is_file():
+            if (root / 'library').is_dir():
+                raise ValueError(f'This is the application folder. Your existing library is in: {root / "library"}')
+            raise ValueError('This is the application folder. Choose a separate library folder so upgrades keep your kits and samples.')
         if root.exists() and not root.is_dir():
             raise ValueError('Choose a folder, not a kit file. Open the kit after starting the editor.')
         validate_library(root)

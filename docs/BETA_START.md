@@ -2,8 +2,9 @@
 
 This ZIP is a portable application folder for testing. It requires Python 3.10 or
 newer; the host window also requires Tk. It is unsigned, has no automatic updater,
-and is not a native iPhone/iPad app. MIDI capture on physical modules and the latest
-mobile workflows still need acceptance testing.
+and is not a native iPhone/iPad app. Mac/Strike MIDI capture has limited
+[hardware acceptance](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md); other host/module
+combinations and the latest mobile workflows still need acceptance testing.
 
 ## First ten minutes
 
@@ -15,6 +16,8 @@ mobile workflows still need acceptance testing.
    If Python/Tk is missing, follow [host setup help](HOST_LAUNCHER.md#first-run-help).
 3. Choose a separate library folder. Start with a copy of your library or an empty
    folder; keep its backup elsewhere. Choose Open editor, or use Try a demo for a module-free walkthrough.
+   The host rejects the extracted application's root as a library, even on a fresh
+   installation. Keep kits/samples in a persistent folder separate from application updates.
 4. Open Drum MIDI toolkit and Try a demo. Name it, add notes/tags and Save session.
    Wait for **Saved in this browser** before closing/reloading the page.
 5. Select one channel/note under Analysis focus. The chart/report should isolate
@@ -64,6 +67,54 @@ Do not post pairing links/tokens. Mark whether the result used real hardware or 
 
 The remaining [release acceptance checklist](RELEASE_CHECKLIST.md) is deliberately
 open until each item has evidence. A passing automated test is not hardware acceptance.
+Use [the hands-on sessions](HANDS_ON_ACCEPTANCE.md) to test one device/workflow at a
+time and record actual results.
+
+## Exporting a kit bundle
+
+Choose **Export kit bundle (.zip)** in the editor to download the current kit, including unsaved
+edits, with the instruments and samples the host can find. Building the ZIP briefly
+queues editor changes; network transfer does not hold the editor lock. Edited library
+instruments take priority over matching card copies.
+
+The editor stays open if building or downloading fails. Read the error, fix the missing
+connection or unreadable file, then retry Export. Repeated clicks during a pending export
+do not start extra requests. The download message means the browser was asked to save
+the file: check its Downloads list (or Files on iPad/iPhone) for completion.
+
+A missing-assets warning means the ZIP is incomplete. Open its `manifest.json` for the
+missing instrument/sample references, make those assets available, and export again.
+Keep the original library backup until you have imported into a separate library and
+checked the result. Bundles do not contain your full library, snapshots or MIDI sessions.
+Exports use the same 512 MiB ZIP/file, 16 MiB instrument, 2 GiB total and 10,000-entry
+limits as imports. Files changed by another program during export are not a consistent
+filesystem snapshot; avoid editing the library externally during export.
+
+**Export kits to JSON** is a separate report of saved library kits, assignments and
+selected pad parameters. It excludes unsaved edits and recovery autosaves, and cannot
+be imported to restore a kit. Any unreadable or malformed kit is listed in `warnings`
+instead of silently omitted. Use a bundle or full library copy for backup.
+
+## Importing a kit bundle
+
+Use a copied library for your first import. The importer accepts kit bundles and
+official/commercial ZIP layouts; it checks and stages supported assets before copying.
+Existing files stay unchanged: identical assets are skipped, conflicting instruments
+or samples keep the existing version, and different kits receive numbered filenames.
+Review conflicts and missing dependencies before deploying.
+
+Limits are 512 MiB per ZIP or extracted file, 16 MiB per instrument, 2 GiB total
+extracted assets and 10,000 archive entries. Temporary space is needed in addition to
+library space. Split larger packs. Unsafe paths, links and corrupt supported assets
+are rejected before any library files are imported.
+
+If copying fails later, the message reports completed new files. Earlier completed
+files remain; the current incomplete file is removed when possible. If cleanup fails,
+inspect the named incomplete file before retrying. Refresh the library and check free
+space/permissions; re-importing skips identical completed files. A lost browser response
+does not prove failure, so refresh before retrying. The app never retries uploads itself.
+A crash or power loss during copying can leave an incomplete file; this is not a
+whole-library rollback mechanism. Keep your backup until the imported kit is checked.
 
 ## Build a package from a checkout
 

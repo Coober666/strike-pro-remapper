@@ -23,6 +23,10 @@ def check(archive):
                   for p in folder.rglob('*') if p.is_file() and p.name != 'PACKAGE-MANIFEST.json'}
         if actual != expected:
             raise ValueError('Package file hashes do not match')
+        for guide in ('README.txt', 'Windows-start.txt', 'Host-and-recovery.txt',
+                      'iPad-and-iPhone.txt', 'MIDI-toolkit.txt', 'Device-checks.txt'):
+            if not (folder / 'Help' / guide).is_file():
+                raise ValueError('Missing bundled help: ' + guide)
         environment = {key: value for key, value in os.environ.items()
                        if not key.upper().startswith(('PYTHON', 'TCL', 'TK', 'VIRTUAL_ENV'))}
         environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')

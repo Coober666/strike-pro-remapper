@@ -120,6 +120,12 @@ def main():
         balance_instruments.append(f'Balance/{index}.sin')
     (OUT / 'balance.skt').write_bytes(sr.build_skt(sr._KIT_BLOCK_TEMPLATE, balance_pads, balance_instruments))
 
+    import zipfile
+    for project in ('chromium', 'ipad-webkit'):
+        for label in ('normal', 'lost'):
+            with zipfile.ZipFile(OUT / f'bundle-{label}-{project}.zip', 'w') as archive:
+                archive.write(OUT / 'Balance/0.wav', f'Samples/Bundle/{label}-{project}.wav')
+
     print(f'wrote {len(list(OUT.iterdir()))} fixtures to {OUT}')
 
 

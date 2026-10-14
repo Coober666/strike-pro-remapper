@@ -22,9 +22,15 @@ everything it doesn't touch.
 
 ## Quick start
 
+**Start with the [October 14 tested beta](docs/BETA_CANDIDATE_2026-10-14.md):** exact
+Windows/source downloads, checksums, what to open, and a ten-minute first test.
+The pinned CI artifacts require GitHub sign-in and expire November 13; they are
+controlled beta downloads, not a published stable release.
+
 **Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
 in show order, add song notes, make song-specific kit copies, preview numbered filenames,
-and print a show sheet. Lists save on the host and work through the paired Wi-Fi editor.
+and print a show sheet. Keyboard focus stays near the song after removal or cancelling
+a kit copy. Lists save on the host and work through the paired Wi-Fi editor.
 Export/import human-readable JSON to move a list between libraries. Local checks catch
 missing or malformed kits and duplicate planned names; they do not certify samples or
 card contents. Batch deployment remains pending. See [the setlist guide](docs/SETLISTS.md).
@@ -32,8 +38,11 @@ card contents. Batch deployment remains pending. See [the setlist guide](docs/SE
 **Drum MIDI toolkit:** open it from the Start screen or Tools to record a generic
 MIDI input, save/import sessions, inspect velocity distributions, compare takes and
 export JSON, CSV or a report. Visual replay sends nothing to your module. Includes a
-synthetic demo; no Strike kit is needed. Sessions stay in this browser, with explicit
-Save and portable JSON export. Capture directly with Web MIDI, or use **Wi-Fi host
+synthetic demo; no Strike kit is needed. Disconnected browser captures retain received
+events and a partial-take label through save/export; a normally stopped take stays
+complete if the device disconnects later. Sessions stay in this browser, with explicit
+Save and portable JSON export. **Save as new copy** preserves an earlier take; stale
+tabs cannot silently overwrite or delete a newer saved session. Capture directly with Web MIDI, or use **Wi-Fi host
 computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
@@ -43,14 +52,18 @@ parallel toolkit asset loads over the LAN.
 [Mac + Strike acceptance](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md) verifies live
 CoreMIDI capture, idle capture lease/ownership/reopen behavior, and factory/user-card
 discovery; Windows hardware acceptance remains open.
+For the remaining device checks, use the [prepared acceptance sessions](docs/HANDS_ON_ACCEPTANCE.md).
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
+Profile confirmations catch saved-content changes made in another tab while you decide.
 Add searchable notes/tags, back up groups of saved sessions, focus analysis on one
 pad/channel and follow optional repeatable capture exercises. JSON/CSV keep every
 event; focused reports describe only the selected channel/note.
 
 **Windows without installing Python:** use the Windows x64 beta ZIP from a tested
+build. Its **Help** folder includes detailed guides readable in Notepad, including
+Wi-Fi pairing, MIDI sessions, recovery and upgrades. Download from a successful
 [CI run](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml)
 (artifact named `strike-windows-beta-…`; GitHub sign-in required). Extract the
 artifact and then the application ZIP fully. Open **Strike Remapper.exe**, then
@@ -80,7 +93,8 @@ Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
 **Optional host window:** double-click `launch-host.bat` / `launch-host.command`, or run
 `python launch_editor.py` (`python3` on macOS). This requires Python 3.10+ with Tk.
 Choose your existing library folder, then **Start** and **Open editor**. The folder is
-remembered across launches and can live outside the downloaded application folder.
+remembered across launches. Choose a persistent folder separate from the application;
+the host rejects the source application's root, including a fresh extraction.
 For iPad/iPhone, enable Wi-Fi, select this computer's private IPv4 address, start,
 and scan the pairing QR code. The code is generated locally. **Stop** saves a recovery
 copy of unsaved kit edits before shutting down this host. If the final recovery write
@@ -222,6 +236,9 @@ double-click.
   cutoff/enable; mute groups; MIDI notes; gate time (Free in ms, tempo-synced, or off)
 - Copy, swap, and batch-edit pads; batch-assign from CSV; kit diff/compare; rename,
   duplicate, clear; 20-step undo with labeled history; autosave + crash recovery
+- CSV assignment validates every row before edits: unknown pads or invalid layers
+  reject the batch; missing library instruments are reported and skipped. Valid
+  changes share one Undo step; unchanged assignments do not consume Undo history.
 - **Kit time machine** — a persistent version history that outlives reloads and restarts
   (the durable counterpart to in-memory undo). Snapshots are captured automatically on
   load and save, on a debounced timer while you edit, and on demand with **Snapshot now**;
@@ -248,10 +265,18 @@ double-click.
 - Edits write to your local library only; factory presets stay read-only; one-click revert
 
 **Sharing & repair**
-- **Kit bundles** — export any kit as a self-contained `.zip` (kit + every referenced
-  instrument + every sample + manifest). Import a bundle on another machine and it just
-  works — no broken absolute paths, the problem that plagues bare `.skt` sharing.
-  Existing library files are never overwritten on import.
+- **Kit bundles** — export the current kit, including unsaved edits, plus available
+  instruments and samples in a `.zip`. Missing assets are listed in the manifest and
+  reported beside the download; an incomplete bundle is not a complete backup.
+  Export uses a consistent editor state and prefers edited library instruments.
+  Download errors keep the editor open for retry. Import contained assets into another local
+  library, then review missing dependencies and conflicts before deployment. Existing
+  library files are never overwritten. Supported assets are validated and staged before
+  copying; corrupt archives and unsafe paths fail before import. A later disk failure
+  reports completed files and recovery steps. See [bundle import recovery](docs/BETA_START.md#importing-a-kit-bundle).
+- **Kit JSON report** — export saved library kit assignments and selected pad parameters.
+  Unreadable or malformed files appear in `warnings`; autosaves and unsaved edits are
+  excluded. This is a report, not an importable kit backup.
 - **Official editor & commercial pack zips** — the importer also accepts official
   Strike Editor kit/instrument exports and commercial pack zips (eDrumWorkshop,
   drum-tec, …): any zip carrying `Kits/`/`Instruments/`/`Samples/` folders (even nested
@@ -440,7 +465,7 @@ Setlist Builder now checks local sample WAV headers, reports missing/ambiguous a
 
 Connection details shows the source revision and exports an allowlisted troubleshooting report without library paths, names, network addresses or credentials. Passing CI builds a source-beta ZIP and SHA-256 checksum as downloadable run artifacts (30-day retention).
 
-Kit Balance Assistant compares bounded local sample windows, flags relative same-group and A/B differences plus possible stacked-layer peak risk, and auditions current/proposed levels. Check individual suggestions to apply them as one Undo step. It never changes WAVs; estimates do not reproduce the module mixer. See [Kit Balance](docs/KIT_BALANCE.md).
+Kit Balance Assistant compares bounded local sample windows, flags relative same-group and A/B differences plus possible stacked-layer peak risk, and auditions current/proposed levels. Only the latest preview request can play; closing or reanalyzing discards pending previews. Reopening also discards the earlier analysis response. Check individual suggestions to apply them as one Undo step. It never changes WAVs; estimates do not reproduce the module mixer. See [Kit Balance](docs/KIT_BALANCE.md).
 
 ## License
 

@@ -80,6 +80,9 @@ application to own an input; close the competing MIDI input application if openi
 - A stopped take expires after **10 minutes**, even if polled. Host restart/Stop,
   logout or pairing loss may make recovery impossible; host buffers are not durable
   backups. Export JSON to keep your take. A driver overflow/error leaves it partial.
+  Direct browser MIDI disconnection during recording or pause also labels the take
+  partial and keeps every received event available to save/export. Disconnection
+  after a normal Stop does not change the completed take's status.
 - If the host has restarted or the take expired, **Forget expired connection** keeps
   the received events and lets you select a new input. Forget does not remotely delete
   an unreachable host's take. Re-pair first if the pairing session has expired.
@@ -149,6 +152,16 @@ input names, tags and notes. Save changes explicitly and wait for **Saved in thi
 browser**. Search examines saved values, not unsaved edits in the current page.
 Older captures without these fields still load with empty annotations.
 
+**Save as new copy** keeps the previous saved version and stores the current take
+separately, within the same 25-session limit. If another toolkit tab changes or deletes
+a saved session, an older tab cannot overwrite or delete that version silently.
+Its current take stays available: save a new copy or export JSON before reopening
+the saved version. A failed save does not discard your edits.
+
+Saved-profile overwrite/delete confirmations also check for changes made while the
+dialog was open. If a conflict is reported, the current pad names remain available
+to export or save under a different profile name.
+
 Select saved captures with their **Include in backup** checkboxes, or **Select shown**
 after searching, then **Export selected sessions**. Backups contain complete saved
 sessions and their pad-map snapshots, including partial/synthetic markers and notes.
@@ -202,9 +215,12 @@ Save/export before reloading: host recovery retrieves MIDI events, not these ann
 
 ## Devices and limits
 
-The parser is module-independent. Generic channel MIDI and the host input driver are simulated in tests;
-Strike, Command, Nitro and other physical modules still require capture acceptance.
-Do not infer device compatibility from a synthetic test.
+The parser is module-independent. Automated tests simulate generic channel MIDI and
+the host input driver. Separate [Mac/Strike hardware checks](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md)
+verified one real performance capture and input lifecycle operations. That is limited
+acceptance for this host/module, not every pad mapping or listening behavior. Command,
+Nitro, other host drivers and physical mobile workflows remain unverified. Do not infer
+device compatibility from a synthetic test.
 
 Live capture requires a supporting browser and secure context (localhost is the
 normal computer-host workflow); see [Web MIDI access requirements](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/requestMIDIAccess).

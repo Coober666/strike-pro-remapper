@@ -107,7 +107,23 @@ def check(root):
                 assets[path] = len(body)
             if not app._factory_catalog():
                 raise RuntimeError('Factory metadata missing')
+            import io
+            import wave
+            import zipfile
+            sample, bundle = io.BytesIO(), io.BytesIO()
+            with wave.open(sample, 'wb') as audio:
+                audio.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b'\0' * 32)
+            with zipfile.ZipFile(bundle, 'w') as archive:
+                archive.writestr('Samples/Package/check.wav', sample.getvalue())
+                archive.writestr('Instruments/Package/check.sin', app._build_sin([('Package/check.wav', 1, 127, 1)]))
+            with app.STATE_LOCK:
+                imported = app.import_bundle(bundle.getvalue())
+                repeated = app.import_bundle(bundle.getvalue())
+            if imported['samples'] != 1 or imported['instruments'] != 1 or repeated['skipped'] != 2:
+                raise RuntimeError('Bundled ZIP import/repeat failed')
             app.create_new_kit('Packaged check')
+            app.assign_instrument('S1H', 'a', 'Package/check.sin')
             app.set_pad_param('S1H', 'la_level', 31)
             saved = root / 'kits/Packaged check.skt'
             app.save_kit(str(saved))
@@ -117,6 +133,20 @@ def check(root):
             if not inspection.strip() or 'Traceback' in inspection:
                 raise RuntimeError('Bundled utility failed: ' + inspection)
             app.set_pad_param('S1H', 'la_level', 32)
+            connection = http.client.HTTPConnection('127.0.0.1', host.server.server_port, timeout=5)
+            connection.request('GET', '/api/export_bundle')
+            response = connection.getresponse()
+            exported = response.read(); connection.close()
+            if response.status != 200 or response.getheader('X-Strike-Missing-Assets') != '0':
+                raise RuntimeError('Packaged bundle export failed')
+            with zipfile.ZipFile(io.BytesIO(exported)) as archive:
+                expected = app.build_skt(app.state['kit_raw'], app.state['pads'], app.state['instruments'], app.state['tail'])
+                if archive.testzip() is not None or archive.read('kit/Packaged check.skt') != expected or archive.read('samples/Package/check.wav') != sample.getvalue():
+                    raise RuntimeError('Packaged bundle lost unsaved edits or sample bytes')
+            report = app.export_kits_report()
+            saved_report = next(kit for kit in report['kits'] if kit['name'] == 'Packaged check.skt')
+            if report['warnings'] or next(pad for pad in saved_report['pads'] if pad['id'] == 'S1H')['la_level'] != 31:
+                raise RuntimeError('Packaged JSON report did not preserve saved-kit scope')
             inputs = NativeInput().inputs()  # Enumerates only; never opens any port.
             outputs = native_midi()['outputs']  # No selected output: no send.
         finally:
@@ -144,5 +174,5 @@ def check(root):
             connection.close()
         finally:
             host.stop()
-    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True,
+    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True, 'bundle_import': True, 'bundle_export': True, 'kit_report': True,
             'midi_inputs': len(inputs), 'identity': identity(Path(app.__file__).parent)}

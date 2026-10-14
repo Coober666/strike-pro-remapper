@@ -1,0 +1,282 @@
+# Remote release audit — October 14, 2026
+
+Windows desktop checks used synthetic MIDI and temporary libraries. They did not
+access the connected Strike, its cards or the running Mac editor. Real Mac evidence
+is recorded separately in [the hardware record](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md).
+
+## Capture recovery
+
+A reproduced browser MIDI defect marked a take complete after its input disconnected
+during recording. Active and paused takes now retain all received events with partial
+status, including after save, reload and JSON export. A take stopped normally before
+disconnection remains complete. Reports describe missing MIDI events without assuming
+the capture came from a host computer.
+
+Validation: 58 Chromium/iPad-WebKit toolkit and Wi-Fi MIDI cases passed. Coverage
+includes lost start/stop/poll responses, delayed polls, hidden pages, retained-take
+recovery, storage failures, pause boundaries and the 50,000-event limit. New assertions
+failed with complete rather than partial status before the fix. Sixteen MIDI core
+tests and JavaScript lint passed.
+
+## Representative capacity measurements
+
+These are local development measurements, not minimum device requirements or mobile
+hardware acceptance. The synthetic take contains 50,000 events over 1,000 seconds:
+one controller event in five, with the remainder note-ons across 24 note numbers.
+Its JSON is 1,592,080 bytes. Pure operations used Node 24.13.0 on Windows, one warm-up
+followed by seven measured calls. The backup contains four copies, 200,000 events total.
+
+| Operation | Median | Maximum |
+| --- | ---: | ---: |
+| Validate take | 23.30 ms | 34.28 ms |
+| Summarize take | 23.35 ms | 27.95 ms |
+| Export all events CSV | 137.33 ms | 158.42 ms |
+| Generate report | 21.36 ms | 24.42 ms |
+| Validate backup | 41.91 ms | 51.91 ms |
+
+Fresh browser contexts imported and saved the same take through the real UI:
+
+| Browser engine | Import through rendered counts | Save through confirmation |
+| --- | ---: | ---: |
+| Chromium | 331 ms | 79 ms |
+| iPad-sized WebKit on Windows | 238 ms | 304 ms |
+
+Both rendered at most 1,000 timeline dots, reported no page errors, fit a 390-pixel
+viewport and opened the file chooser using the keyboard. These single-run browser
+timings include automation overhead and are not performance guarantees.
+
+A temporary library held 2,001 synthetic kits and 50 setlists of 128 rows each.
+Five listing calls had a 1,918.67 ms median and 2,004.34 ms maximum. The result
+contained 2,000 kits, the truncation flag and all 50 setlists; serialized output was
+747,488 bytes. This checks the setlist listing path, not sample scanning or SD reads.
+No performance change was made from these measurements.
+
+## Keyboard continuity
+
+Cancelling a song-specific kit copy previously hid the focused form without returning
+focus to its launcher. Cancel/Escape now restores the song's Copy button. Removing a
+song focuses the adjacent Remove button, or the kit selector when the list becomes
+empty. Twelve setlist browser cases passed across Chromium and iPad WebKit, including
+keyboard-only cancellation and consecutive removals. Viewer extraction and standalone
+viewer build validation passed after regenerating the embedded UI.
+
+## Backup and upgrade checks
+
+The fresh-process source rehearsal passed from the preserved older release to
+ce076e8 and back using a restored backup copy. Recovery bytes, edited snare level,
+tags, sample sentinel and backup hashes were preserved. Existing CI also covers
+failed atomic recovery, blocked kit switches, and retrying a failed final Stop save
+before changing libraries.
+
+Verified Windows packages 75295a9 and ce076e8 were extracted into separate temporary
+folders with Python removed from the child process environment. Each package saved
+a synthetic kit and recovery through its smoke check. Both packaged inspectors then
+produced identical reads of both versions' saved/recovery kits. Restored backup-copy
+and original backup hashes stayed unchanged, as did both application payloads.
+This covers packaged utility compatibility and fresh writes; interactive GUI upgrade
+on a separate machine remains H6.
+
+## Isolated Mac restart
+
+A separate loopback host used the deployed d768546 code and a temporary library;
+card discovery was disabled. Unpaired requests returned 401 and a wrong Origin
+returned 403. Normal Stop saved a synthetic unsaved kit. Restarting on the same port
+rotated pairing, rejected the old cookie/link, accepted fresh pairing and preserved
+recovery bytes. The live LAN editor, real library and module were untouched.
+
+Existing CI covers session expiry, stale writer rejection, explicit handover,
+reload token rotation, suspended-page refresh and uncertain Save responses.
+
+## Prepared acceptance and distribution
+
+[Hands-on sessions H1–H9](HANDS_ON_ACCEPTANCE.md) now provide ordered device,
+playing, listening, interruption, disposable-media, Windows, Pi/other-module and
+outside-beta procedures plus a result form. First-run documentation now distinguishes
+the verified Mac input capture from other untested combinations. Preparation does
+not mark those hardware gates complete.
+
+All ten PR #68 CI checks passed on ce076e8, including source and Windows packages.
+The subsequent documentation changes do not alter that tested runtime.
+
+Physical iPad/iPhone, separate-machine Windows USB, Linux/Pi, Command/Nitro,
+listening and disruptive hardware checks remain distinct acceptance gates.
+
+## Second remote pass: saved work and first run
+
+Two toolkit tabs could silently overwrite a saved session, and an older tab could
+delete a newer saved version. Session reads now retain a revision; updates and deletes
+compare it within their IndexedDB write transaction. Deleted targets cannot be
+resurrected by a stale Save. Save as new copy preserves the current take independently
+without replacing the newer saved version. Existing records without revisions upgrade
+on their next save; portable JSON stays unchanged.
+
+Profile overwrite/delete confirmations also re-check the stored profile after the
+dialog closes. A change made during the confirmation blocks that action and leaves
+the current pad names exportable. This closes the observed confirmation window;
+localStorage profile updates are not atomic multi-tab transactions.
+
+The host previously rejected a source application folder only when it already had
+a library child. A fresh extraction could therefore become the library itself. The
+host now rejects that root before creating any files or binding a port, while retaining
+the existing-library hint for older checkouts.
+
+Each failure was reproduced before its fix. The session changes passed 66 MIDI/Wi-Fi
+browser cases; the subsequent profile fix passed eight focused profile cases across
+Chromium and iPad WebKit. Six host lifecycle tests, the fresh-process library portability
+test, the extracted-source package test and JavaScript lint passed. These checks use
+synthetic libraries and browser storage; the live Mac installation was not restarted.
+
+## Bundled help and CI save timing
+
+The Windows ZIP now includes a Help folder with 12 selected public guides, an index,
+and two screenshots. Guides are generated as plain text for Notepad, preserving code
+examples and rewriting included-guide references to local filenames. Other evidence
+links point to the build's repository revision. The allowlist excludes captures and
+private evidence; package manifests cover every help file.
+
+The d8b0549 PR workflow passed, but its separate push workflow exposed a test race:
+the disconnect regression clicked Save and immediately reloaded before waiting for
+the IndexedDB commit. It now waits for Saved in this browser before reloading, matching
+the documented workflow. Three repetitions per browser passed after the correction.
+Two help-package checks passed, covering the delivered guides, local references,
+Unicode text and unchanged command examples.
+
+All ten checks passed on e34814c. Its clean local Windows package passed extracted
+runtime/GUI/library recovery checks; the ZIP checksums and all 1,045 Windows and 70
+source payload hashes were verified. These packages include the help guides.
+
+## Kit Balance preview ordering
+
+A delayed Listen current response could replace a newer Listen proposed preview.
+The failure was reproduced with an explicitly delayed response before the fix.
+Preview callbacks now require the current request generation and analysis report;
+superseded successes and failures cannot play or replace the current status. Closing
+or reopening the dialog, starting analysis, and applying changes invalidate pending
+previews and stop the current voice.
+
+Four deterministic scenarios cover a newer Listen, an obsolete failure, dialog
+reopening and a new analysis. All 14 release-polish browser cases passed across
+Chromium and iPad WebKit, including existing selection/Undo and lost-response checks.
+JavaScript lint, viewer regeneration and standalone viewer build validation passed.
+Audio uses an instrumented synthetic context: this verifies callback ownership,
+not audible quality or physical mobile audio acceptance. The live Mac was untouched.
+
+## Analysis dialog lifecycle and guide accuracy
+
+A follow-up delayed-response test reproduced an old analysis populating a newly
+opened Kit Balance dialog. Analysis callbacks now require the same dialog generation;
+late results and errors are discarded after close/reopen. The existing busy flag stays
+held until the request settles, and a fresh analysis is available afterward. This
+does not cancel or hide an Apply mutation: its response still reconciles host state.
+
+Both late-success and late-error cases passed across Chromium and iPad WebKit; all
+18 release-polish cases, JavaScript lint and standalone viewer validation passed.
+The MIDI guide also now distinguishes the verified Mac/Strike capture and lifecycle
+from still-unverified module, mobile, mapping and listening combinations.
+
+The preceding 771ab61 clean Windows/source packages passed ZIP and all payload hash
+checks. Extracted Windows runtime/GUI/save/recovery checks passed with no MIDI outputs
+or card access. Package checks exercise temporary libraries, not deployment acceptance.
+
+## CSV assignment validation and recovery
+
+All ten checks passed on e34fcbe, including both browser workflows and CI package
+jobs. The subsequent import review found that CSV layer typos silently targeted
+Layer A, unknown pads could add unused instruments, and malformed later API rows
+could fail after earlier rows had changed the kit. Empty/missing-only batches also
+consumed Undo and marked the kit dirty. These failures were reproduced before fixing.
+
+CSV batches now validate every row before planning final assignments. Unknown pads,
+invalid A/B layers and malformed rows reject the whole batch. Missing instruments
+remain reported skips. Actual changes share one Undo snapshot; identical assignments
+and missing-only batches leave the session unchanged. Repeated targets retain the
+last available assignment, and the result counts changed layers.
+
+The browser rejects malformed two/three-field lines before POST, handles read errors,
+prevents overlapping imports and rejects a changed pad snapshot during file reading.
+An unconfirmed POST is never retried; paired editing pauses for a host-state refresh.
+This read-time guard does not claim general cross-tab revision locking for CSV edits.
+
+Four Python contracts passed, including whole-state preservation after invalid later
+rows, mixed A/B assignment, missing instruments and exact Undo restoration. Six focused
+Chromium/WebKit cases passed for invalid imports, successful assignments/Undo, failed
+file reads, delayed reads across kit switches and a committed write with its response
+lost. The 18 existing release-polish cases also passed; lint and viewer build validation
+passed. An initial browser assertion was corrected to inspect the assignment response
+and resulting pads because the fixture's separate missing-media warning can replace
+the shared status text. Tests use temporary libraries; no module/card access occurred.
+
+## Bundle import preflight and partial-failure recovery
+
+All ten c3afc2b CI checks passed. The ZIP review then reproduced a corrupt later entry
+leaving an earlier kit imported, Windows-style traversal escaping the temporary library,
+and a repeat sample-only import incorrectly reporting no usable content.
+
+Supported assets are now streamed into temporary staging and validated before publication.
+Portable path validation rejects traversal, drive/stream syntax, reserved names, links,
+duplicate archive names and case-ambiguous destinations. Destination containment and
+link checks run before publication and again for each target. Bounds limit compressed,
+per-file and aggregate size and entry count. Existing conflicts remain unchanged;
+exclusive creation prevents an intervening file from being overwritten.
+
+Handled write failures remove the current partial file when possible and report how
+many earlier new files remain. Cleanup failure identifies the incomplete filename;
+listing-refresh failure still reports completed imports. An explicit retry skips
+identical completed files. This is not crash-atomic publication or whole-library rollback.
+The browser catches file errors and uncertain responses, bounds ZIP size and blocks
+overlapping uploads; an uncertain paired response pauses editing without automatic retry.
+
+Ten Python cases ran: nine passed locally, and the actual-symlink case skipped because
+this Windows account cannot create symlinks (Linux CI covers it). Cases include late
+CRC failure, unsafe paths, limits, duplicate names, loose sample mapping, conflict
+preservation, disk-full/cleanup/listing failures and repeat imports. Four focused
+Chromium/WebKit cases passed, including successful host import with its response lost.
+Lint and standalone viewer checks passed. All libraries and ZIPs were disposable;
+the live Mac, module and cards were untouched.
+
+## Bundle export and download recovery
+
+All ten 6cfe2d6 checks passed, including Linux's actual-symlink import regression.
+Export review reproduced omitted assets before lazy inventory loaded, old inventory
+copies shadowing edited library instruments, and a competing editor mutation entering
+between kit serialization and dependency collection. A traversal sample reference also
+escaped its source directory in the disposable fixture.
+
+Export now holds the editor state lock through archive construction, prefers local SIN
+edits and validates source references. It reuses import size limits and rejects ambiguous
+archive names. File reads use the existing transient-media retry helper. Network transfer
+occurs after releasing the lock. This is consistency against editor mutations, not an
+atomic filesystem snapshot against external programs changing library files.
+
+The browser fetches the ZIP without navigating away, catches HTTP/body/network failures,
+checks response type and length, suppresses duplicate clicks and permits explicit retry.
+UTF-8 filenames survive the download. Missing dependencies remain in manifest.json and
+now produce an in-page warning. Download requested means browser handoff, not proof that
+the user saved it to Files or completed a backup.
+
+Seven Python cases passed: exact unsaved-kit/SIN/WAV restoration into a fresh library,
+repeat import, lazy inventory, edited-copy priority, deterministic concurrent editing,
+missing dependencies/read failures, unsafe references, limits/case collisions, and a
+real loopback HTTP disconnect during an 8 MiB response. That disconnect left the lock
+available and a subsequent session request usable without changing the kit.
+Six focused Chromium/WebKit cases passed for errors, partial body, duplicate requests,
+retry, paired Unicode downloads and missing-assets warnings; downloaded bytes matched
+the host response. The first paired assertion expected one no-store directive, but the
+Wi-Fi wrapper also adds it; corrected the assertion to check directive membership.
+Import regression tests, lint, viewer extraction and standalone viewer validation passed.
+These browser results do not establish physical iPad/iPhone Files acceptance.
+
+## Saved kit JSON report
+
+The final export-path review reproduced a separate existing bug: the JSON report used
+the obsolete two-part parser return and tuple pads, swallowed every resulting exception,
+and returned an empty kit list for a valid saved library. It now uses the current parser
+and pad dictionaries, checks round-trip validity, excludes autosaves and lists skipped
+files in warnings. The report reads saved bytes under the editor lock and does not
+replace the active kit. Its UI explicitly distinguishes a saved-kit report from an
+importable backup and catches read/network failures without leaving the editor.
+
+All eight export Python cases and eight focused Chromium/WebKit cases passed after this
+fix. The new regression verifies a real valid saved kit, malformed-file warning,
+autosave exclusion, saved-versus-unsaved levels and unchanged editor state. Browser
+tests download the report, inspect its contents and exercise HTTP/network failure.

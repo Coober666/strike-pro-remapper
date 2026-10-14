@@ -2201,26 +2201,33 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
-let balanceReport=null, balanceBusy=false, balanceVoice=null;
-document.getElementById('balance-dialog').addEventListener('cancel',()=>{if(balanceVoice){balanceVoice.stop();balanceVoice=null;}});
+let balanceReport=null, balanceBusy=false, balanceVoice=null, balancePreviewGeneration=0, balanceDialogGeneration=0;
+function balanceStopPreview() { balancePreviewGeneration++; if(balanceVoice){balanceVoice.stop();balanceVoice=null;} }
+document.getElementById('balance-dialog').addEventListener('cancel',()=>{balanceDialogGeneration++;balanceStopPreview();});
 function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
 function balanceControls() {
   document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
   document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
   document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
 }
-function closeBalance() { if(balanceVoice) {balanceVoice.stop(); balanceVoice=null;} document.getElementById('balance-dialog').close(); }
+function closeBalance() { balanceDialogGeneration++; balanceStopPreview(); document.getElementById('balance-dialog').close(); }
 function openBalance() {
   if(window.VIEWER) return;
+  balanceDialogGeneration++;
+  balanceStopPreview();
   balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
   balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
   document.getElementById('balance-dialog').showModal();
 }
 async function balanceAnalyze() {
   if(balanceBusy) return;
+  balanceStopPreview();
+  const generation=balanceDialogGeneration;
+  const isCurrent=()=>generation===balanceDialogGeneration && document.getElementById('balance-dialog').open;
   balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
   try {
     const report=await api('/balance',{action:'analyze'});
+    if(!isCurrent()) return;
     if(report.error) throw new Error(report.error);
     balanceReport=report; document.getElementById('balance-scope').textContent=report.scope;
     document.getElementById('balance-rows').innerHTML=report.rows.map((r,i)=>`<section class="balance-row">
@@ -2231,31 +2238,36 @@ async function balanceAnalyze() {
       ${r.sample ? `<button class="btn-secondary" onclick="balanceAudition(${i},false)">Listen current</button> ${r.suggested!=null ? `<button class="btn-secondary" onclick="balanceAudition(${i},true)">Listen proposed</button>` : ''}<small> First representative sample, 0.5-second window.</small>` : ''}
       </section>`).join('')+report.notes.map(n=>`<p>${escHtml(n)}</p>`).join('');
     balanceStatus(`${report.rows.length} assigned layers reviewed. Nothing changed. Select suggestions to apply.`);
-  } catch(error) {balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}
+  } catch(error) {if(isCurrent()){balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}}
   finally {balanceBusy=false; balanceControls();}
 }
 async function balanceAudition(index, proposed) {
-  const row=balanceReport?.rows[index]; if(!row) return;
+  const row=balanceReport?.rows[index]; if(!row || balanceBusy) return;
+  balanceStopPreview();
+  const generation=balancePreviewGeneration, report=balanceReport;
+  const isCurrent=()=>generation===balancePreviewGeneration && report===balanceReport && document.getElementById('balance-dialog').open;
+  balanceStatus(`Loading ${proposed ? 'proposed' : 'current'} preview.`);
   try {
     const AudioEngine=window.AudioContext || window.webkitAudioContext;
     if(!AudioEngine) throw new Error('Audio preview is not supported by this browser. Audition on another browser before applying.');
     if(!_blendCtx) _blendCtx=new AudioEngine();
     if(_blendCtx.state==='suspended') await _blendCtx.resume();
+    if(!isCurrent()) return;
     const response=await fetch('/api/balance_preview?sample='+encodeURIComponent(row.sample));
     if(!response.ok) throw new Error('Sample unavailable; analyze again.');
     const buffer=await _blendCtx.decodeAudioData(await response.arrayBuffer());
-    if(!document.getElementById('balance-dialog').open) return;
-    if(balanceVoice) balanceVoice.stop();
+    if(!isCurrent()) return;
     const gain=_blendCtx.createGain(); gain.gain.value=previewVol*(proposed ? row.suggested : row.level)/127*row.instrument_level/127; gain.connect(_blendCtx.destination);
     const voice=_blendCtx.createBufferSource(); voice.buffer=buffer; voice.connect(gain); balanceVoice=voice;
     voice.onended=()=>{gain.disconnect();if(balanceVoice===voice) balanceVoice=null;}; voice.start();
     balanceStatus(`Listening ${proposed ? 'proposed' : 'current'}: ${row.label}, Layer ${row.layer.toUpperCase()}. Kit unchanged.`);
-  } catch(error) {balanceStatus('Preview unavailable: '+error.message);}
+  } catch(error) {if(isCurrent()) balanceStatus('Preview unavailable: '+error.message);}
 }
 async function balanceApply() {
   if(balanceBusy || !balanceReport) return;
   const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
   if(!selected.length) return;
+  balanceStopPreview();
   balanceBusy=true; balanceControls();
   let responseReceived=false;
   try {
@@ -2307,6 +2319,12 @@ async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete thi
 async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
 function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
 function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
+function slRemove(index) {
+  if(sl.busy) return;
+  sl.document.entries.splice(index,1); slMark(); slRows();
+  const next=Math.min(index,sl.document.entries.length-1);
+  (slEl('rows').querySelector(`[data-row="${next}"][data-remove]`) || slEl('kit')).focus();
+}
 async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. Local samples checked; card and factory contents unverified. Nothing deployed.`);}); }
 function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
@@ -2319,7 +2337,7 @@ async function slImport(input) {
     sl.id=null;sl.revision=null;sl.dirty=true;sl.report=report;slRender();slStatus('Imported as a new draft. Missing kits stay visible; copy them into this library, then refresh and check again. Save setlist to keep this copy.');});
 }
 function slCopy(i) { if(sl.busy || sl.copyIndex!==null) return; sl.copyIndex=i; slEl('copy-name').value=''; slEl('copy-form').hidden=false; document.querySelector('.sl-layout').inert=true; slEl('copy-name').focus(); }
-function slCopyCancel() { if(sl.busy) return; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; }
+function slCopyCancel() { if(sl.busy) return; const index=sl.copyIndex; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slEl('rows').querySelector(`[data-row="${index}"][data-copy]`)?.focus(); }
 async function slCopySubmit() { await slRun(async()=>{const row=sl.document.entries[sl.copyIndex];const result=await slRequest('copy_kit',{kit:row.kit,name:slEl('copy-name').value}); row.kit=result.kit; row.output=''; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slMark(); await slRefreshData(); slRows(); slStatus('Kit copy created. Save the setlist to keep its new reference, then use Edit kit for song-specific changes.');}); }
 async function slEditKit(i) { if(sl.busy) return; const row=sl.document.entries[i]; const found=sl.kits.find(k=>k.kit===row.kit); if(!found) {slStatus('Kit is missing from this library. Copy it into library/kits, then Refresh kits.');return;} if(sl.dirty) {slStatus('Save or export your setlist before opening a kit.');return;} await slRun(async()=>{if(await openKit(found.path)) {document.getElementById('setlist-dialog').close(); sl.report=null;} else slStatus('Kit could not be opened. Check editing control and the library.');}); }
 function slPrint() {
@@ -2338,7 +2356,7 @@ function slInit() {
   dialog.addEventListener('keydown',e=>{e.stopPropagation();if((e.ctrlKey || e.metaKey) && e.key==='s'){e.preventDefault();if(sl.copyIndex===null) void slSave();}});
   slEl('saved').addEventListener('click',e=>{const button=e.target.closest('[data-saved]');if(button) void slLoad(Number(button.dataset.saved));});
   slEl('rows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.field || sl.busy) return;sl.document.entries[Number(el.dataset.row)][el.dataset.field]=el.value;slMark();});
-  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove){sl.document.entries.splice(i,1);slMark();slRows();}});
+  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove) slRemove(i);});
   let drag=null;
   slEl('rows').addEventListener('dragstart',e=>{if(e.target.dataset.drag===undefined || sl.busy){e.preventDefault();return;}drag=Number(e.target.dataset.drag);e.dataTransfer.setData('text/plain',String(drag));e.dataTransfer.effectAllowed='move';});
   slEl('rows').addEventListener('dragover',e=>{if(drag!==null){e.preventDefault();e.dataTransfer.dropEffect='move';}});
@@ -4289,31 +4307,68 @@ function renderKitFx(d) {
 }
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
-function exportBundle() {
-  closeAllPopovers();
-  if (!pads.length) { setMsg('Load a kit first', true); return; }
-  setMsg('Building bundle… (kit + instruments + samples)');
-  window.location = '/api/export_bundle';
+let bundleExportBusy=false;
+function requestBlobDownload(blob,filename) {
+  const url=URL.createObjectURL(blob), link=document.createElement('a');
+  link.href=url; link.download=filename;
+  document.body.appendChild(link);
+  try { link.click(); }
+  finally { link.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000); }
 }
 
-async function importBundle(file) {
+async function exportBundle() {
   closeAllPopovers();
-  setMsg(`Importing ${file.name}…`);
-  const buf = await file.arrayBuffer();
-  let bin = '';
-  const bytes = new Uint8Array(buf);
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  const data = await api('/import_bundle', {data_b64: btoa(bin)});
-  if (data.error) { setMsg(data.error, true); return; }
-  kits = data.kits;
-  avail = data.instruments;
-  renderKitList();
-  renderInstruments();
-  await checkPaths();
-  setMsg(data.message);
+  if(bundleExportBusy) return;
+  if (!pads.length) { setMsg('Load a kit first', true); return; }
+  bundleExportBusy=true;
+  setMsg('Building bundle… (kit + instruments + samples)');
+  try {
+    const response=await fetch('/api/export_bundle',{cache:'no-store'});
+    if(!response.ok) {
+      const error=await response.json().catch(()=>({}));
+      throw new Error(error.error || `Export request failed (${response.status})`);
+    }
+    if(!response.headers.get('Content-Type')?.includes('application/zip')) throw new Error('Host did not return a ZIP bundle');
+    const blob=await response.blob();
+    const expected=Number(response.headers.get('Content-Length'));
+    if(!blob.size || (expected && blob.size!==expected)) throw new Error('Bundle download was incomplete');
+    const encoded=response.headers.get('Content-Disposition')?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const filename=encoded ? decodeURIComponent(encoded) : 'kit.strike-bundle.zip';
+    requestBlobDownload(blob,filename);
+    const missing=Number(response.headers.get('X-Strike-Missing-Assets')) || 0;
+    setMsg(`Download requested: ${filename}. Check your browser Downloads.${missing ? ` Warning: ${missing} missing asset(s); see manifest.json in the ZIP. This bundle is incomplete.` : ''}`,missing>0);
+  } catch(error) {
+    setMsg(`Bundle export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { bundleExportBusy=false; }
+}
+
+let bundleImportBusy=false;
+async function importBundle(file) {
+  if(!file || bundleImportBusy) return;
+  closeAllPopovers();
+  bundleImportBusy=true;
+  let sent=false, responseReceived=false;
+  try {
+    if(file.size > 512*1024*1024) throw new Error('Bundle exceeds the 512 MiB ZIP limit. Split it into smaller bundles.');
+    setMsg(`Importing ${file.name}.`);
+    const buf = await file.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buf), CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    sent=true;
+    const data = await api('/import_bundle', {data_b64: btoa(bin)});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    kits = data.kits; avail = data.instruments;
+    renderKitList(); renderInstruments();
+    await checkPaths();
+    setMsg(data.message);
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('Bundle import could not be confirmed. Some files may have been imported. Refresh the library before retrying; the request was not repeated.',true);
+    } else setMsg(error.message,true);
+  } finally {bundleImportBusy=false;}
 }
 
 // ── Kit diff ──────────────────────────────────────────────────────────────────
@@ -5046,30 +5101,40 @@ async function refreshKitSize() {
   } catch(e) { badge.style.display = 'none'; }
 }
 
+let csvImportBusy=false;
 async function importAssignCSV(file) {
+  if (!file || csvImportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
-  const text = await file.text();
-  const assignments = [];
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const cols = line.split(',').map(c => c.trim());
-    if (cols.length < 2) continue;
-    // Support: pad_id,sin_rel  OR  pad_id,layer,sin_rel
-    if (cols.length === 2) {
-      assignments.push({pad_id: cols[0], layer: 'a', sin_rel: cols[1]});
-    } else {
-      assignments.push({pad_id: cols[0], layer: cols[1].toLowerCase(), sin_rel: cols[2]});
+  csvImportBusy=true;
+  let sent=false, responseReceived=false;
+  const originalPads=pads;
+  try {
+    const text = await file.text();
+    if(pads !== originalPads) throw new Error('Kit changed while reading the CSV. Import it again for the current kit.');
+    const assignments = [];
+    for (const [index,rawLine] of text.split(/\r?\n/).entries()) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const cols = line.split(',').map(c => c.trim());
+      if (![2,3].includes(cols.length) || cols.some(c=>!c)) throw new Error(`CSV line ${index+1}: use pad_id,instrument or pad_id,A/B,instrument. Nothing assigned.`);
+      assignments.push({pad_id:cols[0],layer:cols.length===2 ? 'a' : cols[1].toLowerCase(),sin_rel:cols.at(-1)});
     }
-  }
-  if (!assignments.length) { setMsg('No valid rows found in CSV', true); return; }
-  setMsg(`Assigning ${assignments.length} pads from CSV…`);
-  const data = await api('/batch_assign_csv', {assignments});
-  if (data.error) { setMsg(data.error, true); return; }
-  pads = data.pads;
-  setDirtyState(data.dirty, data.undo_count, data.history_labels);
-  renderDrumMap(); renderPadDetail(); checkPaths();
-  setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+    if (!assignments.length) throw new Error('No assignment rows found in CSV.');
+    setMsg(`Assigning ${assignments.length} rows from CSV.`);
+    sent=true;
+    const data = await api('/batch_assign_csv', {assignments});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    pads = data.pads;
+    setDirtyState(data.dirty, data.undo_count, data.history_labels);
+    renderDrumMap(); renderPadDetail(); checkPaths();
+    setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('CSV assignment could not be confirmed. Reload the host kit before trying again; the request was not retried.',true);
+    } else setMsg(error.message,true);
+  } finally {csvImportBusy=false;}
 }
 
 function printMidiMap() {
@@ -5077,11 +5142,22 @@ function printMidiMap() {
   window.open('/api/midi_map_html', '_blank');
 }
 
+let kitsExportBusy=false;
 async function exportKits() {
-  const a = document.createElement('a');
-  a.href = '/api/export_kits';
-  a.download = 'strike_kits_export.json';
-  a.click();
+  closeAllPopovers();
+  if(kitsExportBusy) return;
+  kitsExportBusy=true;
+  setMsg('Building saved-kit JSON report…');
+  try {
+    const response=await fetch('/api/export_kits',{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok || data.error) throw new Error(data.error || `Export request failed (${response.status})`);
+    if(!Array.isArray(data.kits) || !Array.isArray(data.warnings)) throw new Error('Invalid kit report from host');
+    requestBlobDownload(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),'strike_kits_export.json');
+    setMsg(`Download requested: ${data.kits.length} saved kit(s). Check your browser Downloads. This JSON report excludes unsaved edits and is not a kit backup.${data.warnings.length ? ` Warning: ${data.warnings.length} skipped file(s); see warnings in the report.` : ''}`,data.warnings.length>0);
+  } catch(error) {
+    setMsg(`Kit report export failed: ${error.message}. Your edits are unchanged; you can retry Export.`,true);
+  } finally { kitsExportBusy=false; }
 }
 
 // ── SD sync ───────────────────────────────────────────────────────────────────
