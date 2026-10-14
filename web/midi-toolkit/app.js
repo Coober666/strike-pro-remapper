@@ -107,7 +107,10 @@ function inputsChanged() {
   let disconnected = false;
   if (selected && selected.state === 'disconnected') {
     disconnected = true;
-    if (active()) stopCapture('MIDI input disconnected. The captured events are kept; reconnect and start a new take.');
+    if (active()) {
+      current.captureStatus='partial';
+      stopCapture('MIDI input disconnected. This take may be incomplete; received events are kept. Save or export it before starting a new take.');
+    }
     selected.removeEventListener('midimessage', onMessage); selected=null;
   }
   const chosen = selected?.id || $('input').value;

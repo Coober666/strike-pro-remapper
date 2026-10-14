@@ -112,7 +112,7 @@ export function report(session, reference=null, focus='') {
   const s = summarize(session,Infinity,focus);
   const lines = ['Drum MIDI session report', session.name, `Input: ${session.source}`, `Created: ${session.createdAt}`,
     `Source: ${session.synthetic ? 'Synthetic demo' : 'Recorded/imported MIDI'}`, `Active duration: ${(session.durationMs/1000).toFixed(2)} s`,
-    `Capture status: ${session.captureStatus || 'complete'} (partial takes may be missing host events)`,
+    `Capture status: ${session.captureStatus || 'complete'} (partial takes may be missing MIDI events)`,
     `Analysis focus: ${focus ? 'channel:note '+focus : 'all channel messages'}; full-take duration retained`,
     `Tags: ${(session.tags || []).join(', ') || 'None'}`,
     `Notes: ${session.notesText || 'None'}`,

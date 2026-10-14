@@ -24,7 +24,8 @@ everything it doesn't touch.
 
 **Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
 in show order, add song notes, make song-specific kit copies, preview numbered filenames,
-and print a show sheet. Lists save on the host and work through the paired Wi-Fi editor.
+and print a show sheet. Keyboard focus stays near the song after removal or cancelling
+a kit copy. Lists save on the host and work through the paired Wi-Fi editor.
 Export/import human-readable JSON to move a list between libraries. Local checks catch
 missing or malformed kits and duplicate planned names; they do not certify samples or
 card contents. Batch deployment remains pending. See [the setlist guide](docs/SETLISTS.md).
@@ -32,7 +33,9 @@ card contents. Batch deployment remains pending. See [the setlist guide](docs/SE
 **Drum MIDI toolkit:** open it from the Start screen or Tools to record a generic
 MIDI input, save/import sessions, inspect velocity distributions, compare takes and
 export JSON, CSV or a report. Visual replay sends nothing to your module. Includes a
-synthetic demo; no Strike kit is needed. Sessions stay in this browser, with explicit
+synthetic demo; no Strike kit is needed. Disconnected browser captures retain received
+events and a partial-take label through save/export; a normally stopped take stays
+complete if the device disconnects later. Sessions stay in this browser, with explicit
 Save and portable JSON export. Capture directly with Web MIDI, or use **Wi-Fi host
 computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
 and the browser receives it live. Host capture needs the optional MIDI input package;

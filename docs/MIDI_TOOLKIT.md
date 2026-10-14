@@ -80,6 +80,9 @@ application to own an input; close the competing MIDI input application if openi
 - A stopped take expires after **10 minutes**, even if polled. Host restart/Stop,
   logout or pairing loss may make recovery impossible; host buffers are not durable
   backups. Export JSON to keep your take. A driver overflow/error leaves it partial.
+  Direct browser MIDI disconnection during recording or pause also labels the take
+  partial and keeps every received event available to save/export. Disconnection
+  after a normal Stop does not change the completed take's status.
 - If the host has restarted or the take expired, **Forget expired connection** keeps
   the received events and lets you select a new input. Forget does not remotely delete
   an unreachable host's take. Re-pair first if the pairing session has expired.

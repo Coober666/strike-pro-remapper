@@ -192,9 +192,25 @@ test('generic MIDI records only selected channel messages, pauses and keeps disc
   await expect(page.locator('#state')).toHaveText('Paused'); await expect(page.locator('#hits')).toHaveText('2');
   await page.locator('#pause').click(); await page.evaluate(() => { emitMidi([0x99,36,90]); disconnectMidi(); });
   await expect(page.locator('#status')).toContainText('disconnected'); await expect(page.locator('#hits')).toHaveText('3');
+  const disconnected=JSON.parse(await exportFile(page,'json'));
+  expect(disconnected.captureStatus).toBe('partial'); expect(disconnected.events).toHaveLength(5);
+  await expect(page.locator('#origin')).toContainText('Partial take');
+  expect(await page.evaluate(() => midiRequests)).toEqual([{sysex:false}]);
+  await page.locator('#save').click(); await page.reload();
+  await page.locator('#sessions button').first().click();
+  expect(JSON.parse(await exportFile(page,'json'))).toEqual(disconnected);
   await expect(page.locator('#save')).toBeEnabled();
   await expect(page.locator('#note-rows')).toContainText('9 / 38'); await expect(page.locator('#note-rows')).toContainText('10 / 38');
-  expect(await page.evaluate(() => midiRequests)).toEqual([{sysex:false}]);
+});
+
+for (const stopped of [false,true]) test(`disconnect after ${stopped ? 'Stop preserves complete status' : 'Pause retains a partial take'}`,async ({page}) => {
+  await fakeMidi(page); await page.goto('/midi'); await page.locator('#connect').click(); await page.locator('#input').selectOption('drums');
+  await page.locator('#record').click(); await page.evaluate(() => emitMidi([0x99,38,72]));
+  await page.locator(stopped ? '#stop' : '#pause').click();
+  await page.evaluate(() => disconnectMidi());
+  const session=JSON.parse(await exportFile(page,'json'));
+  expect(session.captureStatus).toBe(stopped ? 'complete' : 'partial');
+  expect(session.events.map(e => e.data)).toEqual([[0x99,38,72]]);
 });
 
 test('invalid import preserves current take; names are rendered as text',async ({page}) => {

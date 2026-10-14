@@ -113,6 +113,8 @@ optional three-digit ordering, at most 26 characters including .skt, reserved-na
 and case-insensitive duplicate detection. Source names never change. Printing uses the
 last local-check snapshot, escaped text and an explicit limitation statement.
 Tests: tools/test_setlists.py and tests/browser/zz-setlists.spec.js (Chromium/iPad WebKit).
+Removing a song restores focus to the adjacent Remove button (or the kit selector
+when empty); cancelling a kit copy returns focus to that song's Copy button.
 
 ## General MIDI toolkit
 
@@ -135,7 +137,9 @@ filters to complete channel messages, bounds its callback queue, and timestamps 
 the host monotonic clock. Close/join outside the recorder lock. The Python application
 remains stdlib-only unless the user installs `requirements-midi.txt` for this feature.
 Session v1 has optional `captureStatus` (complete/partial); preserve it in saves/exports
-and show partial copies after network/driver failure. Recover retained events explicitly;
+and mark active browser captures partial on MIDI disconnection, including while paused.
+Disconnection after normal Stop must not downgrade a completed take. Show partial copies
+after network/driver failure. Recover retained events explicitly;
 never automatically start a new take or reacquire after host restart. Native driver
 behavior has limited Mac/Strike acceptance: real capture plus idle pause/resume,
 lease expiry, ownership and reopen checks (see `docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md`).

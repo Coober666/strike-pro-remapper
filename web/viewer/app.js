@@ -2307,6 +2307,12 @@ async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete thi
 async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
 function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
 function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
+function slRemove(index) {
+  if(sl.busy) return;
+  sl.document.entries.splice(index,1); slMark(); slRows();
+  const next=Math.min(index,sl.document.entries.length-1);
+  (slEl('rows').querySelector(`[data-row="${next}"][data-remove]`) || slEl('kit')).focus();
+}
 async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. Local samples checked; card and factory contents unverified. Nothing deployed.`);}); }
 function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
@@ -2319,7 +2325,7 @@ async function slImport(input) {
     sl.id=null;sl.revision=null;sl.dirty=true;sl.report=report;slRender();slStatus('Imported as a new draft. Missing kits stay visible; copy them into this library, then refresh and check again. Save setlist to keep this copy.');});
 }
 function slCopy(i) { if(sl.busy || sl.copyIndex!==null) return; sl.copyIndex=i; slEl('copy-name').value=''; slEl('copy-form').hidden=false; document.querySelector('.sl-layout').inert=true; slEl('copy-name').focus(); }
-function slCopyCancel() { if(sl.busy) return; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; }
+function slCopyCancel() { if(sl.busy) return; const index=sl.copyIndex; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slEl('rows').querySelector(`[data-row="${index}"][data-copy]`)?.focus(); }
 async function slCopySubmit() { await slRun(async()=>{const row=sl.document.entries[sl.copyIndex];const result=await slRequest('copy_kit',{kit:row.kit,name:slEl('copy-name').value}); row.kit=result.kit; row.output=''; sl.copyIndex=null; slEl('copy-form').hidden=true; document.querySelector('.sl-layout').inert=false; slMark(); await slRefreshData(); slRows(); slStatus('Kit copy created. Save the setlist to keep its new reference, then use Edit kit for song-specific changes.');}); }
 async function slEditKit(i) { if(sl.busy) return; const row=sl.document.entries[i]; const found=sl.kits.find(k=>k.kit===row.kit); if(!found) {slStatus('Kit is missing from this library. Copy it into library/kits, then Refresh kits.');return;} if(sl.dirty) {slStatus('Save or export your setlist before opening a kit.');return;} await slRun(async()=>{if(await openKit(found.path)) {document.getElementById('setlist-dialog').close(); sl.report=null;} else slStatus('Kit could not be opened. Check editing control and the library.');}); }
 function slPrint() {
@@ -2338,7 +2344,7 @@ function slInit() {
   dialog.addEventListener('keydown',e=>{e.stopPropagation();if((e.ctrlKey || e.metaKey) && e.key==='s'){e.preventDefault();if(sl.copyIndex===null) void slSave();}});
   slEl('saved').addEventListener('click',e=>{const button=e.target.closest('[data-saved]');if(button) void slLoad(Number(button.dataset.saved));});
   slEl('rows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.field || sl.busy) return;sl.document.entries[Number(el.dataset.row)][el.dataset.field]=el.value;slMark();});
-  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove){sl.document.entries.splice(i,1);slMark();slRows();}});
+  slEl('rows').addEventListener('click',e=>{const el=e.target.closest('button');if(!el || sl.busy) return;const i=Number(el.dataset.row);if(el.dataset.move) slMove(i,i+Number(el.dataset.move));else if(el.dataset.copy) slCopy(i);else if(el.dataset.edit) void slEditKit(i);else if(el.dataset.remove) slRemove(i);});
   let drag=null;
   slEl('rows').addEventListener('dragstart',e=>{if(e.target.dataset.drag===undefined || sl.busy){e.preventDefault();return;}drag=Number(e.target.dataset.drag);e.dataTransfer.setData('text/plain',String(drag));e.dataTransfer.effectAllowed='move';});
   slEl('rows').addEventListener('dragover',e=>{if(drag!==null){e.preventDefault();e.dataTransfer.dropEffect='move';}});
