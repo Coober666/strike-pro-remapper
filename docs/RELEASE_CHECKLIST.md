@@ -4,6 +4,9 @@ Use a copied library and disposable SD card for interruption tests. Record OS, b
 Python, app commit, module model and the actual result; simulations do not prove hardware
 support. Preserve the existing verified iPad → Intel Mac → Strike record separately.
 
+Use [the prepared hands-on sessions and result form](HANDS_ON_ACCEPTANCE.md) for
+device, playing, listening, reconnect, media, Windows, Pi and outside-beta checks.
+
 ## Automated gates
 
 - [ ] CI passes on the release commit: format round trips, regression tests, browser

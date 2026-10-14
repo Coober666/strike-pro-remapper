@@ -60,14 +60,43 @@ empty. Twelve setlist browser cases passed across Chromium and iPad WebKit, incl
 keyboard-only cancellation and consecutive removals. Viewer extraction and standalone
 viewer build validation passed after regenerating the embedded UI.
 
-## Remaining remote queue
+## Backup and upgrade checks
 
-- Review backup/recovery and version-boundary coverage for the current packaged
-  distribution; rehearse only uncovered paths with disposable external libraries.
-- Review pairing expiry, stale writer and isolated host restart coverage.
-- Consolidate first-run/troubleshooting instructions and prepare bounded device,
-  playing, listening, disconnect and disposable-media acceptance procedures.
-- Check the resulting PR's CI and refresh packages after runtime changes pass.
+The fresh-process source rehearsal passed from the preserved older release to
+ce076e8 and back using a restored backup copy. Recovery bytes, edited snare level,
+tags, sample sentinel and backup hashes were preserved. Existing CI also covers
+failed atomic recovery, blocked kit switches, and retrying a failed final Stop save
+before changing libraries.
+
+Verified Windows packages 75295a9 and ce076e8 were extracted into separate temporary
+folders with Python removed from the child process environment. Each package saved
+a synthetic kit and recovery through its smoke check. Both packaged inspectors then
+produced identical reads of both versions' saved/recovery kits. Restored backup-copy
+and original backup hashes stayed unchanged, as did both application payloads.
+This covers packaged utility compatibility and fresh writes; interactive GUI upgrade
+on a separate machine remains H6.
+
+## Isolated Mac restart
+
+A separate loopback host used the deployed d768546 code and a temporary library;
+card discovery was disabled. Unpaired requests returned 401 and a wrong Origin
+returned 403. Normal Stop saved a synthetic unsaved kit. Restarting on the same port
+rotated pairing, rejected the old cookie/link, accepted fresh pairing and preserved
+recovery bytes. The live LAN editor, real library and module were untouched.
+
+Existing CI covers session expiry, stale writer rejection, explicit handover,
+reload token rotation, suspended-page refresh and uncertain Save responses.
+
+## Prepared acceptance and distribution
+
+[Hands-on sessions H1–H9](HANDS_ON_ACCEPTANCE.md) now provide ordered device,
+playing, listening, interruption, disposable-media, Windows, Pi/other-module and
+outside-beta procedures plus a result form. First-run documentation now distinguishes
+the verified Mac input capture from other untested combinations. Preparation does
+not mark those hardware gates complete.
+
+All ten PR #68 CI checks passed on ce076e8, including source and Windows packages.
+The subsequent documentation changes do not alter that tested runtime.
 
 Physical iPad/iPhone, separate-machine Windows USB, Linux/Pi, Command/Nitro,
 listening and disruptive hardware checks remain distinct acceptance gates.

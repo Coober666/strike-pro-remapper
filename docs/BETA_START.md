@@ -2,8 +2,9 @@
 
 This ZIP is a portable application folder for testing. It requires Python 3.10 or
 newer; the host window also requires Tk. It is unsigned, has no automatic updater,
-and is not a native iPhone/iPad app. MIDI capture on physical modules and the latest
-mobile workflows still need acceptance testing.
+and is not a native iPhone/iPad app. Mac/Strike MIDI capture has limited
+[hardware acceptance](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md); other host/module
+combinations and the latest mobile workflows still need acceptance testing.
 
 ## First ten minutes
 
@@ -64,6 +65,8 @@ Do not post pairing links/tokens. Mark whether the result used real hardware or 
 
 The remaining [release acceptance checklist](RELEASE_CHECKLIST.md) is deliberately
 open until each item has evidence. A passing automated test is not hardware acceptance.
+Use [the hands-on sessions](HANDS_ON_ACCEPTANCE.md) to test one device/workflow at a
+time and record actual results.
 
 ## Build a package from a checkout
 

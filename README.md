@@ -46,6 +46,7 @@ parallel toolkit asset loads over the LAN.
 [Mac + Strike acceptance](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md) verifies live
 CoreMIDI capture, idle capture lease/ownership/reopen behavior, and factory/user-card
 discovery; Windows hardware acceptance remains open.
+For the remaining device checks, use the [prepared acceptance sessions](docs/HANDS_ON_ACCEPTANCE.md).
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
