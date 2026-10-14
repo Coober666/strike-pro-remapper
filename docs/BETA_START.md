@@ -70,6 +70,27 @@ open until each item has evidence. A passing automated test is not hardware acce
 Use [the hands-on sessions](HANDS_ON_ACCEPTANCE.md) to test one device/workflow at a
 time and record actual results.
 
+## Importing a kit bundle
+
+Use a copied library for your first import. The importer accepts kit bundles and
+official/commercial ZIP layouts; it checks and stages supported assets before copying.
+Existing files stay unchanged: identical assets are skipped, conflicting instruments
+or samples keep the existing version, and different kits receive numbered filenames.
+Review conflicts and missing dependencies before deploying.
+
+Limits are 512 MiB per ZIP or extracted file, 16 MiB per instrument, 2 GiB total
+extracted assets and 10,000 archive entries. Temporary space is needed in addition to
+library space. Split larger packs. Unsafe paths, links and corrupt supported assets
+are rejected before any library files are imported.
+
+If copying fails later, the message reports completed new files. Earlier completed
+files remain; the current incomplete file is removed when possible. If cleanup fails,
+inspect the named incomplete file before retrying. Refresh the library and check free
+space/permissions; re-importing skips identical completed files. A lost browser response
+does not prove failure, so refresh before retrying. The app never retries uploads itself.
+A crash or power loss during copying can leave an incomplete file; this is not a
+whole-library rollback mechanism. Keep your backup until the imported kit is checked.
+
 ## Build a package from a checkout
 
 From the repository folder, run:

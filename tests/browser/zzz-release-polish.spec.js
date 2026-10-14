@@ -2,6 +2,40 @@ import {copyFile, mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
 
+test('bundle import handles file errors, rejects oversized files and supports a repeated sample-only ZIP',async({page},info)=>{
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(()=>closeStartScreen());
+  let writes=0;
+  page.on('request',request=>{if(request.url().endsWith('/api/import_bundle')) writes++;});
+  await page.evaluate(()=>importBundle({name:'bad.zip',size:1,arrayBuffer:async()=>{throw new Error('Read failed');}}));
+  await expect(page.locator('#msg')).toContainText('Read failed');
+  await page.evaluate(()=>importBundle({name:'large.zip',size:513*1024*1024}));
+  await expect(page.locator('#msg')).toContainText('512 MiB ZIP limit');
+  expect(writes).toBe(0);
+  const bytes=[...await readFile(`tests/fixtures/bundle-normal-${info.project.name}.zip`)];
+  const before=await page.evaluate(()=>({pads,kitDirty,undoCount}));
+  await page.evaluate(bytes=>importBundle(new File([new Uint8Array(bytes)],'samples.zip')),bytes);
+  await expect(page.locator('#msg')).toContainText('1 sample(s)');
+  await page.evaluate(bytes=>importBundle(new File([new Uint8Array(bytes)],'samples.zip')),bytes);
+  await expect(page.locator('#msg')).toContainText('1 already present');
+  expect(await page.evaluate(()=>({pads,kitDirty,undoCount}))).toEqual(before);
+});
+
+test('lost bundle response reports uncertain import without replay',async({page},info)=>{
+  await page.goto('http://127.0.0.1:8768/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(()=>closeStartScreen());
+  let writes=0, imported=0;
+  await page.route('**/wifi/editor',route=>route.request().method()==='GET' ? route.abort() : route.continue());
+  await page.route('**/api/import_bundle',async route=>{writes++;imported=(await (await route.fetch()).json()).result.samples;await route.abort();});
+  const bytes=[...await readFile(`tests/fixtures/bundle-lost-${info.project.name}.zip`)];
+  await page.evaluate(bytes=>importBundle(new File([new Uint8Array(bytes)],'samples.zip')),bytes);
+  await expect(page.locator('#msg')).toContainText('Some files may have been imported');
+  await expect(page.locator('#wifi-access-status')).toContainText('Connection needs checking');
+  expect({writes,imported}).toEqual({writes:1,imported:1});
+  await page.evaluate(()=>fetch('/wifi/logout',{method:'POST'}));
+});
+
 test('CSV rejects invalid batches, preserves Undo and reports successful layers',async({page})=>{
   await mkdir('.build/browser-library/instruments/CSV',{recursive:true});
   await copyFile('tests/fixtures/single_zone.sin','.build/browser-library/instruments/CSV/One.sin');

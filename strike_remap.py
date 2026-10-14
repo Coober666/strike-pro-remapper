@@ -1717,73 +1717,23 @@ def _classify_zip_entry(parts: tuple, sin_wav_rels: dict) -> 'tuple | None':
 
 
 def import_bundle(zip_bytes: bytes) -> dict:
-    """Unpack a kit/instrument zip into the library. Accepts strike-bundle zips,
-    official Strike Editor exports, and commercial pack zips (eDrumWorkshop etc.).
-    Existing files are never overwritten: identical ones count as skipped,
-    different ones as conflicts."""
-    import zipfile
-    from pathlib import PurePosixPath
-    zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    entries = []
-    for n in zf.namelist():
-        if n.endswith('/') or PurePosixPath(n).name in ('manifest.json', '.DS_Store'):
-            continue
-        parts = PurePosixPath(n).parts
-        if not parts or any(p in ('..', '') for p in parts) or PurePosixPath(n).is_absolute():
-            continue  # blocks zip-slip
-        entries.append((n, parts))
-
-    # Pre-scan .sin files for their referenced WAV rel paths so loose WAVs can be
-    # placed where instrument resolution expects them (basename → samples-rel).
-    sin_wav_rels = {}
-    for n, parts in entries:
-        if parts[-1].lower().endswith('.sin'):
+    """Preflight an archive, then publish new files without overwriting the library."""
+    from strike_remapper.bundle_import import import_archive, ImportStopped
+    try:
+        result = import_archive(zip_bytes, LIBRARY_DIR, _classify_zip_entry, parse_sin_all_wavs)
+    except ImportStopped as exc:
+        if exc.completed:
             try:
-                for wav_rel in parse_sin_all_wavs(zf.read(n)):
-                    base = wav_rel.replace('\\', '/').rsplit('/', 1)[-1].lower()
-                    sin_wav_rels.setdefault(base, wav_rel.replace('\\', '/'))
+                refresh_available()
             except Exception:
-                pass  # malformed .sin → fall back to path-based placement
-
-    kit_names = []
-    counts = {'kits': 0, 'instruments': 0, 'samples': 0, 'skipped': 0, 'conflicts': []}
-    for n, parts in entries:
-        classified = _classify_zip_entry(parts, sin_wav_rels)
-        if not classified:
-            continue
-        kind, rel = classified
-        if any(p in ('..', '') for p in PurePosixPath(rel).parts):
-            continue
-        dest_dir = LIBRARY_DIR / kind
-        data = zf.read(n)
-        dest = dest_dir / rel
-        if kind == 'kits':
-            # never clobber an existing kit — find a free " (n)" name instead
-            base, ext = dest.stem, dest.suffix
-            ctr = 2
-            while dest.exists() and dest.read_bytes() != data:
-                dest = dest_dir / f'{base} ({ctr}){ext}'
-                ctr += 1
-            if dest.exists():
-                counts['skipped'] += 1
-                kit_names.append(dest.name)
-                continue
-            kit_names.append(dest.name)
-        elif dest.exists():
-            if dest.read_bytes() == data:
-                counts['skipped'] += 1
-            else:
-                counts['conflicts'].append(rel)
-            continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-        counts[kind] += 1
-
-    if not kit_names and not counts['instruments'] and not counts['samples']:
-        raise ValueError('No .skt, .sin, or .wav files found in zip — not a kit/instrument bundle')
-    refresh_available()
-    counts['kit_names'] = kit_names
-    return counts
+                pass  # Preserve the original partial-import recovery instructions.
+        raise
+    try:
+        refresh_available()
+    except Exception as exc:
+        completed = sum(result[k] for k in ('kits', 'instruments', 'samples'))
+        raise ImportStopped(completed, 'Files were processed, but the library listing could not refresh.') from exc
+    return result
 
 
 def swap_pads(pad_id_a: str, pad_id_b: str):
@@ -9407,24 +9357,33 @@ function exportBundle() {
   window.location = '/api/export_bundle';
 }
 
+let bundleImportBusy=false;
 async function importBundle(file) {
+  if(!file || bundleImportBusy) return;
   closeAllPopovers();
-  setMsg(`Importing ${file.name}…`);
-  const buf = await file.arrayBuffer();
-  let bin = '';
-  const bytes = new Uint8Array(buf);
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  const data = await api('/import_bundle', {data_b64: btoa(bin)});
-  if (data.error) { setMsg(data.error, true); return; }
-  kits = data.kits;
-  avail = data.instruments;
-  renderKitList();
-  renderInstruments();
-  await checkPaths();
-  setMsg(data.message);
+  bundleImportBusy=true;
+  let sent=false, responseReceived=false;
+  try {
+    if(file.size > 512*1024*1024) throw new Error('Bundle exceeds the 512 MiB ZIP limit. Split it into smaller bundles.');
+    setMsg(`Importing ${file.name}.`);
+    const buf = await file.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buf), CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    sent=true;
+    const data = await api('/import_bundle', {data_b64: btoa(bin)});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    kits = data.kits; avail = data.instruments;
+    renderKitList(); renderInstruments();
+    await checkPaths();
+    setMsg(data.message);
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('Bundle import could not be confirmed. Some files may have been imported. Refresh the library before retrying; the request was not repeated.',true);
+    } else setMsg(error.message,true);
+  } finally {bundleImportBusy=false;}
 }
 
 // ── Kit diff ──────────────────────────────────────────────────────────────────

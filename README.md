@@ -261,9 +261,11 @@ double-click.
 
 **Sharing & repair**
 - **Kit bundles** — export any kit as a self-contained `.zip` (kit + every referenced
-  instrument + every sample + manifest). Import a bundle on another machine and it just
-  works — no broken absolute paths, the problem that plagues bare `.skt` sharing.
-  Existing library files are never overwritten on import.
+  instrument + every sample + manifest). Import contained assets into another local
+  library, then review missing dependencies and conflicts before deployment. Existing
+  library files are never overwritten. Supported assets are validated and staged before
+  copying; corrupt archives and unsafe paths fail before import. A later disk failure
+  reports completed files and recovery steps. See [bundle import recovery](docs/BETA_START.md#importing-a-kit-bundle).
 - **Official editor & commercial pack zips** — the importer also accepts official
   Strike Editor kit/instrument exports and commercial pack zips (eDrumWorkshop,
   drum-tec, …): any zip carrying `Kits/`/`Instruments/`/`Samples/` folders (even nested

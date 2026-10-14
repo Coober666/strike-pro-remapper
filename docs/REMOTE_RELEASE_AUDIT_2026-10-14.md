@@ -205,3 +205,31 @@ lost. The 18 existing release-polish cases also passed; lint and viewer build va
 passed. An initial browser assertion was corrected to inspect the assignment response
 and resulting pads because the fixture's separate missing-media warning can replace
 the shared status text. Tests use temporary libraries; no module/card access occurred.
+
+## Bundle import preflight and partial-failure recovery
+
+All ten c3afc2b CI checks passed. The ZIP review then reproduced a corrupt later entry
+leaving an earlier kit imported, Windows-style traversal escaping the temporary library,
+and a repeat sample-only import incorrectly reporting no usable content.
+
+Supported assets are now streamed into temporary staging and validated before publication.
+Portable path validation rejects traversal, drive/stream syntax, reserved names, links,
+duplicate archive names and case-ambiguous destinations. Destination containment and
+link checks run before publication and again for each target. Bounds limit compressed,
+per-file and aggregate size and entry count. Existing conflicts remain unchanged;
+exclusive creation prevents an intervening file from being overwritten.
+
+Handled write failures remove the current partial file when possible and report how
+many earlier new files remain. Cleanup failure identifies the incomplete filename;
+listing-refresh failure still reports completed imports. An explicit retry skips
+identical completed files. This is not crash-atomic publication or whole-library rollback.
+The browser catches file errors and uncertain responses, bounds ZIP size and blocks
+overlapping uploads; an uncertain paired response pauses editing without automatic retry.
+
+Ten Python cases ran: nine passed locally, and the actual-symlink case skipped because
+this Windows account cannot create symlinks (Linux CI covers it). Cases include late
+CRC failure, unsafe paths, limits, duplicate names, loose sample mapping, conflict
+preservation, disk-full/cleanup/listing failures and repeat imports. Four focused
+Chromium/WebKit cases passed, including successful host import with its response lost.
+Lint and standalone viewer checks passed. All libraries and ZIPs were disposable;
+the live Mac, module and cards were untouched.

@@ -431,6 +431,16 @@ rewrites strings in `state['instruments']` (the kit str table), one undo entry.
 Bundles: `export_bundle()/import_bundle()` + GET `/api/export_bundle`, POST
 `/api/import_bundle` (base64 zip) — zip mirrors library layout (kit/, instruments/<rel>,
 samples/<wav_rel>) so no path rewriting; import never overwrites existing files.
+`bundle_import.py` preflights portable paths, links, duplicate/case-ambiguous names,
+supported-entry CRC/decompression and limits in temporary staging before publication.
+Limits: 512 MiB ZIP/file, 16 MiB SIN, 2 GiB total and 10,000 ZIP entries. Destinations
+must remain in the library with no symlink/reparse components; validate again before
+exclusive creation. Existing kits get numbered copies, identical assets skip, other
+conflicts keep existing files. On handled copy failure remove only the newly opened
+partial file; earlier completed files stay and ImportStopped reports the count. This
+is not a crash-atomic multi-file transaction. Cleanup failures identify the incomplete
+file; listing failures must not hide completed imports. Never auto-retry uploads.
+Tests: `tools/test_bundle_import.py` and bundle browser cases use disposable libraries.
 
 Editing: `sin_detail()/sin_update()/sin_revert()` + `/api/sin_detail|sin_update|sin_revert`.
 Edits always target the library copy (`_sin_abs` prefers `library/instruments/` because a

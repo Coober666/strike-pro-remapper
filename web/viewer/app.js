@@ -4314,24 +4314,33 @@ function exportBundle() {
   window.location = '/api/export_bundle';
 }
 
+let bundleImportBusy=false;
 async function importBundle(file) {
+  if(!file || bundleImportBusy) return;
   closeAllPopovers();
-  setMsg(`Importing ${file.name}…`);
-  const buf = await file.arrayBuffer();
-  let bin = '';
-  const bytes = new Uint8Array(buf);
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-  }
-  const data = await api('/import_bundle', {data_b64: btoa(bin)});
-  if (data.error) { setMsg(data.error, true); return; }
-  kits = data.kits;
-  avail = data.instruments;
-  renderKitList();
-  renderInstruments();
-  await checkPaths();
-  setMsg(data.message);
+  bundleImportBusy=true;
+  let sent=false, responseReceived=false;
+  try {
+    if(file.size > 512*1024*1024) throw new Error('Bundle exceeds the 512 MiB ZIP limit. Split it into smaller bundles.');
+    setMsg(`Importing ${file.name}.`);
+    const buf = await file.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buf), CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    sent=true;
+    const data = await api('/import_bundle', {data_b64: btoa(bin)});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    kits = data.kits; avail = data.instruments;
+    renderKitList(); renderInstruments();
+    await checkPaths();
+    setMsg(data.message);
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('Bundle import could not be confirmed. Some files may have been imported. Refresh the library before retrying; the request was not repeated.',true);
+    } else setMsg(error.message,true);
+  } finally {bundleImportBusy=false;}
 }
 
 // ── Kit diff ──────────────────────────────────────────────────────────────────

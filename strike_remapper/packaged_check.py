@@ -107,6 +107,20 @@ def check(root):
                 assets[path] = len(body)
             if not app._factory_catalog():
                 raise RuntimeError('Factory metadata missing')
+            import io
+            import wave
+            import zipfile
+            sample, bundle = io.BytesIO(), io.BytesIO()
+            with wave.open(sample, 'wb') as audio:
+                audio.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b'\0' * 32)
+            with zipfile.ZipFile(bundle, 'w') as archive:
+                archive.writestr('Samples/Package/check.wav', sample.getvalue())
+            with app.STATE_LOCK:
+                imported = app.import_bundle(bundle.getvalue())
+                repeated = app.import_bundle(bundle.getvalue())
+            if imported['samples'] != 1 or repeated['skipped'] != 1:
+                raise RuntimeError('Bundled ZIP import/repeat failed')
             app.create_new_kit('Packaged check')
             app.set_pad_param('S1H', 'la_level', 31)
             saved = root / 'kits/Packaged check.skt'
@@ -144,5 +158,5 @@ def check(root):
             connection.close()
         finally:
             host.stop()
-    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True,
+    return {'paired': True, 'factory_outputs': len(outputs), 'assets': assets, 'saved': True, 'recovery': True, 'utility': True, 'bundle_import': True,
             'midi_inputs': len(inputs), 'identity': identity(Path(app.__file__).parent)}
