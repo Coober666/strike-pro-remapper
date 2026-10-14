@@ -177,3 +177,31 @@ from still-unverified module, mobile, mapping and listening combinations.
 The preceding 771ab61 clean Windows/source packages passed ZIP and all payload hash
 checks. Extracted Windows runtime/GUI/save/recovery checks passed with no MIDI outputs
 or card access. Package checks exercise temporary libraries, not deployment acceptance.
+
+## CSV assignment validation and recovery
+
+All ten checks passed on e34fcbe, including both browser workflows and CI package
+jobs. The subsequent import review found that CSV layer typos silently targeted
+Layer A, unknown pads could add unused instruments, and malformed later API rows
+could fail after earlier rows had changed the kit. Empty/missing-only batches also
+consumed Undo and marked the kit dirty. These failures were reproduced before fixing.
+
+CSV batches now validate every row before planning final assignments. Unknown pads,
+invalid A/B layers and malformed rows reject the whole batch. Missing instruments
+remain reported skips. Actual changes share one Undo snapshot; identical assignments
+and missing-only batches leave the session unchanged. Repeated targets retain the
+last available assignment, and the result counts changed layers.
+
+The browser rejects malformed two/three-field lines before POST, handles read errors,
+prevents overlapping imports and rejects a changed pad snapshot during file reading.
+An unconfirmed POST is never retried; paired editing pauses for a host-state refresh.
+This read-time guard does not claim general cross-tab revision locking for CSV edits.
+
+Four Python contracts passed, including whole-state preservation after invalid later
+rows, mixed A/B assignment, missing instruments and exact Undo restoration. Six focused
+Chromium/WebKit cases passed for invalid imports, successful assignments/Undo, failed
+file reads, delayed reads across kit switches and a committed write with its response
+lost. The 18 existing release-polish cases also passed; lint and viewer build validation
+passed. An initial browser assertion was corrected to inspect the assignment response
+and resulting pads because the fixture's separate missing-media warning can replace
+the shared status text. Tests use temporary libraries; no module/card access occurred.

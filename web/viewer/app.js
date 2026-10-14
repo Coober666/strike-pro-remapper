@@ -5064,30 +5064,40 @@ async function refreshKitSize() {
   } catch(e) { badge.style.display = 'none'; }
 }
 
+let csvImportBusy=false;
 async function importAssignCSV(file) {
+  if (!file || csvImportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
-  const text = await file.text();
-  const assignments = [];
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const cols = line.split(',').map(c => c.trim());
-    if (cols.length < 2) continue;
-    // Support: pad_id,sin_rel  OR  pad_id,layer,sin_rel
-    if (cols.length === 2) {
-      assignments.push({pad_id: cols[0], layer: 'a', sin_rel: cols[1]});
-    } else {
-      assignments.push({pad_id: cols[0], layer: cols[1].toLowerCase(), sin_rel: cols[2]});
+  csvImportBusy=true;
+  let sent=false, responseReceived=false;
+  const originalPads=pads;
+  try {
+    const text = await file.text();
+    if(pads !== originalPads) throw new Error('Kit changed while reading the CSV. Import it again for the current kit.');
+    const assignments = [];
+    for (const [index,rawLine] of text.split(/\r?\n/).entries()) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const cols = line.split(',').map(c => c.trim());
+      if (![2,3].includes(cols.length) || cols.some(c=>!c)) throw new Error(`CSV line ${index+1}: use pad_id,instrument or pad_id,A/B,instrument. Nothing assigned.`);
+      assignments.push({pad_id:cols[0],layer:cols.length===2 ? 'a' : cols[1].toLowerCase(),sin_rel:cols.at(-1)});
     }
-  }
-  if (!assignments.length) { setMsg('No valid rows found in CSV', true); return; }
-  setMsg(`Assigning ${assignments.length} pads from CSV…`);
-  const data = await api('/batch_assign_csv', {assignments});
-  if (data.error) { setMsg(data.error, true); return; }
-  pads = data.pads;
-  setDirtyState(data.dirty, data.undo_count, data.history_labels);
-  renderDrumMap(); renderPadDetail(); checkPaths();
-  setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+    if (!assignments.length) throw new Error('No assignment rows found in CSV.');
+    setMsg(`Assigning ${assignments.length} rows from CSV.`);
+    sent=true;
+    const data = await api('/batch_assign_csv', {assignments});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    pads = data.pads;
+    setDirtyState(data.dirty, data.undo_count, data.history_labels);
+    renderDrumMap(); renderPadDetail(); checkPaths();
+    setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('CSV assignment could not be confirmed. Reload the host kit before trying again; the request was not retried.',true);
+    } else setMsg(error.message,true);
+  } finally {csvImportBusy=false;}
 }
 
 function printMidiMap() {

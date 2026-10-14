@@ -478,6 +478,13 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
 - `strike_remapper.audio.normalize_wav(wav_data)` → `(bytes, peak_db_str)` —
   peak-normalize 16/24-bit PCM WAV; `strike_remap` re-exports the audio helpers
 - `batch_assign_csv(assignments)` — assign multiple pads from `[{pad_id, layer, sin_rel}]`
+  after validating all row shapes, pad IDs and A/B layers. Missing instruments remain
+  reported skips; malformed rows reject the whole batch without state/history changes.
+  Plan final assignments before one Undo snapshot; no-op imports do not dirty the kit.
+  The browser accepts two/three comma-separated fields, rejects malformed lines before
+  POST, serializes file imports and rejects a changed pad snapshot during file reading.
+  Lost responses are not replayed; paired editing pauses until host state is refreshed.
+  Tests: `tools/test_csv_assignment.py` and CSV cases in `zzz-release-polish.spec.js`.
 - `swap_pads(pad_id_a, pad_id_b)` — swap full payloads between two pads
 - `batch_set_param(pad_ids, param, value)` — apply one param to many pads (single undo entry)
 - `diff_kit(path)` — compare another .skt against current state, returns per-pad diff.

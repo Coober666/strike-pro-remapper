@@ -1876,37 +1876,47 @@ def set_instrument_tags(sin_rel: str, tags: list):
 
 
 def batch_assign_csv(assignments: list) -> dict:
-    """Assign instruments from a list of {pad_id, layer, sin_rel} dicts. Single undo entry."""
-    _push_history(f'CSV assign ({len(assignments)} rows)')
-    changed, skipped = 0, []
+    """Validate the entire batch before one undoable assignment change."""
+    if not isinstance(assignments, list) or not assignments:
+        raise ValueError('CSV assignments must be a non-empty list of rows.')
+    pads_by_id = {pad['id']: pad for pad in state['pads']}
+    planned, skipped = {}, []
     avail = state.get('avail', {})
-    for row in assignments:
-        pad_id  = str(row.get('pad_id', '')).strip().upper()
-        layer   = str(row.get('layer', 'a')).strip().lower()
-        sin_rel = str(row.get('sin_rel', '')).strip()
-        if not pad_id or not sin_rel:
-            continue
+    for number, row in enumerate(assignments, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f'CSV row {number}: expected a pad, layer and instrument.')
+        values = [row.get('pad_id'), row.get('layer', 'a'), row.get('sin_rel')]
+        if any(not isinstance(value, str) or not value.strip() for value in values):
+            raise ValueError(f'CSV row {number}: pad, layer and instrument must be non-empty text.')
+        pad_id, layer, sin_rel = values[0].strip().upper(), values[1].strip().lower(), values[2].strip()
+        if pad_id not in pads_by_id:
+            raise ValueError(f'CSV row {number}: unknown pad {pad_id}. Nothing assigned.')
+        if layer not in ('a', 'b'):
+            raise ValueError(f'CSV row {number}: layer must be A or B. Nothing assigned.')
         if sin_rel not in avail:
             skipped.append(sin_rel)
             continue
-        instruments = state['instruments']
+        planned[(pad_id, layer)] = sin_rel
+    instruments = list(state['instruments'])
+    changes = []
+    for (pad_id, layer), sin_rel in planned.items():
         if sin_rel not in instruments:
             instruments.append(sin_rel)
-        idx = instruments.index(sin_rel)
-        for pad in state['pads']:
-            if pad['id'] == pad_id:
-                if layer == 'b':
-                    pad['layer_b'] = idx
-                else:
-                    pad['layer_a'] = idx
-                changed += 1
-                break
-    state['dirty'] = True
-    msg = f'CSV assigned {changed} pads'
+        index = instruments.index(sin_rel)
+        pad = pads_by_id[pad_id]
+        if pad['layer_' + layer] != index:
+            changes.append((pad, layer, index))
+    msg = f'CSV assigned {len(changes)} layers'
     if skipped:
         msg += f' ({len(skipped)} instruments not in library)'
-    state['message'] = msg
-    return {'changed': changed, 'skipped': skipped}
+    if changes:
+        _push_history(f'CSV assign ({len(changes)} layers)')
+        state['instruments'] = instruments
+        for pad, layer, index in changes:
+            pad['layer_' + layer] = index
+        state['dirty'] = True
+        state['message'] = msg
+    return {'changed': len(changes), 'skipped': skipped, 'message': msg}
 
 
 # Per-pad fields compared by the diff engine (both kit-vs-kit and snapshot-vs-snapshot).
@@ -10147,30 +10157,40 @@ async function refreshKitSize() {
   } catch(e) { badge.style.display = 'none'; }
 }
 
+let csvImportBusy=false;
 async function importAssignCSV(file) {
+  if (!file || csvImportBusy) return;
   if (!pads.length) { setMsg('Load a kit first', true); return; }
-  const text = await file.text();
-  const assignments = [];
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const cols = line.split(',').map(c => c.trim());
-    if (cols.length < 2) continue;
-    // Support: pad_id,sin_rel  OR  pad_id,layer,sin_rel
-    if (cols.length === 2) {
-      assignments.push({pad_id: cols[0], layer: 'a', sin_rel: cols[1]});
-    } else {
-      assignments.push({pad_id: cols[0], layer: cols[1].toLowerCase(), sin_rel: cols[2]});
+  csvImportBusy=true;
+  let sent=false, responseReceived=false;
+  const originalPads=pads;
+  try {
+    const text = await file.text();
+    if(pads !== originalPads) throw new Error('Kit changed while reading the CSV. Import it again for the current kit.');
+    const assignments = [];
+    for (const [index,rawLine] of text.split(/\r?\n/).entries()) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const cols = line.split(',').map(c => c.trim());
+      if (![2,3].includes(cols.length) || cols.some(c=>!c)) throw new Error(`CSV line ${index+1}: use pad_id,instrument or pad_id,A/B,instrument. Nothing assigned.`);
+      assignments.push({pad_id:cols[0],layer:cols.length===2 ? 'a' : cols[1].toLowerCase(),sin_rel:cols.at(-1)});
     }
-  }
-  if (!assignments.length) { setMsg('No valid rows found in CSV', true); return; }
-  setMsg(`Assigning ${assignments.length} pads from CSV…`);
-  const data = await api('/batch_assign_csv', {assignments});
-  if (data.error) { setMsg(data.error, true); return; }
-  pads = data.pads;
-  setDirtyState(data.dirty, data.undo_count, data.history_labels);
-  renderDrumMap(); renderPadDetail(); checkPaths();
-  setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+    if (!assignments.length) throw new Error('No assignment rows found in CSV.');
+    setMsg(`Assigning ${assignments.length} rows from CSV.`);
+    sent=true;
+    const data = await api('/batch_assign_csv', {assignments});
+    responseReceived=true;
+    if (data.error) throw new Error(data.error);
+    pads = data.pads;
+    setDirtyState(data.dirty, data.undo_count, data.history_labels);
+    renderDrumMap(); renderPadDetail(); checkPaths();
+    setMsg(data.message + (data.skipped?.length ? ` — skipped: ${data.skipped.slice(0,3).join(', ')}${data.skipped.length > 3 ? '…' : ''}` : ''));
+  } catch(error) {
+    if(sent && !responseReceived) {
+      pauseWifiEditing();
+      setMsg('CSV assignment could not be confirmed. Reload the host kit before trying again; the request was not retried.',true);
+    } else setMsg(error.message,true);
+  } finally {csvImportBusy=false;}
 }
 
 function printMidiMap() {
@@ -12394,7 +12414,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 result = batch_assign_csv(body.get('assignments', []))
                 self.send_json({
-                    'message':        state['message'],
+                    'message':        result['message'],
                     'pads':           self._pad_view(state['pads'], state['instruments']),
                     'dirty':          state['dirty'],
                     'undo_count':     len(state['history']),

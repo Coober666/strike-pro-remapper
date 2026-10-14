@@ -2,6 +2,67 @@ import {copyFile, mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
 
+test('CSV rejects invalid batches, preserves Undo and reports successful layers',async({page})=>{
+  await mkdir('.build/browser-library/instruments/CSV',{recursive:true});
+  await copyFile('tests/fixtures/single_zone.sin','.build/browser-library/instruments/CSV/One.sin');
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{await openKit(file);closeStartScreen();await loadInstruments();},path.resolve('tests/fixtures/balance.skt'));
+  const before=await page.evaluate(()=>({pads,kitDirty,undoCount}));
+  const pad=before.pads[0].id;
+  const importText=text=>page.evaluate(text=>importAssignCSV(new File([text],'assign.csv')),text);
+  await importText(`${pad},a,CSV/One.sin\n${pad},c,CSV/One.sin`);
+  await expect(page.locator('#msg')).toContainText('layer must be A or B');
+  expect(await page.evaluate(()=>({pads,kitDirty,undoCount}))).toEqual(before);
+  await importText(`${pad},a,CSV/One.sin\nbroken row`);
+  await expect(page.locator('#msg')).toContainText('CSV line 2');
+  expect(await page.evaluate(()=>({pads,kitDirty,undoCount}))).toEqual(before);
+  const assigned=page.waitForResponse('**/api/batch_assign_csv');
+  await importText(`${pad},a,CSV/One.sin\n${pad},b,CSV/One.sin`);
+  expect((await (await assigned).json()).message).toBe('CSV assigned 2 layers');
+  expect(await page.evaluate(()=>[pads[0].layer_a_path,pads[0].layer_b_path])).toEqual(['CSV/One.sin','CSV/One.sin']);
+  expect(await page.evaluate(()=>undoCount)).toBe(before.undoCount+1);
+  await page.evaluate(()=>undoLast());
+  expect(await page.evaluate(()=>pads)).toEqual(before.pads);
+  await page.evaluate(()=>importAssignCSV({text:async()=>{throw new Error('File could not be read');}}));
+  await expect(page.locator('#msg')).toContainText('File could not be read');
+});
+
+test('CSV pending file read cannot overlap another import or follow a kit switch',async({page})=>{
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{await openKit(file);closeStartScreen();},path.resolve('tests/fixtures/balance.skt'));
+  let writes=0;
+  page.on('request',request=>{if(request.url().endsWith('/api/batch_assign_csv')) writes++;});
+  await page.evaluate(()=>{
+    window.pendingCSV=importAssignCSV({text:()=>new Promise(resolve=>{window.releaseCSV=resolve;})});
+    window.secondRead=false;
+    void importAssignCSV({text:async()=>{window.secondRead=true;return 'K1H,a,Missing.sin';}});
+  });
+  await page.evaluate(file=>openKit(file),path.resolve('.build/browser-library/kits',"John's Test Kit.skt"));
+  const before=await page.evaluate(()=>({pads,kitDirty,undoCount}));
+  await page.evaluate(async()=>{window.releaseCSV('K1H,a,Missing.sin');await window.pendingCSV;});
+  await expect(page.locator('#msg')).toContainText('Kit changed while reading');
+  expect(await page.evaluate(()=>window.secondRead)).toBe(false);
+  expect(writes).toBe(0);
+  expect(await page.evaluate(()=>({pads,kitDirty,undoCount}))).toEqual(before);
+});
+
+test('lost CSV response pauses paired editing without repeating the assignment',async({page})=>{
+  await mkdir('.build/browser-library/instruments/CSV',{recursive:true});
+  await copyFile('tests/fixtures/single_zone.sin','.build/browser-library/instruments/CSV/One.sin');
+  await page.goto('http://127.0.0.1:8768/wifi/pair#pair=browser-wifi-pairing');
+  await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{await openKit(file);closeStartScreen();await loadInstruments();},path.resolve('tests/fixtures/balance.skt'));
+  let writes=0, applied=0;
+  await page.route('**/wifi/editor',route=>route.request().method()==='GET' ? route.abort() : route.continue());
+  await page.route('**/api/batch_assign_csv',async route=>{writes++;applied=(await (await route.fetch()).json()).changed;await route.abort();});
+  await page.evaluate(()=>importAssignCSV(new File([pads[0].id+',a,CSV/One.sin'],'assign.csv')));
+  await expect(page.locator('#msg')).toContainText('could not be confirmed');
+  await expect(page.locator('#wifi-access-status')).toContainText('Connection needs checking');
+  expect(writes).toBe(1);
+  expect(applied).toBe(1);
+  await page.evaluate(()=>fetch('/wifi/logout',{method:'POST'}));
+});
+
 for (const failure of [false,true]) test(`balance analysis cannot populate a reopened dialog (${failure ? 'failure' : 'success'})`,async({page})=>{
   await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
   await page.evaluate(async file=>{await openKit(file);closeStartScreen();openBalance();},path.resolve('tests/fixtures/balance.skt'));

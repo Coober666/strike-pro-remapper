@@ -231,6 +231,9 @@ double-click.
   cutoff/enable; mute groups; MIDI notes; gate time (Free in ms, tempo-synced, or off)
 - Copy, swap, and batch-edit pads; batch-assign from CSV; kit diff/compare; rename,
   duplicate, clear; 20-step undo with labeled history; autosave + crash recovery
+- CSV assignment validates every row before edits: unknown pads or invalid layers
+  reject the batch; missing library instruments are reported and skipped. Valid
+  changes share one Undo step; unchanged assignments do not consume Undo history.
 - **Kit time machine** — a persistent version history that outlives reloads and restarts
   (the durable counterpart to in-memory undo). Snapshots are captured automatically on
   load and save, on a debounced timer while you edit, and on demand with **Snapshot now**;
