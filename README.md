@@ -38,6 +38,7 @@ computer** from a paired iPad/iPhone: the USB host records and timestamps the ta
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 **Host setup check** reports missing MIDI support, driver errors and visible inputs.
+The launcher demo retains host MIDI access after Wi-Fi pairing.
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.

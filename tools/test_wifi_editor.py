@@ -75,7 +75,7 @@ class WifiEditorTests(unittest.TestCase):
         self.assertIn(b'Pairing link', page)
         self.assertNotIn(b'boot-screen', page)
         self.assertNotIn(b'test-editor-pairing', page)
-        for path in ('/api/kits', '/api/status', '/api/session', '/api/export_bundle', '/factory', '/api/outputs', '/midi', '/midi/core.js', '/wifi/midi/inputs'):
+        for path in ('/api/kits', '/api/status', '/api/session', '/api/export_bundle', '/factory', '/api/outputs', '/midi', '/midi?demo=1', '/midi/core.js', '/wifi/midi/inputs'):
             self.assertEqual(self.request(path)[0], 401, path)
         for path in ('/api/select', '/api/save', '/api/run_tool', '/api/deploy', '/api/activate', '/wifi/midi'):
             self.assertEqual(self.request(path, {})[0], 401, path)
@@ -96,6 +96,8 @@ class WifiEditorTests(unittest.TestCase):
         self.assertIn(b'data-wifi-editor="true"', page)
         self.assertIn(b'boot-screen', page)
         self.assertIn(b'Drum MIDI Toolkit', self.request('/midi')[2])
+        for path in ('/midi?demo=1', '/midi/?demo=1'):
+            self.assertIn(b'data-host-midi="true"', self.request(path)[2])
         self.assertIn(b'validateSession', self.request('/midi/core.js')[2])
         self.assertEqual(headers['Cache-Control'], 'no-store')
         self.assertEqual(headers['X-Frame-Options'], 'DENY')
