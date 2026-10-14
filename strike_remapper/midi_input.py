@@ -8,6 +8,8 @@ import sys
 import threading
 import time
 
+from strike_remapper.runtime import worker_command
+
 ROOT = Path(__file__).resolve().parent.parent
 MISSING = 'Host MIDI needs python-rtmidi. Install requirements-midi.txt with the Python that runs the editor, then refresh inputs.'
 
@@ -34,7 +36,7 @@ def process_options():
 class NativeInput:
     def inputs(self):
         try:
-            result = subprocess.run([sys.executable, '-m', 'strike_remapper.midi_input'],
+            result = subprocess.run(worker_command('midi-input'),
                                     capture_output=True, timeout=8, **process_options())
             data = json.loads(result.stdout)
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
@@ -50,7 +52,7 @@ class NativeInput:
 class InputProcess:
     def __init__(self, port, receive, failed):
         self.closed = False
-        self.process = subprocess.Popen([sys.executable, '-m', 'strike_remapper.midi_input', port],
+        self.process = subprocess.Popen(worker_command('midi-input', port),
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                         **process_options())
         self.thread = threading.Thread(target=self._read, args=(receive, failed), daemon=True)

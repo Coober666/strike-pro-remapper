@@ -8,6 +8,7 @@ from pathlib import Path
 import secrets
 import threading
 import time
+from urllib.parse import urlparse
 
 from strike_remapper.factory_bridge import Controller, WEB as FACTORY_WEB
 from strike_remapper.midi_capture import MidiCapture, CaptureError
@@ -145,7 +146,7 @@ def make_handler(app, pairing, controller=None, midi=None):
                     self.send_json({'inputs': midi.inputs()})
                 except Exception as exc:
                     self.send_json({'error': str(exc)}, 503)
-            elif self.path in ('/midi', '/midi/'):
+            elif urlparse(self.path).path in ('/midi', '/midi/'):
                 page = (Path(__file__).resolve().parent.parent / 'web' / 'midi-toolkit' / 'index.html').read_text(encoding='utf-8')
                 self.document(page.replace('<html lang="en">', '<html lang="en" data-host-midi="true">', 1))
             elif self.path in ('/', '/index.html'):

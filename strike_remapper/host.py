@@ -7,6 +7,7 @@ import socket
 import threading
 
 import strike_remap as app
+from strike_remapper.runtime import validate_library
 from strike_remapper.wifi_editor import Pairing, make_handler
 from strike_remapper.vendor.qrcodegen import QrCode
 
@@ -61,6 +62,7 @@ class Host:
             raise ValueError(f'This is the application folder. Your existing library is in: {root / "library"}')
         if root.exists() and not root.is_dir():
             raise ValueError('Choose a folder, not a kit file. Open the kit after starting the editor.')
+        validate_library(root)
         root.mkdir(parents=True, exist_ok=True)
         # Check writability before binding; do not overwrite any existing library files.
         probe = root / ('.write-check-' + secrets.token_hex(8))

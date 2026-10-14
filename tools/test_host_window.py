@@ -43,6 +43,7 @@ class WindowTests(unittest.TestCase):
         self.config.write_text(json.dumps({'library': str(self.library), 'address':'127.0.0.1'}))
         self.host = Host()
         self.errors = []
+        self.opened = []
         self.callback_errors = []
         self.root.report_callback_exception = lambda *args: self.callback_errors.append(args)
         self.addCleanup(self.tmp.cleanup)
@@ -93,6 +94,7 @@ class WindowTests(unittest.TestCase):
         with patch.dict(os.environ, {'APPDATA': self.tmp.name}), \
                 patch.object(tk, 'Tk', return_value=self.root), \
                 patch.object(tk.Misc, 'mainloop', inspect), \
+                patch.object(launch_editor.webbrowser, 'open', side_effect=lambda url: self.opened.append(url) or True), \
                 patch.object(launch_editor, 'Host', return_value=self.host), \
                 patch.object(launch_editor, 'lan_addresses', return_value=['127.0.0.1']), \
                 patch.object(self.host, 'start', side_effect=start), \
@@ -103,11 +105,14 @@ class WindowTests(unittest.TestCase):
     def test_start_stop_and_saved_library(self):
         def exercise():
             self.assert_controls_fit()
-            self.button('Start').invoke()
+            self.button('Open editor').invoke()
             self.wait(lambda: self.host.running and not self.button('Stop').instate(['disabled']))
             self.assertFalse(self.host.pair_url, 'Wi-Fi must remain opt-in even with a saved address')
             self.assertEqual(self.host.library, self.library)
-            self.assertTrue(self.button('Start').instate(['disabled']))
+            self.assertEqual(self.opened, [self.host.url])
+            self.button('Try a demo').invoke()
+            self.assertEqual(self.opened[-1], self.host.url.rstrip('/') + '/midi?demo=1')
+            self.assertFalse(self.button('Open editor').instate(['disabled']))
             conn = http.client.HTTPConnection('127.0.0.1', self.host.server.server_port, timeout=3)
             conn.request('GET', '/api/session')
             response = conn.getresponse()
@@ -117,7 +122,7 @@ class WindowTests(unittest.TestCase):
             app.create_new_kit('Window check')
             app.set_pad_param('S1H', 'la_level', 31)
             self.button('Stop').invoke()
-            self.wait(lambda: not self.button('Start').instate(['disabled']))
+            self.wait(lambda: not self.button('Open editor').instate(['disabled']))
             self.assertFalse(self.host.running)
             self.assertTrue((self.library / 'kits/Window check.autosave.skt').exists())
             self.assertEqual(json.loads(self.config.read_text())['library'], str(self.library))
@@ -126,7 +131,7 @@ class WindowTests(unittest.TestCase):
 
     def test_final_save_failure_keeps_retry_controls_available(self):
         def exercise():
-            self.button('Start').invoke()
+            self.button('Open editor').invoke()
             self.wait(lambda: self.host.running and not self.button('Stop').instate(['disabled']))
             app.create_new_kit('Retry check')
             app.set_pad_param('S1H', 'la_level', 45)
@@ -142,14 +147,14 @@ class WindowTests(unittest.TestCase):
                 self.assertTrue(self.root.winfo_exists())
             self.assertFalse(self.host.running)
             self.assertTrue(self.host.recovery_pending)
-            self.assertTrue(self.button('Start').instate(['disabled']))
+            self.assertTrue(self.button('Open editor').instate(['disabled']))
             self.assertFalse(self.button('Retry recovery save').instate(['disabled']))
             self.root.geometry('600x440')
             self.root.update()
             self.assert_controls_fit()
             self.assertIn('Keep this window', ' '.join(w.cget('text') for w in self.widgets() if w.winfo_class() == 'TLabel'))
             self.button('Retry recovery save').invoke()
-            self.wait(lambda: not self.button('Start').instate(['disabled']))
+            self.wait(lambda: not self.button('Open editor').instate(['disabled']))
             self.assertFalse(self.host.recovery_pending)
             self.assertTrue((self.library / 'kits/Retry check.autosave.skt').exists())
         self.run_window(exercise)
@@ -159,9 +164,11 @@ class WindowTests(unittest.TestCase):
             self.root.geometry('600x440')
             self.root.update()
             next(w for w in self.widgets() if w.winfo_class() == 'TCheckbutton').invoke()
-            self.button('Start').invoke()
+            self.button('Open editor').invoke()
             self.wait(lambda: self.host.running and not self.button('Stop').instate(['disabled']))
             self.assertIn('/wifi/pair#pair=', self.host.pair_url)
+            self.button('Try a demo').invoke()
+            self.assertEqual(self.opened[-1], self.host.pair_url + '&view=demo')
             self.assert_controls_fit()
             canvases = [w for w in self.widgets() if w.winfo_class() == 'Canvas']
             viewport = next(w for w in canvases if w.cget('yscrollcommand'))
@@ -177,7 +184,7 @@ class WindowTests(unittest.TestCase):
             self.root.update()
             self.assertGreaterEqual(entry.winfo_rooty(), viewport.winfo_rooty())
             self.button('Stop').invoke()
-            self.wait(lambda: not self.button('Start').instate(['disabled']))
+            self.wait(lambda: not self.button('Open editor').instate(['disabled']))
             self.assertFalse(self.errors)
         self.run_window(exercise)
 

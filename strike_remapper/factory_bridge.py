@@ -15,16 +15,18 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from strike_remapper.runtime import worker_command, hidden_process
+
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / 'web' / 'factory-controller'
 
 
 def native_midi(selected=None):
-    args = [sys.executable, '-m', 'strike_remapper.factory_midi']
+    args = worker_command('factory-midi')
     if selected is not None:
         args.append(selected)
     try:
-        result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=6)
+        result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=6, **hidden_process())
     except subprocess.TimeoutExpired:
         raise RuntimeError('MIDI driver timed out. The command may have been sent; check the card before trying again.') from None
     try:

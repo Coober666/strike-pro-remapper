@@ -19,7 +19,7 @@ Windows: open launch-host.bat.
 Mac: open launch-host.command, or run python3 launch_editor.py here.
 Linux desktop: run python3 launch_editor.py here.
 
-Choose a separate library folder, then Start and Open editor.
+Choose a separate library folder, then Open editor.
 Start with an empty library or a copy. Keep your original library backed up.
 For a module-free walkthrough, open Drum MIDI toolkit and Try a demo.
 

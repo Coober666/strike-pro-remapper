@@ -18,7 +18,9 @@ def identity(root):
             if len(data) > 256 * 1024:
                 return result
             value = json.loads(data)
-            if value.get('format') == 'strike-source-beta' and re.fullmatch(r'[0-9a-f]{40}', value.get('revision', '')):
+            if value.get('format') in ('strike-source-beta', 'strike-windows-beta') and re.fullmatch(r'[0-9a-f]{40}', value.get('revision', '')):
+                if value['format'] == 'strike-windows-beta':
+                    result['channel'] = 'Windows beta'
                 result.update(revision=value['revision'], working_tree_changed=value.get('workingTreeChanged') is not False)
         except (OSError, ValueError, TypeError, AttributeError):
             pass

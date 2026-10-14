@@ -26,27 +26,33 @@ remaining feature issues. This records software integration, not new hardware ev
 
 The integrated MIDI toolkit adds local generic MIDI capture, saved browser sessions,
 visual replay, velocity/controller measurements, session comparison and portable exports.
-It is the measurement foundation for #30, not Trigger Coach advice. Physical capture
-and module-specific recommendations remain unverified or deferred. The Wi-Fi
-toolkit adds paired host input capture, host timestamps and retained-take recovery;
-its native driver and real mobile/device acceptance still need physical testing.
+It is the measurement foundation for #30, not Trigger Coach advice. Real Mac/Strike
+CoreMIDI capture is verified, including notes and hi-hat CC4. Idle ownership,
+pause/resume, lease expiry and reopen checks also passed. See the bounded
+[October 14 evidence](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md).
+The Wi-Fi toolkit adds paired host input capture, host timestamps and retained-take
+recovery; other OS drivers, physical disconnection and newest mobile workflows still
+need testing. Module-specific recommendations remain deferred.
 The setup/profile follow-on adds read-only host diagnostics, confirmed MIDI Learn,
 portable user-named profiles and capture snapshots of pad names. No factory maps are
-assumed. Diagnostics and learning have simulated coverage; real input access and
-physical Strike/Command/Nitro mapping remain acceptance work.
+assumed. Diagnostics and learning have simulated coverage; Mac/Strike input access
+is verified, while physical Strike/Command/Nitro pad mapping remains acceptance work.
 The session workflow pass adds searchable notes/tags, atomic batch backup restore,
 pad-focused analysis and optional unscored capture exercises. A portable source-beta
 builder and first-run guide support release rehearsal; Python installation, signing
 and physical module/mobile acceptance remain separate gates.
 
-1. Physically test the launcher on Windows and the existing Intel Mac, including its
-   Python/Tk installation, QR scanning, correct library choice and normal Stop/recovery.
+1. Test the unsigned Windows bundle on an independent machine and with a connected
+   module. The current Intel Mac uses tested browser-launch shortcuts and an isolated
+   CoreMIDI environment; its Python lacks Tk. Mac Tk distribution, physical QR scanning
+   and user acceptance of normal Stop/recovery remain separate work.
 2. Test real iPad/iPhone touch, scrolling, audio gestures and reconnects. Automated
    Chromium/WebKit tests support development but do not establish device compatibility.
 3. Exercise interrupted deployment and restoration using disposable media, then confirm
    the copied kit and both layers on the Strike.
-4. Package/sign desktop releases after the launch and storage paths pass acceptance.
-   Test upgrades while preserving a library outside the application folder.
+4. Finish distribution/signing after the launch and storage paths pass acceptance.
+   PR #67 supplies a tested unsigned Windows ZIP with Python/Tk/MIDI bundled; PRs #66
+   and #67 remain open. Test upgrades while preserving an external library.
 5. Invite a small outside beta to independently install, edit, save, deploy and restore.
 6. Add a focused general MIDI utility once the Strike workflow is dependable; do not
    broaden into an unverified universal module editor.

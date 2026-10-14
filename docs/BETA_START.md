@@ -14,7 +14,7 @@ mobile workflows still need acceptance testing.
    from the extracted application folder. Linux desktop: run that same command.
    If Python/Tk is missing, follow [host setup help](HOST_LAUNCHER.md#first-run-help).
 3. Choose a separate library folder. Start with a copy of your library or an empty
-   folder; keep its backup elsewhere. Choose Start, then Open editor.
+   folder; keep its backup elsewhere. Choose Open editor, or use Try a demo for a module-free walkthrough.
 4. Open Drum MIDI toolkit and Try a demo. Name it, add notes/tags and Save session.
    Wait for **Saved in this browser** before closing/reloading the page.
 5. Select one channel/note under Analysis focus. The chart/report should isolate
@@ -25,7 +25,7 @@ mobile workflows still need acceptance testing.
 
 ## iPad and iPhone
 
-Stop the host, enable Wi-Fi, choose its private IPv4 address and Start. Scan its
+Stop the host, enable Wi-Fi, choose its private IPv4 address and choose Open editor. Scan its
 pairing QR code with the mobile device on the same trusted network. Use `http://`;
 Brave may need its automatic HTTPS upgrade disabled for this local address. Open
 Drum MIDI toolkit from the editor. The module connects to the host computer by USB.

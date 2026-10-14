@@ -3,7 +3,7 @@
 ![CI](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml/badge.svg)
 
 **An offline kit and instrument editor for the Alesis Strike / Strike Pro drum module.**
-No module connection required. No packages to install for the editor. Clone and run.
+No module connection required. Windows beta bundles Python, Tk and host MIDI support; the source editor remains standard-library Python.
 
 ![Strike Pro Remapper — touch map controls, layer rack, and pad editor](docs/screenshot.png)
 
@@ -38,12 +38,24 @@ computer** from a paired iPad/iPhone: the USB host records and timestamps the ta
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 **Host setup check** reports missing MIDI support, driver errors and visible inputs.
+The launcher demo retains host MIDI access after Wi-Fi pairing; the host accepts
+parallel toolkit asset loads over the LAN.
+[Mac + Strike acceptance](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md) verifies live
+CoreMIDI capture, idle capture lease/ownership/reopen behavior, and factory/user-card
+discovery; Windows hardware acceptance remains open.
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
 Add searchable notes/tags, back up groups of saved sessions, focus analysis on one
 pad/channel and follow optional repeatable capture exercises. JSON/CSV keep every
 event; focused reports describe only the selected channel/note.
+
+**Windows without installing Python:** use the Windows x64 beta ZIP from a tested
+[CI run](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml)
+(artifact named `strike-windows-beta-…`; GitHub sign-in required). Extract the
+artifact and then the application ZIP fully. Open **Strike Remapper.exe**, then
+**Open editor** or **Try a demo**. See the [Windows walkthrough](docs/WINDOWS_BETA.md).
+This is an unsigned beta, not a published signed installer. Updates are manual.
 
 **Testing a source beta ZIP?** Follow the [first-run walkthrough](docs/BETA_START.md).
 The portable package keeps application files separate from your library and includes
