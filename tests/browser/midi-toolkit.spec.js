@@ -328,7 +328,7 @@ test('generic MIDI records only selected channel messages, pauses and keeps disc
   expect(disconnected.captureStatus).toBe('partial'); expect(disconnected.events).toHaveLength(5);
   await expect(page.locator('#origin')).toContainText('Partial take');
   expect(await page.evaluate(() => midiRequests)).toEqual([{sysex:false}]);
-  await page.locator('#save').click(); await page.reload();
+  await page.locator('#save').click(); await expect(page.locator('#state')).toHaveText('Saved in this browser'); await page.reload();
   await page.locator('#sessions button').first().click();
   expect(JSON.parse(await exportFile(page,'json'))).toEqual(disconnected);
   await expect(page.locator('#save')).toBeEnabled();

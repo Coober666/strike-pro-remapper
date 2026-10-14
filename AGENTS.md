@@ -884,6 +884,12 @@ MIDI ports or discovering cards. This is not physical hardware or clean-OS accep
 The launcher Open editor starts then opens; Try a demo starts and opens synthetic MIDI.
 Wi-Fi demo pairing uses an exact view=demo flag, never a user-provided redirect URL.
 Manual updates only. Source entry points remain supported. No automatic activation.
+Windows builds also generate Help/*.txt from an explicit public-guide allowlist in
+tools/package_help.py, copying two selected screenshots. The text keeps command blocks
+intact, points included-guide links at packaged filenames, and uses revision-specific
+repository links for omitted evidence. Do not package private captures or whole evidence
+directories. These files are covered by PACKAGE-MANIFEST hashes; package checks require
+the main help entry points. No runtime Markdown dependency is needed.
 
 Wi-Fi toolkit HTML matching uses the parsed URL path, so /midi?demo=1 keeps its
 data-host-midi marker and host input/setup controls. Query strings do not bypass pairing.

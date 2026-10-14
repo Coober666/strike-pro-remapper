@@ -20,6 +20,13 @@ must stay separate from this folder; libraries inside the package are rejected.
 Back up your library and original SD card before editing/deploying real kits.
 Closing the browser alone does not stop the host.
 
+Detailed help travels with this download. Open the Help folder beside the executable,
+then double-click README.txt or a named guide to read it in Notepad. Setup, Wi-Fi,
+MIDI sessions/profiles, recovery/upgrades, setlists and device-check instructions are
+included as text files, with screenshots. No Markdown app or internet is required
+to read them; optional repository/evidence links need internet. Source-start.txt is
+for the separate Python source package, not the bundled Windows executable.
+
 For iPad/iPhone: before opening the editor, enable Wi-Fi in the launcher and
 choose this computer's private IPv4 address. Scan the pairing code on the same
 trusted network; use HTTP. The Windows computer stays on and hosts the editor,

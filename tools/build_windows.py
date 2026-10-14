@@ -80,6 +80,8 @@ def build(output, require_clean=False):
         (folder / 'StrikeHelper.exe').rename(folder / '_internal/StrikeHelper.exe')
         shutil.copyfile(ROOT / 'docs/WINDOWS_BETA.md', folder / 'START-HERE.txt')
         shutil.copyfile(ROOT / 'LICENSE', folder / 'LICENSE.txt')
+        from tools.package_help import write_help
+        write_help(folder, source['revision'])
         info['files'] = {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                          for p in sorted(folder.rglob('*')) if p.is_file()}
         (folder / 'PACKAGE-MANIFEST.json').write_text(json.dumps(info, indent=2) + '\n', encoding='utf-8')

@@ -57,6 +57,8 @@ pad/channel and follow optional repeatable capture exercises. JSON/CSV keep ever
 event; focused reports describe only the selected channel/note.
 
 **Windows without installing Python:** use the Windows x64 beta ZIP from a tested
+build. Its **Help** folder includes detailed guides readable in Notepad, including
+Wi-Fi pairing, MIDI sessions, recovery and upgrades. Download from a successful
 [CI run](https://github.com/Coober666/strike-pro-remapper/actions/workflows/ci.yml)
 (artifact named `strike-windows-beta-…`; GitHub sign-in required). Extract the
 artifact and then the application ZIP fully. Open **Strike Remapper.exe**, then

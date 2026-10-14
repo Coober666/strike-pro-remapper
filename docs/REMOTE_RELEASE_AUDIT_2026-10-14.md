@@ -125,3 +125,18 @@ browser cases; the subsequent profile fix passed eight focused profile cases acr
 Chromium and iPad WebKit. Six host lifecycle tests, the fresh-process library portability
 test, the extracted-source package test and JavaScript lint passed. These checks use
 synthetic libraries and browser storage; the live Mac installation was not restarted.
+
+## Bundled help and CI save timing
+
+The Windows ZIP now includes a Help folder with 12 selected public guides, an index,
+and two screenshots. Guides are generated as plain text for Notepad, preserving code
+examples and rewriting included-guide references to local filenames. Other evidence
+links point to the build's repository revision. The allowlist excludes captures and
+private evidence; package manifests cover every help file.
+
+The d8b0549 PR workflow passed, but its separate push workflow exposed a test race:
+the disconnect regression clicked Save and immediately reloaded before waiting for
+the IndexedDB commit. It now waits for Saved in this browser before reloading, matching
+the documented workflow. Three repetitions per browser passed after the correction.
+Two help-package checks passed, covering the delivered guides, local references,
+Unicode text and unchanged command examples.
