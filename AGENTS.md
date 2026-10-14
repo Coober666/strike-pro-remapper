@@ -230,6 +230,23 @@ to a removable-card save path automatically. Browser autosave is supplemental, u
 `kitDirty`, and reports failures. Tests: `test_recovery_interruptions.py` and
 `test_host_launcher.py`, always with temporary libraries and loopback networking.
 
+## Accessibility and isolated installation checks
+
+Generated pad and Kit FX rows acquire accessible names from their visible labels
+through `labelParameterRows`. Parameter rerenders preserve the currently focused
+control by its stable onchange attribute, including layer rack controls; do not
+restore focus to a stale request sender. Kit FX uses a native dialog with its own
+keyboard scope. Let Space activate focused native controls before audition shortcuts.
+`setMsg` mirrors action/error feedback into a polite live region; per-hit MIDI
+feedback passes announce=false. Preserve these behaviors in generated viewer files.
+Regression coverage: tests/browser/accessibility.spec.js (Chromium and WebKit).
+
+`tools/check_source_package.py` checks a real ZIP/sidecar, then runs paired startup,
+save/recovery and headless setup help in a fresh isolated Python process. Source CI
+runs this in a pinned unprivileged offline Linux container. The Python-free
+`tools/check_windows_clean.ps1` harness uses fresh temporary libraries and retains
+evidence. A successful developer-machine run is not clean-Windows-OS acceptance.
+
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
 

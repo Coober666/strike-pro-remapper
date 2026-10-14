@@ -133,6 +133,14 @@ jobs:
           python-version: '3.12'
       - name: Build verified source beta
         run: python tools/build_beta.py --output "${{ runner.temp }}/strike-remapper-${{ github.sha }}.zip" --require-clean
+      - name: Check source in an offline unprivileged Linux container
+        run: >-
+          docker run --rm --network none --read-only --user 65534:65534
+          --tmpfs /tmp:rw,nosuid,size=256m
+          --mount "type=bind,source=${{ runner.temp }},target=/input,readonly"
+          --mount "type=bind,source=${{ github.workspace }}/tools/check_source_package.py,target=/check.py,readonly"
+          python@sha256:8d9d0b8bcf6506481eae4907c18f5e3e7902e629f5f6d684f9e7c32e85e3ddf0
+          python -I -B /check.py /input/strike-remapper-${{ github.sha }}.zip
       - uses: actions/upload-artifact@v4
         with:
           name: strike-source-beta-${{ github.sha }}
