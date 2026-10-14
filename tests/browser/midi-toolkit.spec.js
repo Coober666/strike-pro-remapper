@@ -50,6 +50,11 @@ test('Trigger Coach renders imported labels as text and marks partial evidence',
   await expect(page.locator('#coach-result')).toContainText('<img src=x onerror=alert(1)>');
   await expect(page.locator('#coach-result')).toContainText('repeat a complete take');
   await expect(page.locator('#coach-result img')).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#coach-result summary').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#coach-result details').first()).toHaveAttribute('open','');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 async function restoreFile(page,value) {
   await page.locator('#backup-import').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
