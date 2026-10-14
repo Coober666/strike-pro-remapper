@@ -120,3 +120,24 @@ jobs:
           name: playwright-failures
           path: test-results/
           if-no-files-found: ignore
+
+  source-beta:
+    needs: [windows-host, test, browser]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build verified source beta
+        run: python tools/build_beta.py --output "${{ runner.temp }}/strike-remapper-${{ github.sha }}.zip" --require-clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strike-source-beta-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/strike-remapper-*.zip
+            ${{ runner.temp }}/strike-remapper-*.sha256.txt
+          if-no-files-found: error
+          retention-days: 30

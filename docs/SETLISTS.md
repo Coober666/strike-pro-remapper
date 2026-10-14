@@ -35,9 +35,10 @@ plus `.skt`. Existing names, including case-only variants, cannot be overwritten
   and avoid reserved device names. Unsupported characters are removed in the preview;
   duplicate names after shortening/sanitizing are flagged. Numbering uses 001–128.
 
-Checks never read a card, enumerate devices, read WAV samples or replace the active kit.
-They do not verify sample completeness, total sample size, card space, existing card
-files or actual module playback. A local pass is not deployment approval. Printing shows
+Checks never read a card, enumerate devices or replace the active kit. Local WAV headers
+and declared audio lengths are checked; shared local file sizes are counted once.
+Factory sample completeness and sizes, card space, existing card files and actual module
+playback remain unverified. A local pass is not deployment approval. Printing shows
 the last check snapshot; run checks again after editing or copying kit files elsewhere.
 
 **Batch setlist deployment is not included.** Deploy individual kits through the normal
@@ -79,3 +80,7 @@ kit preservation, exact copies, atomic-write failure, revisions, path restrictio
 missing/corrupt kits, duplicate outputs, import/export/print, drag/touch ordering and
 paired editor ownership. Physical iPad/iPhone interaction and batch deployment remain
 release acceptance work; no new module-write claim is made by these tests.
+
+## Collection preview
+
+Check saved kits also checks local WAV headers and declared audio length, flags missing or ambiguous files, and estimates unique local storage. Export batch preview saves the current check results and planned kit names. This is a review document, not a deployable bundle. Factory samples, existing card files, free space and final asset layout are unverified; batch writes remain disabled. Recheck after external library changes. No audio or card files are written.

@@ -122,7 +122,30 @@ class SetlistTests(unittest.TestCase):
         self.assertIn('cannot be verified', str(result))
         self.assertIn('1 factory-catalog', str(result))
         self.assertNotIn('will be silent', str(result))
-        self.assertIn('Samples and card contents are not checked', str(result))
+        self.assertIn('factory samples and card contents are not checked', str(result))
+
+    def test_sample_preview_deduplicates_and_reports_missing(self):
+        import wave
+        data = app._build_sin([('Fixtures/test.wav', 1, 127, 1)])
+        detail = app.parse_sin(data)
+        inst = self.root / 'instruments'; inst.mkdir()
+        (inst / 'Test.sin').write_bytes(data)
+        for sample in {m['sample'] for m in detail['mappings']}:
+            path = self.root / 'samples' / sample
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with wave.open(str(path), 'wb') as audio:
+                audio.setparams((1, 2, 44100, 0, 'NONE', 'not compressed'))
+                audio.writeframes(b'\x00\x00' * 100)
+        payload = bytearray(62); payload[:4] = b'S1H '
+        struct.pack_into('<H', payload, 24, 65535)
+        kit = app.build_skt(app._KIT_BLOCK_TEMPLATE, [{'id':'S1H', 'payload':payload, 'layer_a':0, 'layer_b':65535}], ['Test.sin'])
+        (self.root / 'kits' / 'Sample.skt').write_bytes(kit)
+        report = self.store.check(document('Sample.skt', 'Sample.skt'))
+        self.assertFalse(report['preview']['writes_enabled'])
+        self.assertEqual(report['preview']['samples'], len({m['sample'] for m in detail['mappings']}))
+        self.assertEqual(report['rows'][0]['status'], 'checked')
+        path.unlink()
+        self.assertEqual(self.store.check(document('Sample.skt'))['rows'][0]['status'], 'blocked')
 
     def test_paired_route_requires_owner_and_rejects_bad_body(self):
         old = app.LIBRARY_DIR
@@ -140,11 +163,15 @@ class SetlistTests(unittest.TestCase):
             conn.request(method, route, json.dumps(data) if data is not None else None, headers or {})
             response = conn.getresponse(); return response.status, json.loads(response.read())
         self.assertEqual(request('GET')[0], 401)
+        self.assertEqual(request('GET', route='/api/support_report')[0], 401)
+        self.assertEqual(request('POST', {'action':'analyze'}, headers={'Origin':'http://'+pairing.authority}, route='/api/balance')[0], 401)
         cookie = pairing.pair('test-setlist-token').split(';')[0]
         headers = {'Cookie':cookie, 'Origin':'http://'+pairing.authority, 'Content-Type':'application/json'}
         self.assertEqual(request('GET', headers=headers)[0], 200)
         draft = {'action':'save', 'document':document('Original.skt')}
         self.assertEqual(request('POST', draft, headers)[0], 409)
+        self.assertEqual(request('POST', {'action':'apply'}, headers, '/api/balance')[0], 409)
+        self.assertEqual(request('GET', headers=headers, route='/api/support_report')[0], 200)
         token = request('POST', {}, headers, '/wifi/editor')[1]['token']
         headers['X-Strike-Editor'] = token
         self.assertEqual(request('POST', [], headers)[0], 400)

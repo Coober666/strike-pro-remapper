@@ -6,6 +6,8 @@ from pathlib import Path, PurePosixPath
 import re
 import struct
 import uuid
+import wave
+from strike_remapper.library_assets import local_file, wav_info
 
 from strike_remapper.formats import parse_skt, build_skt, parse_sin, NO_INSTRUMENT
 
@@ -209,10 +211,13 @@ class Store:
             # Catalog keys provide positive evidence only; absence proves nothing.
             catalog = set(raw.get('instruments', raw))
         rows = []
+        assets = {}
+        audio_cache = {}
         names = [filename(row['output'] or PurePosixPath(row['kit']).stem, i+1 if clean['numbered'] else None)
                  for i, row in enumerate(clean['entries'])]
         for i, row in enumerate(clean['entries']):
             issues = []
+            row_assets = set()
             def issue(level, message):
                 issues.append({'level': level, 'message': message})
             if sum(n.casefold() == names[i].casefold() for n in names) > 1:
@@ -220,6 +225,8 @@ class Store:
             try:
                 path = inside(self.kits, row['kit'])
                 data = read_bounded(path, MAX_KIT_BYTES)
+                assets['kits/' + names[i]] = {'path': 'kits/' + names[i], 'source': 'kits/' + row['kit'], 'bytes': len(data), 'kind': 'kit'}
+                row_assets.add('kits/' + names[i])
                 kit_raw, pads, instruments, tail = parse_skt(data)
                 if build_skt(kit_raw, pads, instruments, tail) != data:
                     issue('blocker', 'Kit does not round-trip exactly. Review it in the editor before preparing it.')
@@ -241,7 +248,36 @@ class Store:
                         continue
                     sin = inside(self.library, 'instruments/' + '/'.join(parts))
                     if sin.is_file():
-                        parse_sin(read_bounded(sin, MAX_KIT_BYTES))
+                        sin_data = read_bounded(sin, MAX_KIT_BYTES)
+                        instrument = parse_sin(sin_data)
+                        sin_key = sin.relative_to(self.library).as_posix()
+                        assets[sin_key] = {'path': sin_key, 'source': sin_key, 'bytes': len(sin_data), 'kind': 'instrument'}
+                        row_assets.add(sin_key)
+                        samples = {m['sample'] for m in instrument['mappings']}
+                        if not samples:
+                            issue('warning', 'Local instrument has no sample mappings: ' + rel)
+                        for sample in sorted(samples):
+                            try:
+                                wav = local_file(self.library, ('instruments', 'samples'), sample)
+                                if wav is None:
+                                    issue('blocker', 'Missing local sample: ' + sample)
+                                    continue
+                                key = wav.relative_to(self.library).as_posix()
+                                if key not in audio_cache:
+                                    if len(audio_cache) >= 4096:
+                                        raise ValueError('Collection exceeds 4096 local samples; split the setlist')
+                                    try:
+                                        audio_cache[key] = wav_info(wav)
+                                    except (OSError, ValueError, wave.Error, EOFError) as exc:
+                                        audio_cache[key] = str(exc)
+                                info = audio_cache[key]
+                                if isinstance(info, str):
+                                    raise ValueError(info)
+                                assets[key] = {'path': 'Samples/' + sample.replace('\\', '/'), 'source': key,
+                                               'bytes': info['bytes'], 'pcm_bytes': info['pcm_bytes'], 'kind': 'sample'}
+                                row_assets.add(key)
+                            except (OSError, ValueError, wave.Error, EOFError):
+                                issue('blocker', 'Sample could not be checked (missing, ambiguous, unsafe, truncated or unsupported): ' + sample)
                         local += 1
                     elif rel in catalog:
                         factory += 1
@@ -250,11 +286,21 @@ class Store:
                 if unknown:
                     issue('warning', f'{unknown} instrument reference(s) cannot be verified from the local library or factory catalog.')
                 if local or factory:
-                    issue('info', f'{local} local instrument(s); {factory} factory-catalog reference(s). Samples and card contents are not checked.')
+                    issue('info', f'{local} local instrument(s); {factory} factory-catalog reference(s). Local sample headers checked; factory samples and card contents are not checked.')
                 if not used:
                     issue('warning', 'No instruments are assigned to this kit.')
             except (OSError, ValueError, IndexError, KeyError, AssertionError, struct.error) as exc:
                 issue('blocker', 'Saved kit could not be checked: ' + str(exc))
+            sample_bytes = sum(assets[k].get('pcm_bytes', 0) for k in row_assets)
+            if sample_bytes > 200 * 1024 * 1024:
+                issue('warning', 'Local decoded samples exceed 200 MiB. Review module memory limits before deployment.')
             status = 'blocked' if any(v['level'] == 'blocker' for v in issues) else 'review' if any(v['level'] == 'warning' for v in issues) else 'checked'
-            rows.append({'position': i+1, 'filename': names[i], 'status': status, 'issues': issues})
-        return {'rows': rows, 'scope': 'Local saved kits only. Samples, card space and destination collisions need Deploy to Module preflight. Nothing has been deployed.'}
+            rows.append({'position': i+1, 'filename': names[i], 'status': status, 'issues': issues, 'local_sample_bytes': sample_bytes})
+        destinations = {}
+        for asset in assets.values():
+            destinations.setdefault(asset['path'].casefold(), set()).add(asset['source'])
+        collisions = sorted(k for k, sources in destinations.items() if len(sources) > 1)
+        return {'rows': rows, 'preview': {'files': sorted(assets.values(), key=lambda a: a['path']),
+                'local_bytes': sum(a['bytes'] for a in assets.values()),
+                'samples': sum(a['kind'] == 'sample' for a in assets.values()),
+                'collisions': collisions, 'writes_enabled': False}, 'scope': 'Preview only: local saved kits, instruments and WAV headers. Shared local files counted once. Factory sample sizes, card space, existing destination files and final deployment paths are unverified. Batch writes are disabled; use individual Deploy to Module preflight. Nothing has been deployed.'}

@@ -4,9 +4,11 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 PREFIX = 'strike-remapper-beta/'
 START = '''Strike Remapper source beta
 
@@ -79,7 +81,16 @@ def build(output, root=ROOT):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--require-clean', action='store_true', help='Reject unknown or modified source trees')
     args = parser.parse_args()
+    if args.require_clean:
+        from strike_remapper.support import identity
+        source = identity(ROOT)
+        if source['revision'] == 'unknown' or source['working_tree_changed'] is not False:
+            parser.error('A clean Git checkout is required for an automated beta.')
     result = build(args.output)
+    checksum = hashlib.sha256(args.output.read_bytes()).hexdigest()
+    with args.output.with_suffix('.sha256.txt').open('x', encoding='utf-8') as handle:
+        handle.write(checksum + '  ' + args.output.name + '\n')
     print(f'Built {args.output} ({len(result["files"])} files), source {result["revision"]}')
     print('Source beta: Python required; unsigned; physical acceptance pending.')

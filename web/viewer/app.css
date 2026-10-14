@@ -1252,6 +1252,21 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 @media(max-width:700px) { .sl-layout { grid-template-columns:minmax(0,1fr); }.sl-shelf { border-right:0; border-bottom:1px solid #424a40; }.sl-shelf #sl-saved { flex-direction:row; flex-wrap:wrap; margin:8px 0; }.sl-main,.sl-head { padding:18px 14px; }.sl-row-fields { grid-template-columns:minmax(0,1fr); }.sl-row { grid-template-columns:34px minmax(0,1fr); gap:8px; }#sl-status { padding:12px 14px; } }
 body.viewer-mode .setlist-link { display:none !important; }
 
+#balance-dialog { width:min(900px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); margin:auto; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:20px; font-size:.85rem; line-height:1.5; }
+#balance-dialog h2 { font-size:1.35rem; margin-bottom:8px; }
+#balance-dialog button { min-height:44px; padding:8px 12px; font-size:.78rem; }
+#balance-status { margin:12px 0; padding:10px 12px; background:var(--raised); border-left:3px solid #b79a59; }
+.balance-method { color:var(--text-2); margin:12px 0; }
+.balance-method summary { cursor:pointer; min-height:36px; }
+.balance-actions { position:sticky; bottom:-20px; background:var(--panel); padding:12px 0; border-top:1px solid var(--border); }
+body:has(#balance-dialog[open]) { overflow:hidden; }
+.balance-row { border-top:1px solid var(--border); padding:14px 0; overflow-wrap:anywhere; }
+.balance-row p { margin:4px 0 8px; color:var(--text-2); }
+.balance-row small { display:block; margin-top:6px; color:var(--text-2); }
+.balance-row label { display:block; min-height:44px; }
+.balance-row input { width:20px; height:20px; vertical-align:middle; }
+#balance-dialog::backdrop { background:#0009; }
+
 /* ── viewer-mode overrides (added, not extracted) ── */
 /* Web Viewer v1 is a pure-browser, READ-ONLY kit explorer. engine.js adds the
    `viewer-mode` class to <body>; these rules hide every mutating affordance while

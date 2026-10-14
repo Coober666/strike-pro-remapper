@@ -173,12 +173,15 @@
 </div>
 <dialog id="connection-dialog" aria-labelledby="connection-title">
   <h3 id="connection-title">Connection details</h3>
+  <p id="connection-version">Build information loads when opened.</p>
+  <p>First visit? Choose a copied or empty library, save a local kit, then try the MIDI demo. Pair your iPad/iPhone over Wi-Fi when ready.</p>
   <div class="connection-row"><strong>Computer</strong><p id="connection-computer-detail">Checking connection…</p></div>
   <div class="connection-row"><strong>Library on computer</strong><p id="connection-library-detail">Checking library…</p></div>
   <div class="connection-row"><strong>User card · deployment destination</strong><p id="connection-user-detail">Checking card…</p></div>
   <div class="connection-row"><strong>Factory card · read-only sounds</strong><p id="connection-factory-detail">Checking card…</p></div>
   <div class="connection-actions">
     <button class="btn-secondary" type="button" onclick="checkStatus()">Refresh connection</button>
+    <button class="btn-secondary" type="button" onclick="exportSupportReport()">Export troubleshooting report</button>
     <button id="connection-activate" class="btn-secondary" data-factory-card type="button" onclick="document.getElementById('connection-dialog').close();showFactoryCard()">Activate factory card</button>
     <button class="btn-primary" type="button" onclick="document.getElementById('connection-dialog').close()">Done</button>
   </div>
@@ -235,6 +238,7 @@
       <span class="map-title"><small>Performance surface</small>Kit map</span>
       <button id="batch-toggle-btn" class="btn-secondary" style="margin-left:auto;font-size:.68rem;padding:2px 8px;"
         onclick="batchToggle()" title="Select multiple pads and apply a parameter to all at once">&#x2611; Batch edit</button>
+      <button class="btn-secondary setlist-link" id="balance-open" onclick="openBalance()">Kit Balance</button>
       <button id="reset-layout-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
         onclick="resetAllOverrides()" title="Restore all pads to default positions and shapes.">Reset layout</button>
       <button id="setup-profiles-btn" class="btn-secondary" style="font-size:.68rem;padding:2px 8px;"
@@ -422,6 +426,16 @@
   </section>
 
 </div>
+<dialog id="balance-dialog" aria-labelledby="balance-title">
+  <h2 id="balance-title">Kit Balance Assistant</h2>
+  <p>Check local samples for uneven layers. Listen first, then select the adjustments you want. This changes kit levels only.</p>
+  <p id="balance-status" role="status"></p><details class="balance-method"><summary>How these estimates work</summary><p id="balance-scope"></p></details><div id="balance-rows"></div>
+  <div class="sl-actions balance-actions">
+    <button class="btn-secondary" id="balance-analyze" onclick="balanceAnalyze()">Analyze local samples</button>
+    <button class="btn-primary" id="balance-apply" onclick="balanceApply()" disabled>Apply selected · one Undo</button>
+    <button class="btn-secondary" onclick="closeBalance()">Done</button>
+  </div>
+</dialog>
 <dialog id="setlist-dialog" aria-labelledby="sl-title">
   <header class="sl-head"><div><h2 id="sl-title">Setlist Builder</h2><p>Plan the show using saved library kits.</p></div><button type="button" onclick="slClose()" aria-label="Close Setlist Builder">Close</button></header>
   <div class="sl-layout">
@@ -434,7 +448,7 @@
       <label class="sl-number"><input id="sl-numbered" type="checkbox" onchange="slEditHeader()"> Number planned filenames in show order (001, 002…)</label>
       <p class="sl-hint">Move songs with the arrows or drag the order handle. Output names are a plan; source kits keep their names.</p>
       <ol id="sl-rows" aria-label="Songs in show order"></ol>
-      <div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
+      <p id="sl-preview" class="sl-hint" aria-live="polite"></p><div class="sl-actions"><button id="sl-check" onclick="slCheck()">Check saved kits</button><button id="sl-export-preview" onclick="slExportPreview()">Export batch preview</button><button id="sl-print" onclick="slPrint()">Print show sheet</button></div>
       <p class="sl-hint">Local checks cover saved kit structure, instrument references and planned names. Samples, card space and existing card files still need Deploy to Module preflight. Batch deployment is not available yet.</p>
     </section>
   </div>

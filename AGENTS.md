@@ -107,7 +107,7 @@ follow links outside the library. Listing excludes autosaves; copies use exact s
 bytes and exclusive creation, reject case-insensitive collisions, and never load/mutate
 the active kit. Local checks parse saved .skt files, require exact round trip, validate
 assigned references, and use local .sin / factory-catalog positive evidence only.
-Unknown references remain unverified. No SD discovery, sample reads or card-space checks
+Unknown references remain unverified. Local sample headers are inspected through library_assets.py (safe relative paths, no symlinks, bounded metadata reads). Shared files are counted once in the exportable batch preview; missing/ambiguous/truncated files block a row. No SD discovery or card-space checks
 occur; do not call a local pass deployment-ready. Filename plans use conservative ASCII,
 optional three-digit ordering, at most 26 characters including .skt, reserved-name guards
 and case-insensitive duplicate detection. Source names never change. Printing uses the
@@ -840,3 +840,13 @@ Two volumes expected: "NO NAME" (user, writable) and "NO NAME 1" (preset, read-o
 
 Instrument `.sin` files live under `<volume>/Instruments/`. Kits under `<volume>/Kits/`.
 SD volume detection searches one level deep (catches Ventoy `STORAGE/` subfolder).
+
+## Beta identity and support
+
+`support.py` reads the packaged manifest, or bounded Git commands only when the app root has .git. Reports allowlist OS/Python, build identity and editor counts; never include library paths, kit names, addresses, credentials, exceptions or captured data. GET /api/support_report retains normal host/pairing guards and never discovers cards. CI source-beta waits for all three test jobs, builds a clean checkout and uploads a ZIP/checksum without publishing a release.
+
+## Kit Balance Assistant
+
+`balance.py` is state-independent analysis of local files through library_assets.py. It measures first-0.5-second PCM windows, at most eight highest-velocity mappings/layer and 96 unique WAVs. RMS uses channel energy, never stereo downmix; medians compare at least three same-instrument-group/same-layer peers. A/B boundary differences and worst-case overlapping peak sums are estimates. Suggestions are capped at 6 dB and level 1–127; muted/unmeasured layers get no suggestion.
+
+POST /api/balance analyze/apply uses STATE_LOCK and the existing paired ownership guard with an 8 KB body bound. Apply recomputes evidence and validates a token covering kit bytes, revision, SIN bytes, measured WAV bytes/metadata and report. Only server-provided selected levels may be applied. Validate all selections before one _push_history, then change known level offsets; no audio writes. GET balance_preview serves a bounded local sample window. Native dialog UI requires unchecked explicit selection, offers current/proposed audition, and never retries failed writes. New tests: test_balance.py, zzz-release-polish.spec.js. Physical listening acceptance remains open.

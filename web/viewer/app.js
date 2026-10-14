@@ -1929,6 +1929,7 @@ function updateWifiAccess(data) {
   document.getElementById('wifi-take-control').hidden = wifiEditing;
   updateSaveState();
   if (document.getElementById('setlist-dialog')?.open) slControls();
+  if (document.getElementById('balance-dialog')?.open) balanceControls();
 }
 
 async function initWifiEditor() {
@@ -2158,6 +2159,7 @@ function slControls() {
   slEl('save').disabled=sl.busy || !wifiEditing;
   slEl('check').disabled=sl.busy || !wifiEditing || !sl.document?.entries.length;
   slEl('print').disabled=sl.busy || !sl.report;
+  slEl('export-preview').disabled=sl.busy || !sl.report;
   document.querySelectorAll('#sl-rows [data-move]').forEach(el => { const target=Number(el.dataset.row)+Number(el.dataset.move); el.disabled=sl.busy || target<0 || target>=sl.document.entries.length; });
 }
 async function slRequest(action, values={}) {
@@ -2199,7 +2201,80 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
+let balanceReport=null, balanceBusy=false, balanceVoice=null;
+document.getElementById('balance-dialog').addEventListener('cancel',()=>{if(balanceVoice){balanceVoice.stop();balanceVoice=null;}});
+function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
+function balanceControls() {
+  document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
+  document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
+  document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
+}
+function closeBalance() { if(balanceVoice) {balanceVoice.stop(); balanceVoice=null;} document.getElementById('balance-dialog').close(); }
+function openBalance() {
+  if(window.VIEWER) return;
+  balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
+  balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
+  document.getElementById('balance-dialog').showModal();
+}
+async function balanceAnalyze() {
+  if(balanceBusy) return;
+  balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
+  try {
+    const report=await api('/balance',{action:'analyze'});
+    if(report.error) throw new Error(report.error);
+    balanceReport=report; document.getElementById('balance-scope').textContent=report.scope;
+    document.getElementById('balance-rows').innerHTML=report.rows.map((r,i)=>`<section class="balance-row">
+      <strong>${escHtml(r.label)} · Layer ${r.layer.toUpperCase()}</strong>
+      <p>${r.rms_db==null ? 'No audible measurement' : `RMS ${r.rms_db.toFixed(1)} dBFS · window peak ${r.peak_db.toFixed(1)} dBFS · ${r.sample_count} sample(s), highest velocity ${r.velocity}`} · Current level ${r.level}</p>
+      ${r.reasons.map(reason=>`<p>${escHtml(reason)}</p>`).join('')}
+      ${r.suggested!=null ? `<label><input type="checkbox" value="${i}" onchange="balanceControls()"> Apply level ${r.level} → ${r.suggested}</label>` : '<p>No adjustment suggested.</p>'}
+      ${r.sample ? `<button class="btn-secondary" onclick="balanceAudition(${i},false)">Listen current</button> ${r.suggested!=null ? `<button class="btn-secondary" onclick="balanceAudition(${i},true)">Listen proposed</button>` : ''}<small> First representative sample, 0.5-second window.</small>` : ''}
+      </section>`).join('')+report.notes.map(n=>`<p>${escHtml(n)}</p>`).join('');
+    balanceStatus(`${report.rows.length} assigned layers reviewed. Nothing changed. Select suggestions to apply.`);
+  } catch(error) {balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}
+  finally {balanceBusy=false; balanceControls();}
+}
+async function balanceAudition(index, proposed) {
+  const row=balanceReport?.rows[index]; if(!row) return;
+  try {
+    const AudioEngine=window.AudioContext || window.webkitAudioContext;
+    if(!AudioEngine) throw new Error('Audio preview is not supported by this browser. Audition on another browser before applying.');
+    if(!_blendCtx) _blendCtx=new AudioEngine();
+    if(_blendCtx.state==='suspended') await _blendCtx.resume();
+    const response=await fetch('/api/balance_preview?sample='+encodeURIComponent(row.sample));
+    if(!response.ok) throw new Error('Sample unavailable; analyze again.');
+    const buffer=await _blendCtx.decodeAudioData(await response.arrayBuffer());
+    if(!document.getElementById('balance-dialog').open) return;
+    if(balanceVoice) balanceVoice.stop();
+    const gain=_blendCtx.createGain(); gain.gain.value=previewVol*(proposed ? row.suggested : row.level)/127*row.instrument_level/127; gain.connect(_blendCtx.destination);
+    const voice=_blendCtx.createBufferSource(); voice.buffer=buffer; voice.connect(gain); balanceVoice=voice;
+    voice.onended=()=>{gain.disconnect();if(balanceVoice===voice) balanceVoice=null;}; voice.start();
+    balanceStatus(`Listening ${proposed ? 'proposed' : 'current'}: ${row.label}, Layer ${row.layer.toUpperCase()}. Kit unchanged.`);
+  } catch(error) {balanceStatus('Preview unavailable: '+error.message);}
+}
+async function balanceApply() {
+  if(balanceBusy || !balanceReport) return;
+  const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
+  if(!selected.length) return;
+  balanceBusy=true; balanceControls();
+  let responseReceived=false;
+  try {
+    const data=await api('/balance',{action:'apply',token:balanceReport.token,selected});
+    responseReceived=true;
+    if(data.error) throw new Error(data.error);
+    pads=data.pads; setDirtyState(data.dirty,data.undo_count,data.history_labels); renderDrumMap(); renderPadDetail();
+    balanceReport=null; document.getElementById('balance-rows').textContent=''; balanceStatus(data.message); setMsg(data.message);
+  } catch(error) {balanceReport=null; if(!responseReceived) pauseWifiEditing(); balanceStatus(error.message+' Re-analyze before another attempt; an unconfirmed request is never retried.');}
+  finally {balanceBusy=false; balanceControls();}
+}
+function slExportPreview() {
+  if(!sl.report) { slStatus('Run Check saved kits first.'); return; }
+  slDownload('strike-batch-preview.json',JSON.stringify({format:'strike-batch-preview',version:1,setlist:sl.document,report:sl.report},null,2),'application/json');
+}
 function slResults() {
+  const plan=sl.report?.preview;
+  slEl('export-preview').disabled=!plan || sl.busy;
+  slEl('preview').textContent=plan ? `${plan.files.length} planned local files · ${plan.samples} unique samples · ${(plan.local_bytes/1048576).toFixed(2)} MiB on disk. ${plan.collisions.length} collection path collisions. ${sl.report.scope}` : 'Check saved kits for a batch preview. Batch writes are disabled.';
   document.querySelectorAll('#sl-rows [data-result]').forEach(el => {
     const row=sl.report?.rows[Number(el.dataset.result)]; el.dataset.status=row?.status || '';
     el.innerHTML=row ? `<strong>${{blocked:'Needs fixing',review:'Review references',checked:'Local check passed'}[row.status]}</strong><p>Planned file: <code>${escHtml(row.filename)}</code></p>${row.issues.map(v=>`<p>${escHtml(v.message)}</p>`).join('')}` : 'Not checked. Run Check saved kits to preview filenames and readiness.';
@@ -2232,7 +2307,7 @@ async function slDelete() { if(sl.busy || !sl.id || !await slConfirm('Delete thi
 async function slRefresh() { await slRun(async()=>{await slRefreshData(); sl.report=null; slResults(); slStatus('Saved lists and kits refreshed. Your current draft is kept; local checks need refreshing.');}); }
 function slAdd() { const kit=sl.kits[Number(slEl('kit').value)]; if(sl.busy || !kit) return; if(sl.document.entries.length>=128) {slStatus('A setlist holds up to 128 songs.');return;} sl.document.entries.push({kit:kit.kit,song:'',output:'',notes:''}); slMark(); slRows(); }
 function slMove(from,to) { if(sl.busy || !slEl('copy-form').hidden || from===to || to<0 || to>=sl.document.entries.length) return; const [row]=sl.document.entries.splice(from,1); sl.document.entries.splice(to,0,row); slMark(); slRows(); slEl('rows').querySelector(`[data-row="${to}"][data-move="${to===0 ? 1 : -1}"]`)?.focus(); }
-async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. No card or sample check. Nothing deployed.`);}); }
+async function slCheck() { await slRun(async()=>{sl.report=await slRequest('check',{document:sl.document}); slResults(); const blocked=sl.report.rows.filter(r=>r.status==='blocked').length, review=sl.report.rows.filter(r=>r.status==='review').length; slStatus(`Local checks: ${blocked} need fixing, ${review} need review. Local samples checked; card and factory contents unverified. Nothing deployed.`);}); }
 function slDownload(name, text, type) { const url=URL.createObjectURL(new Blob([text],{type})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function slExport() { slDownload('strike-setlist.json',JSON.stringify(sl.document,null,2)+'\n','application/json'); slStatus('Setlist draft exported. This JSON contains references and notes; copy the kit files separately.'); }
 async function slImport(input) {
@@ -5707,6 +5782,21 @@ function renderConnectionStatus() {
 async function openConnectionDetails() {
   document.getElementById('connection-dialog').showModal();
   await checkStatus();
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    const app=data.application;
+    document.getElementById('connection-version').textContent=`${app.product} · ${app.channel} · ${app.revision.slice(0,12)}${app.working_tree_changed ? ' · local changes' : ''}`;
+  } catch { document.getElementById('connection-version').textContent='Build information unavailable. Reconnect and try again.'; }
+}
+async function exportSupportReport() {
+  try {
+    const data=await api('/support_report');
+    if(data.error) throw new Error(data.error);
+    data.client={touch:navigator.maxTouchPoints>0,web_midi:typeof navigator.requestMIDIAccess==='function',secure_context:window.isSecureContext,wifi:!!wifiMode};
+    slDownload('strike-troubleshooting.json',JSON.stringify(data,null,2),'application/json');
+    document.getElementById('connection-version').textContent='Report downloaded. Add your browser, module model and reproduction steps when sharing.';
+  } catch { document.getElementById('connection-version').textContent='Report unavailable. Reconnect and try again.'; }
 }
 
 (async () => {

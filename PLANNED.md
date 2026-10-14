@@ -62,7 +62,7 @@ and physical module/mobile acceptance remain separate gates.
 - #35: card resilience has automated coverage; disposable-media interruption testing remains.
 - #57: Raspberry Pi host spike remains hardware-unverified.
 - #55: direct iPad USB research remains paused with native mobile development.
-- #29: Kit Balance Assistant remains future work.
+- #29: Kit Balance Assistant has a local sample-based MVP: bounded RMS/peak measurements, same-group and A/B warnings, audition and explicit one-Undo level adjustments. Physical listening acceptance remains open.
 - #30: MIDI measurement foundation is integrated; evidence-based Trigger Coach advice remains.
 
 The physical iPad → Intel Mac → Strike save/deploy/playback record is in
