@@ -77,6 +77,11 @@ layout screenshots were visually inspected. This is a bounded audit, not a full
 WCAG certification or a real screen-reader test; unvisited dialogs and OS/browser
 zoom behavior still require acceptance.
 
+The first full CI run exposed a test-order dependency: accessibility loaded a kit
+before factory/startup checks that require the shared synthetic host to be empty.
+The suite now follows the existing `zz*` mutating-workflow convention and runs
+after startup coverage. This changed test scheduling, not the factory protocol.
+
 The handoff deliberately pins the verified merged build. Accessibility changes
 in this follow-up need their own passing PR/package build before being described
 as included in those downloads.

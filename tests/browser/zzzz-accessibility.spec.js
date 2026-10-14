@@ -1,6 +1,9 @@
 import path from 'node:path';
 import {expect, test} from '@playwright/test';
 
+// Like the other zz* editor workflows, this suite loads/mutates the shared
+// synthetic host. Keep it after factory-card/start-screen's empty-host checks.
+
 async function editor(page) {
   await page.goto('/');
   await expect(page.locator('#boot-screen')).toBeHidden();

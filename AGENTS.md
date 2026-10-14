@@ -239,7 +239,7 @@ restore focus to a stale request sender. Kit FX uses a native dialog with its ow
 keyboard scope. Let Space activate focused native controls before audition shortcuts.
 `setMsg` mirrors action/error feedback into a polite live region; per-hit MIDI
 feedback passes announce=false. Preserve these behaviors in generated viewer files.
-Regression coverage: tests/browser/accessibility.spec.js (Chromium and WebKit).
+Regression coverage: tests/browser/zzzz-accessibility.spec.js (Chromium and WebKit).
 
 `tools/check_source_package.py` checks a real ZIP/sidecar, then runs paired startup,
 save/recovery and headless setup help in a fresh isolated Python process. Source CI
