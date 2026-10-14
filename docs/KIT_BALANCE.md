@@ -11,6 +11,8 @@ They do not send MIDI or change the kit. Audition the whole kit separately after
 Only the latest Listen request can play or report an error. Closing the dialog,
 starting a new analysis, or applying changes stops the preview and discards pending
 preview results.
+Closing and reopening also discards the earlier analysis response or error. Wait for
+an in-flight analysis to finish, then choose Analyze local samples in the new dialog.
 
 Suggestions start unchecked. Select only the layers you want, then Apply selected.
 All selected level changes form **one Undo step**. Exclude a pad by leaving both

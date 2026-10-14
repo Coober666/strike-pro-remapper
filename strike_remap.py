@@ -7287,18 +7287,19 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
-let balanceReport=null, balanceBusy=false, balanceVoice=null, balancePreviewGeneration=0;
+let balanceReport=null, balanceBusy=false, balanceVoice=null, balancePreviewGeneration=0, balanceDialogGeneration=0;
 function balanceStopPreview() { balancePreviewGeneration++; if(balanceVoice){balanceVoice.stop();balanceVoice=null;} }
-document.getElementById('balance-dialog').addEventListener('cancel',balanceStopPreview);
+document.getElementById('balance-dialog').addEventListener('cancel',()=>{balanceDialogGeneration++;balanceStopPreview();});
 function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
 function balanceControls() {
   document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
   document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
   document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
 }
-function closeBalance() { balanceStopPreview(); document.getElementById('balance-dialog').close(); }
+function closeBalance() { balanceDialogGeneration++; balanceStopPreview(); document.getElementById('balance-dialog').close(); }
 function openBalance() {
   if(window.VIEWER) return;
+  balanceDialogGeneration++;
   balanceStopPreview();
   balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
   balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
@@ -7307,9 +7308,12 @@ function openBalance() {
 async function balanceAnalyze() {
   if(balanceBusy) return;
   balanceStopPreview();
+  const generation=balanceDialogGeneration;
+  const isCurrent=()=>generation===balanceDialogGeneration && document.getElementById('balance-dialog').open;
   balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
   try {
     const report=await api('/balance',{action:'analyze'});
+    if(!isCurrent()) return;
     if(report.error) throw new Error(report.error);
     balanceReport=report; document.getElementById('balance-scope').textContent=report.scope;
     document.getElementById('balance-rows').innerHTML=report.rows.map((r,i)=>`<section class="balance-row">
@@ -7320,7 +7324,7 @@ async function balanceAnalyze() {
       ${r.sample ? `<button class="btn-secondary" onclick="balanceAudition(${i},false)">Listen current</button> ${r.suggested!=null ? `<button class="btn-secondary" onclick="balanceAudition(${i},true)">Listen proposed</button>` : ''}<small> First representative sample, 0.5-second window.</small>` : ''}
       </section>`).join('')+report.notes.map(n=>`<p>${escHtml(n)}</p>`).join('');
     balanceStatus(`${report.rows.length} assigned layers reviewed. Nothing changed. Select suggestions to apply.`);
-  } catch(error) {balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}
+  } catch(error) {if(isCurrent()){balanceStatus(error.message); document.getElementById('balance-rows').textContent='';}}
   finally {balanceBusy=false; balanceControls();}
 }
 async function balanceAudition(index, proposed) {

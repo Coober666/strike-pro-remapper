@@ -160,3 +160,20 @@ Chromium and iPad WebKit, including existing selection/Undo and lost-response ch
 JavaScript lint, viewer regeneration and standalone viewer build validation passed.
 Audio uses an instrumented synthetic context: this verifies callback ownership,
 not audible quality or physical mobile audio acceptance. The live Mac was untouched.
+
+## Analysis dialog lifecycle and guide accuracy
+
+A follow-up delayed-response test reproduced an old analysis populating a newly
+opened Kit Balance dialog. Analysis callbacks now require the same dialog generation;
+late results and errors are discarded after close/reopen. The existing busy flag stays
+held until the request settles, and a fresh analysis is available afterward. This
+does not cancel or hide an Apply mutation: its response still reconciles host state.
+
+Both late-success and late-error cases passed across Chromium and iPad WebKit; all
+18 release-polish cases, JavaScript lint and standalone viewer validation passed.
+The MIDI guide also now distinguishes the verified Mac/Strike capture and lifecycle
+from still-unverified module, mobile, mapping and listening combinations.
+
+The preceding 771ab61 clean Windows/source packages passed ZIP and all payload hash
+checks. Extracted Windows runtime/GUI/save/recovery checks passed with no MIDI outputs
+or card access. Package checks exercise temporary libraries, not deployment acceptance.

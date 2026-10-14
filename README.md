@@ -449,7 +449,7 @@ Setlist Builder now checks local sample WAV headers, reports missing/ambiguous a
 
 Connection details shows the source revision and exports an allowlisted troubleshooting report without library paths, names, network addresses or credentials. Passing CI builds a source-beta ZIP and SHA-256 checksum as downloadable run artifacts (30-day retention).
 
-Kit Balance Assistant compares bounded local sample windows, flags relative same-group and A/B differences plus possible stacked-layer peak risk, and auditions current/proposed levels. Only the latest preview request can play; closing or reanalyzing discards pending previews. Check individual suggestions to apply them as one Undo step. It never changes WAVs; estimates do not reproduce the module mixer. See [Kit Balance](docs/KIT_BALANCE.md).
+Kit Balance Assistant compares bounded local sample windows, flags relative same-group and A/B differences plus possible stacked-layer peak risk, and auditions current/proposed levels. Only the latest preview request can play; closing or reanalyzing discards pending previews. Reopening also discards the earlier analysis response. Check individual suggestions to apply them as one Undo step. It never changes WAVs; estimates do not reproduce the module mixer. See [Kit Balance](docs/KIT_BALANCE.md).
 
 ## License
 

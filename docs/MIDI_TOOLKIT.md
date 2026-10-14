@@ -215,9 +215,12 @@ Save/export before reloading: host recovery retrieves MIDI events, not these ann
 
 ## Devices and limits
 
-The parser is module-independent. Generic channel MIDI and the host input driver are simulated in tests;
-Strike, Command, Nitro and other physical modules still require capture acceptance.
-Do not infer device compatibility from a synthetic test.
+The parser is module-independent. Automated tests simulate generic channel MIDI and
+the host input driver. Separate [Mac/Strike hardware checks](MAC_HARDWARE_ACCEPTANCE_2026-10-14.md)
+verified one real performance capture and input lifecycle operations. That is limited
+acceptance for this host/module, not every pad mapping or listening behavior. Command,
+Nitro, other host drivers and physical mobile workflows remain unverified. Do not infer
+device compatibility from a synthetic test.
 
 Live capture requires a supporting browser and secure context (localhost is the
 normal computer-host workflow); see [Web MIDI access requirements](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/requestMIDIAccess).

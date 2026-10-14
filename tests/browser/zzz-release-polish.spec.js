@@ -2,6 +2,30 @@ import {copyFile, mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
 
+for (const failure of [false,true]) test(`balance analysis cannot populate a reopened dialog (${failure ? 'failure' : 'success'})`,async({page})=>{
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{await openKit(file);closeStartScreen();openBalance();},path.resolve('tests/fixtures/balance.skt'));
+  let release, requested=false;
+  const blocked=new Promise(resolve=>{release=resolve;});
+  await page.route('**/api/balance',async route=>{
+    const response=await route.fetch(); requested=true; await blocked;
+    if(failure) await route.fulfill({json:{error:'Obsolete analysis failed'}});
+    else await route.fulfill({response});
+  });
+  await page.evaluate(()=>{window.pendingAnalysis=balanceAnalyze();});
+  await expect.poll(()=>requested).toBe(true);
+  await page.getByRole('button',{name:'Done',exact:true}).click();
+  await page.evaluate(()=>openBalance());
+  release(); await page.evaluate(()=>window.pendingAnalysis);
+  await expect(page.locator('#balance-status')).toContainText('No adjustments selected');
+  await expect(page.locator('#balance-rows')).toBeEmpty();
+  await expect(page.locator('#balance-apply')).toBeDisabled();
+  await expect(page.locator('#balance-analyze')).toBeEnabled();
+  await page.unroute('**/api/balance');
+  await page.locator('#balance-analyze').click();
+  await expect(page.locator('#balance-status')).toContainText('Nothing changed');
+});
+
 for (const scenario of ['newer listen','late failure','reopened dialog','new analysis']) test(`balance preview ignores obsolete requests after ${scenario}`,async({page})=>{
   for(const folder of ['instruments','samples']) await mkdir(`.build/browser-library/${folder}/Balance`,{recursive:true});
   for(let i=0;i<4;i++) {

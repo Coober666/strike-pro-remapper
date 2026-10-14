@@ -873,6 +873,9 @@ Balance preview callbacks check both a request generation and the analysis repor
 A newer Listen, dialog close/cancel/reopen, analysis or Apply invalidates pending audio
 and errors and stops the current voice. Browser regressions delay responses explicitly
 and use a synthetic audio context; they do not establish listening acceptance.
+Analysis success/error callbacks also check the dialog generation. Closing/reopening
+invalidates the old report without cancelling a server mutation; the busy flag remains
+held until the request settles. Apply responses still reconcile the host's kit state.
 
 ## Windows folder beta
 
