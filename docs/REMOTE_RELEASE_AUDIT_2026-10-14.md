@@ -140,3 +140,23 @@ the IndexedDB commit. It now waits for Saved in this browser before reloading, m
 the documented workflow. Three repetitions per browser passed after the correction.
 Two help-package checks passed, covering the delivered guides, local references,
 Unicode text and unchanged command examples.
+
+All ten checks passed on e34814c. Its clean local Windows package passed extracted
+runtime/GUI/library recovery checks; the ZIP checksums and all 1,045 Windows and 70
+source payload hashes were verified. These packages include the help guides.
+
+## Kit Balance preview ordering
+
+A delayed Listen current response could replace a newer Listen proposed preview.
+The failure was reproduced with an explicitly delayed response before the fix.
+Preview callbacks now require the current request generation and analysis report;
+superseded successes and failures cannot play or replace the current status. Closing
+or reopening the dialog, starting analysis, and applying changes invalidate pending
+previews and stop the current voice.
+
+Four deterministic scenarios cover a newer Listen, an obsolete failure, dialog
+reopening and a new analysis. All 14 release-polish browser cases passed across
+Chromium and iPad WebKit, including existing selection/Undo and lost-response checks.
+JavaScript lint, viewer regeneration and standalone viewer build validation passed.
+Audio uses an instrumented synthetic context: this verifies callback ownership,
+not audible quality or physical mobile audio acceptance. The live Mac was untouched.

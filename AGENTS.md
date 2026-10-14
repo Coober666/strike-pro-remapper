@@ -869,6 +869,11 @@ SD volume detection searches one level deep (catches Ventoy `STORAGE/` subfolder
 
 POST /api/balance analyze/apply uses STATE_LOCK and the existing paired ownership guard with an 8 KB body bound. Apply recomputes evidence and validates a token covering kit bytes, revision, SIN bytes, measured WAV bytes/metadata and report. Only server-provided selected levels may be applied. Validate all selections before one _push_history, then change known level offsets; no audio writes. GET balance_preview serves a bounded local sample window. Native dialog UI requires unchecked explicit selection, offers current/proposed audition, and never retries failed writes. New tests: test_balance.py, zzz-release-polish.spec.js. Physical listening acceptance remains open.
 
+Balance preview callbacks check both a request generation and the analysis report.
+A newer Listen, dialog close/cancel/reopen, analysis or Apply invalidates pending audio
+and errors and stops the current voice. Browser regressions delay responses explicitly
+and use a synthetic audio context; they do not establish listening acceptance.
+
 ## Windows folder beta
 
 Build with Python 3.11 x64 and requirements-build-windows.txt using tools/build_windows.py.

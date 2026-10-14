@@ -2201,23 +2201,26 @@ function slRows() {
     <button data-row="${i}" data-edit="true">Edit kit</button><button data-row="${i}" data-copy="true">Copy kit for song</button><button data-row="${i}" data-remove="true" aria-label="Remove song ${i+1}">Remove</button></div><div class="sl-result" data-result="${i}"></div></div></li>`).join('') : '<li class="sl-hint">Your show starts here. Choose a saved kit above, then add a song title. You can use the same kit for several songs.</li>';
   slResults(); slControls();
 }
-let balanceReport=null, balanceBusy=false, balanceVoice=null;
-document.getElementById('balance-dialog').addEventListener('cancel',()=>{if(balanceVoice){balanceVoice.stop();balanceVoice=null;}});
+let balanceReport=null, balanceBusy=false, balanceVoice=null, balancePreviewGeneration=0;
+function balanceStopPreview() { balancePreviewGeneration++; if(balanceVoice){balanceVoice.stop();balanceVoice=null;} }
+document.getElementById('balance-dialog').addEventListener('cancel',balanceStopPreview);
 function balanceStatus(text) { document.getElementById('balance-status').textContent=text; }
 function balanceControls() {
   document.getElementById('balance-analyze').disabled=balanceBusy || !wifiEditing;
   document.getElementById('balance-apply').disabled=balanceBusy || !wifiEditing || !balanceReport || !document.querySelector('#balance-rows input:checked');
   document.querySelectorAll('#balance-rows input,#balance-rows button').forEach(el=>{el.disabled=balanceBusy;});
 }
-function closeBalance() { if(balanceVoice) {balanceVoice.stop(); balanceVoice=null;} document.getElementById('balance-dialog').close(); }
+function closeBalance() { balanceStopPreview(); document.getElementById('balance-dialog').close(); }
 function openBalance() {
   if(window.VIEWER) return;
+  balanceStopPreview();
   balanceReport=null; document.getElementById('balance-rows').textContent=''; document.getElementById('balance-scope').textContent='';
   balanceStatus('No adjustments selected. Analysis reads your local library only.'); balanceControls();
   document.getElementById('balance-dialog').showModal();
 }
 async function balanceAnalyze() {
   if(balanceBusy) return;
+  balanceStopPreview();
   balanceBusy=true; balanceReport=null; balanceControls(); balanceStatus('Measuring local sample windows…');
   try {
     const report=await api('/balance',{action:'analyze'});
@@ -2235,27 +2238,32 @@ async function balanceAnalyze() {
   finally {balanceBusy=false; balanceControls();}
 }
 async function balanceAudition(index, proposed) {
-  const row=balanceReport?.rows[index]; if(!row) return;
+  const row=balanceReport?.rows[index]; if(!row || balanceBusy) return;
+  balanceStopPreview();
+  const generation=balancePreviewGeneration, report=balanceReport;
+  const isCurrent=()=>generation===balancePreviewGeneration && report===balanceReport && document.getElementById('balance-dialog').open;
+  balanceStatus(`Loading ${proposed ? 'proposed' : 'current'} preview.`);
   try {
     const AudioEngine=window.AudioContext || window.webkitAudioContext;
     if(!AudioEngine) throw new Error('Audio preview is not supported by this browser. Audition on another browser before applying.');
     if(!_blendCtx) _blendCtx=new AudioEngine();
     if(_blendCtx.state==='suspended') await _blendCtx.resume();
+    if(!isCurrent()) return;
     const response=await fetch('/api/balance_preview?sample='+encodeURIComponent(row.sample));
     if(!response.ok) throw new Error('Sample unavailable; analyze again.');
     const buffer=await _blendCtx.decodeAudioData(await response.arrayBuffer());
-    if(!document.getElementById('balance-dialog').open) return;
-    if(balanceVoice) balanceVoice.stop();
+    if(!isCurrent()) return;
     const gain=_blendCtx.createGain(); gain.gain.value=previewVol*(proposed ? row.suggested : row.level)/127*row.instrument_level/127; gain.connect(_blendCtx.destination);
     const voice=_blendCtx.createBufferSource(); voice.buffer=buffer; voice.connect(gain); balanceVoice=voice;
     voice.onended=()=>{gain.disconnect();if(balanceVoice===voice) balanceVoice=null;}; voice.start();
     balanceStatus(`Listening ${proposed ? 'proposed' : 'current'}: ${row.label}, Layer ${row.layer.toUpperCase()}. Kit unchanged.`);
-  } catch(error) {balanceStatus('Preview unavailable: '+error.message);}
+  } catch(error) {if(isCurrent()) balanceStatus('Preview unavailable: '+error.message);}
 }
 async function balanceApply() {
   if(balanceBusy || !balanceReport) return;
   const selected=[...document.querySelectorAll('#balance-rows input:checked')].map(el=>balanceReport.rows[Number(el.value)].id);
   if(!selected.length) return;
+  balanceStopPreview();
   balanceBusy=true; balanceControls();
   let responseReceived=false;
   try {

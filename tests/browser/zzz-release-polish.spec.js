@@ -2,6 +2,48 @@ import {copyFile, mkdir, readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
 
+for (const scenario of ['newer listen','late failure','reopened dialog','new analysis']) test(`balance preview ignores obsolete requests after ${scenario}`,async({page})=>{
+  for(const folder of ['instruments','samples']) await mkdir(`.build/browser-library/${folder}/Balance`,{recursive:true});
+  for(let i=0;i<4;i++) {
+    await copyFile(`tests/fixtures/Balance/${i}.sin`,`.build/browser-library/instruments/Balance/${i}.sin`);
+    await copyFile(`tests/fixtures/Balance/${i}.wav`,`.build/browser-library/samples/Balance/${i}.wav`);
+  }
+  await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
+  await page.evaluate(async file=>{
+    await openKit(file);closeStartScreen();openBalance();
+    window.previewStarts=[];
+    window.pendingPreviews=[];
+    const original=balanceAudition;
+    balanceAudition=(...args)=>{const pending=original(...args);window.pendingPreviews.push(pending);return pending;};
+    _blendCtx={state:'running',destination:{},decodeAudioData:async bytes=>({marker:new Uint8Array(bytes)[0]}),
+      createGain:()=>({gain:{value:1},connect(){},disconnect(){}}),
+      createBufferSource:()=>({connect(){},start(){window.previewStarts.push(this.buffer.marker);},stop(){this.onended?.();}})};
+    window.AudioContext ||= function(){};
+  },path.resolve('tests/fixtures/balance.skt'));
+  await page.locator('#balance-analyze').click(); await expect(page.locator('#balance-status')).toContainText('Nothing changed');
+  let release, requests=0;
+  const blocked=new Promise(resolve=>{release=resolve;});
+  await page.route('**/api/balance_preview?*',async route=>{
+    if(++requests===1) { await blocked; await route.fulfill({status:scenario==='late failure' ? 500 : 200,body:Buffer.from([1])}); }
+    else await route.fulfill({body:Buffer.from([2])});
+  });
+  await page.getByRole('button',{name:'Listen current',exact:true}).first().click();
+  await expect.poll(()=>requests).toBe(1);
+  let expected='Listening proposed', starts=[2];
+  if(scenario==='reopened dialog') {
+    await page.getByRole('button',{name:'Done',exact:true}).click(); await page.evaluate(()=>openBalance());
+    expected='No adjustments selected'; starts=[];
+  } else if(scenario==='new analysis') {
+    await page.locator('#balance-analyze').click(); expected='Nothing changed'; starts=[];
+  } else await page.getByRole('button',{name:'Listen proposed',exact:true}).first().click();
+  await expect(page.locator('#balance-status')).toContainText(expected);
+  release();
+  // Await completion of both requests, including decoding/catch in the older call.
+  await page.evaluate(()=>Promise.all(window.pendingPreviews));
+  await expect(page.locator('#balance-status')).toContainText(expected);
+  expect(await page.evaluate(()=>previewStarts)).toEqual(starts);
+});
+
 test('balance suggestions require selection, reject stale results and undo together',async({page})=>{
   for(const folder of ['instruments','samples']) await mkdir(`.build/browser-library/${folder}/Balance`,{recursive:true});
   for(let i=0;i<4;i++) {
