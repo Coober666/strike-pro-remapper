@@ -28,6 +28,138 @@ async function restoreFile(page,value) {
   await page.locator('#backup-import').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
 }
 
+test('another tab cannot silently overwrite a saved MIDI take',async ({page,context}) => {
+  await page.goto('/midi'); await page.locator('#demo').click();
+  await page.locator('#name').fill('Original'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  const other=await context.newPage();
+  await other.goto('/midi'); await other.locator('#sessions').getByRole('button',{name:'Original',exact:true}).click();
+  await other.locator('#name').fill('Other tab edit'); await other.locator('#save').click();
+  await expect(other.locator('#state')).toHaveText('Saved in this browser');
+  await page.locator('#name').fill('My local edit'); await page.locator('#save').click();
+  await expect(page.locator('#status')).toContainText('changed in another tab');
+  await expect(page.locator('#state')).toHaveText('Not saved');
+  const exported=JSON.parse(await exportFile(page,'json'));
+  expect(exported.name).toBe('My local edit'); expect(exported.events).toEqual(demoSession().events);
+  await page.locator('#save-copy').click(); await expect(page.locator('#status')).toContainText('Saved as a new copy');
+  await expect(page.locator('#search-count')).toHaveText('2 of 2 saved sessions');
+  await page.locator('#name').fill('Copy revised'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  const names=await page.evaluate(async () => (await (await import('/midi/storage.js')).listSessions()).map(s => s.name).sort());
+  expect(names).toEqual(['Copy revised','Other tab edit']);
+});
+
+test('stale deletion preserves a newer take and deleted takes are not silently resurrected',async ({page,context}) => {
+  await page.goto('/midi'); await page.locator('#demo').click();
+  await page.locator('#name').fill('Original'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  const other=await context.newPage(); await other.goto('/midi');
+  await other.locator('#sessions').getByRole('button',{name:'Original',exact:true}).click();
+  await page.getByRole('button',{name:'Delete Original',exact:true}).click();
+  await other.locator('#name').fill('Newer version'); await other.locator('#save').click();
+  await expect(other.locator('#state')).toHaveText('Saved in this browser');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#status')).toContainText('Could not delete: This session changed in another tab');
+  await expect(page.locator('#sessions').getByRole('button',{name:'Newer version',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Delete Newer version',exact:true}).click();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#search-count')).toHaveText('0 of 0 saved sessions');
+  await other.locator('#name').fill('Keep this unsaved edit'); await other.locator('#save').click();
+  await expect(other.locator('#status')).toContainText('deleted in another tab');
+  await expect(other.locator('#search-count')).toHaveText('0 of 0 saved sessions');
+  expect(JSON.parse(await exportFile(other,'json')).name).toBe('Keep this unsaved edit');
+  await other.locator('#save-copy').click(); await expect(other.locator('#search-count')).toHaveText('1 of 1 saved sessions');
+});
+
+test('legacy session records upgrade safely and concurrent writes have only one winner',async ({page}) => {
+  await page.goto('/midi');
+  await page.evaluate(async () => {
+    const {saveSession}=await import('/midi/storage.js'), {demoSession}=await import('/midi/core.js');
+    const {id}=await saveSession(demoSession());
+    await new Promise((resolve,reject) => {
+      const r=indexedDB.open('drum-midi-toolkit');
+      r.onsuccess=() => {
+        const db=r.result, tx=db.transaction(['sessions','metadata'],'readwrite');
+        for (const name of ['sessions','metadata']) {
+          const store=tx.objectStore(name), item=store.get(id);
+          item.onsuccess=() => { delete item.result.revision; store.put(item.result); };
+        }
+        tx.oncomplete=() => { db.close(); resolve(); }; tx.onabort=() => reject(tx.error);
+      };
+    });
+  });
+  await page.reload(); await page.locator('#sessions').getByRole('button',{name:'Demo · steady groove',exact:true}).click();
+  await page.locator('#name').fill('Legacy upgraded'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  const result=await page.evaluate(async () => {
+    const {listSessions,readSavedSession,saveSession}=await import('/midi/storage.js');
+    const [{id}]=await listSessions(), record=await readSavedSession(id);
+    const results=await Promise.allSettled(['First edit','Second edit'].map(name => saveSession({...record.session,name},id,record.revision)));
+    return {statuses:results.map(r => r.status).sort(),session:(await readSavedSession(id)).session,meta:(await listSessions())[0]};
+  });
+  expect(result.statuses).toEqual(['fulfilled','rejected']);
+  expect(['First edit','Second edit']).toContain(result.session.name);
+  expect(result.meta.name).toBe(result.session.name); expect(result.meta.revision).toBe(2);
+});
+
+test('copy limits and aborted updates preserve the saved version and allow a safe retry',async ({page}) => {
+  await page.goto('/midi'); await page.locator('#demo').click();
+  await page.locator('#name').fill('Original'); await page.locator('#save').click();
+  await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  await page.evaluate(async () => {
+    const {saveSession}=await import('/midi/storage.js'), {demoSession}=await import('/midi/core.js');
+    for (let i=0;i<24;i++) await saveSession({...demoSession(),name:'Other '+i});
+  });
+  await page.locator('#name').fill('Pending edit'); await page.locator('#save-copy').click();
+  await expect(page.locator('#status')).toContainText('Session limit reached');
+  await expect(page.locator('#state')).toHaveText('Not saved');
+  await expect(page.locator('#search-count')).toHaveText('25 of 25 saved sessions');
+  await page.evaluate(() => {
+    const original=IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put=function(...args) {
+      const request=original.apply(this,args);
+      if (this.name === 'sessions') {
+        IDBObjectStore.prototype.put=original;
+        request.addEventListener('success',() => this.transaction.abort());
+      }
+      return request;
+    };
+  });
+  await page.locator('#save').click(); await expect(page.locator('#status')).toContainText('Session save was interrupted');
+  await expect(page.locator('#sessions').getByRole('button',{name:'Original',exact:true})).toBeVisible();
+  expect(JSON.parse(await exportFile(page,'json')).name).toBe('Pending edit');
+  await page.locator('#save').click(); await expect(page.locator('#state')).toHaveText('Saved in this browser');
+  await expect(page.locator('#search-count')).toHaveText('25 of 25 saved sessions');
+  await expect(page.locator('#sessions').getByRole('button',{name:'Pending edit',exact:true})).toBeVisible();
+});
+
+test('profile confirmations cannot overwrite or delete changes made while the dialog was open',async ({page,context}) => {
+  async function mapping(target,note,label) {
+    await target.locator('#map-channel').fill('10'); await target.locator('#map-note').fill(String(note));
+    await target.locator('#map-label').fill(label); await target.locator('#map-apply').click();
+  }
+  await page.goto('/midi'); await page.locator('#pad-profiles summary').click();
+  await page.locator('#profile-name').fill('My drums'); await page.locator('#profile-save').click();
+  await expect(page.locator('#profile-status')).toContainText('Profile saved');
+  const other=await context.newPage(); await other.goto('/midi'); await other.locator('#pad-profiles summary').click();
+  await other.locator('#profile-select').selectOption('My drums'); await other.locator('#profile-load').click();
+  await mapping(page,36,'Local kick'); await page.locator('#profile-save').click();
+  await mapping(other,38,'Other snare'); await other.locator('#profile-save').click();
+  await other.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(other.locator('#profile-status')).toContainText('Profile saved');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#profile-status')).toContainText('changed in another tab');
+  expect(JSON.parse(await exportFile(page,'profile-export')).mappings.map(m => m.label)).toEqual(['Local kick']);
+  await page.locator('#profile-select').selectOption('My drums'); await page.locator('#profile-delete').click();
+  await mapping(other,42,'Other hi-hat'); await other.locator('#profile-save').click();
+  await other.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(other.locator('#profile-status')).toContainText('Profile saved');
+  await page.getByRole('button',{name:'Continue',exact:true}).click();
+  await expect(page.locator('#profile-status')).toContainText('changed in another tab');
+  const saved=await page.evaluate(async () => (await import('/midi/profiles.js')).readProfiles());
+  expect(saved[0].mappings.map(m => m.label)).toEqual(['Other snare','Other hi-hat']);
+});
+
 test('notes and tags persist, search combines words and invalid annotations cannot be saved',async ({page}) => {
   await page.goto('/midi'); await page.locator('#demo').click();
   await page.getByText('Session notes & tags',{exact:true}).click();

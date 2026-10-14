@@ -160,6 +160,9 @@ of the profile store and retained across host polling; names do not affect stati
 `drum-midi-profiles-v1` localStorage is bounded to 25 profiles / 128 KB, with 128 unique
 channel/note pairs per profile. Invalid imports/storage cannot replace current data;
 failed saves leave export available. Profile names/labels render only as text.
+Profile overwrite/delete confirmations re-read saved content before writing and reject
+changes made while the dialog was open, preserving the current profile for export.
+This localStorage check is not an atomic multi-tab transaction like session storage.
 Session v1 also accepts bounded `tags`, `notesText` and an `exercise` key defined in
 `metadata.js`; old sessions default to empty values. Preserve annotations across host
 polling. Exercises are user-selected instructions, never scored or marked completed.
@@ -168,6 +171,12 @@ polling. Exercises are user-selected instructions, never scored or marked comple
 count guard; never overwrite existing sessions or commit a partial batch. Metadata
 and session records stay in sync. Search uses saved metadata, and backups use saved
 records from one readonly transaction. Browser-local unsaved work is separate.
+Saved MIDI sessions carry a local revision in both IndexedDB stores. Read the session
+and revision together; compare revisions inside the same readwrite transaction as
+save/delete. Reject stale or deleted targets, retain current edits, and offer Save as
+new copy. Legacy records without a revision start at zero; portable session JSON is
+unchanged. Copy/restore use new IDs and preserve the 25-session limit. Browser tests
+cover two-tab conflicts, concurrent transactions, legacy records and aborted retries.
 Analysis focus is a channel/note view, never event deletion: filters in summarize,
 compare, charts/replay/report retain original pause boundaries and duration. JSON/CSV,
 overview totals and controller list always retain the full take. Reset focus on a
@@ -191,6 +200,9 @@ WebKit MIDI is simulated and does not establish physical mobile compatibility.
 `launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
 It starts only one service, defaults to localhost, and uses the existing paired handler
 when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
+Reject the source application's root as a library even on a fresh extraction with no
+library child. Existing source checkouts still point users to their library subfolder;
+the frozen Windows package continues to reject all libraries inside its app folder.
 Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
 encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
 No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.

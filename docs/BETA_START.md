@@ -16,6 +16,8 @@ combinations and the latest mobile workflows still need acceptance testing.
    If Python/Tk is missing, follow [host setup help](HOST_LAUNCHER.md#first-run-help).
 3. Choose a separate library folder. Start with a copy of your library or an empty
    folder; keep its backup elsewhere. Choose Open editor, or use Try a demo for a module-free walkthrough.
+   The host rejects the extracted application's root as a library, even on a fresh
+   installation. Keep kits/samples in a persistent folder separate from application updates.
 4. Open Drum MIDI toolkit and Try a demo. Name it, add notes/tags and Save session.
    Wait for **Saved in this browser** before closing/reloading the page.
 5. Select one channel/note under Analysis focus. The chart/report should isolate

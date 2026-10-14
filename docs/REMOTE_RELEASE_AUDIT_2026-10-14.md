@@ -100,3 +100,28 @@ The subsequent documentation changes do not alter that tested runtime.
 
 Physical iPad/iPhone, separate-machine Windows USB, Linux/Pi, Command/Nitro,
 listening and disruptive hardware checks remain distinct acceptance gates.
+
+## Second remote pass: saved work and first run
+
+Two toolkit tabs could silently overwrite a saved session, and an older tab could
+delete a newer saved version. Session reads now retain a revision; updates and deletes
+compare it within their IndexedDB write transaction. Deleted targets cannot be
+resurrected by a stale Save. Save as new copy preserves the current take independently
+without replacing the newer saved version. Existing records without revisions upgrade
+on their next save; portable JSON stays unchanged.
+
+Profile overwrite/delete confirmations also re-check the stored profile after the
+dialog closes. A change made during the confirmation blocks that action and leaves
+the current pad names exportable. This closes the observed confirmation window;
+localStorage profile updates are not atomic multi-tab transactions.
+
+The host previously rejected a source application folder only when it already had
+a library child. A fresh extraction could therefore become the library itself. The
+host now rejects that root before creating any files or binding a port, while retaining
+the existing-library hint for older checkouts.
+
+Each failure was reproduced before its fix. The session changes passed 66 MIDI/Wi-Fi
+browser cases; the subsequent profile fix passed eight focused profile cases across
+Chromium and iPad WebKit. Six host lifecycle tests, the fresh-process library portability
+test, the extracted-source package test and JavaScript lint passed. These checks use
+synthetic libraries and browser storage; the live Mac installation was not restarted.

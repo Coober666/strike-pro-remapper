@@ -152,6 +152,16 @@ input names, tags and notes. Save changes explicitly and wait for **Saved in thi
 browser**. Search examines saved values, not unsaved edits in the current page.
 Older captures without these fields still load with empty annotations.
 
+**Save as new copy** keeps the previous saved version and stores the current take
+separately, within the same 25-session limit. If another toolkit tab changes or deletes
+a saved session, an older tab cannot overwrite or delete that version silently.
+Its current take stays available: save a new copy or export JSON before reopening
+the saved version. A failed save does not discard your edits.
+
+Saved-profile overwrite/delete confirmations also check for changes made while the
+dialog was open. If a conflict is reported, the current pad names remain available
+to export or save under a different profile name.
+
 Select saved captures with their **Include in backup** checkboxes, or **Select shown**
 after searching, then **Export selected sessions**. Backups contain complete saved
 sessions and their pad-map snapshots, including partial/synthetic markers and notes.

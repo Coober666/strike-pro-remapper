@@ -25,7 +25,7 @@
     <section class="take"><div class="take-heading"><div class="name-field"><label for="name">Session name</label><input id="name" maxlength="120" value="Untitled capture"></div><span id="state" class="state">Ready</span></div>
       <p id="origin" class="fine">No session loaded. Try the demo without a MIDI device.</p>
       <details><summary>Session notes &amp; tags</summary><label for="session-tags">Tags, separated by commas</label><input id="session-tags" maxlength="512" placeholder="snare, before, strike"><label for="session-notes">Notes</label><textarea id="session-notes" maxlength="2000" rows="3" placeholder="Pad, playing style, settings changed, anything you noticed…"></textarea><p id="metadata-error" role="status" class="fine"></p><p class="fine">Save the session to keep changes. Notes and tags travel with JSON and batch backups.</p></details>
-      <div class="buttons"><button id="save" disabled>Save session</button><button id="json" disabled>Export JSON</button><button id="csv" disabled>Export all events CSV</button><button id="report" disabled>Export report</button></div>
+      <div class="buttons"><button id="save" disabled>Save session</button><button id="save-copy" disabled>Save as new copy</button><button id="json" disabled>Export JSON</button><button id="csv" disabled>Export all events CSV</button><button id="report" disabled>Export report</button></div>
       <dl class="metrics"><div><dt>Note-on hits</dt><dd id="hits">0</dd></div><div><dt>Notes / channels</dt><dd id="notes">0</dd></div><div><dt>Active time</dt><dd id="duration">0.00 s</dd></div><div><dt>Channel messages</dt><dd id="events">0</dd></div></dl>
     </section>
     <section><details id="pad-profiles"><summary>Pad names &amp; MIDI Learn</summary>

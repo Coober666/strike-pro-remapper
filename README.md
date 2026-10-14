@@ -36,7 +36,8 @@ export JSON, CSV or a report. Visual replay sends nothing to your module. Includ
 synthetic demo; no Strike kit is needed. Disconnected browser captures retain received
 events and a partial-take label through save/export; a normally stopped take stays
 complete if the device disconnects later. Sessions stay in this browser, with explicit
-Save and portable JSON export. Capture directly with Web MIDI, or use **Wi-Fi host
+Save and portable JSON export. **Save as new copy** preserves an earlier take; stale
+tabs cannot silently overwrite or delete a newer saved session. Capture directly with Web MIDI, or use **Wi-Fi host
 computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
@@ -50,6 +51,7 @@ For the remaining device checks, use the [prepared acceptance sessions](docs/HAN
 **Pad names & MIDI Learn** lets you build named profiles for any module, confirm each
 learned channel/note, and export/import profiles between devices. Saved sessions keep
 their own pad names; MIDI messages and module settings stay unchanged.
+Profile confirmations catch saved-content changes made in another tab while you decide.
 Add searchable notes/tags, back up groups of saved sessions, focus analysis on one
 pad/channel and follow optional repeatable capture exercises. JSON/CSV keep every
 event; focused reports describe only the selected channel/note.
@@ -84,7 +86,8 @@ Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
 **Optional host window:** double-click `launch-host.bat` / `launch-host.command`, or run
 `python launch_editor.py` (`python3` on macOS). This requires Python 3.10+ with Tk.
 Choose your existing library folder, then **Start** and **Open editor**. The folder is
-remembered across launches and can live outside the downloaded application folder.
+remembered across launches. Choose a persistent folder separate from the application;
+the host rejects the source application's root, including a fresh extraction.
 For iPad/iPhone, enable Wi-Fi, select this computer's private IPv4 address, start,
 and scan the pairing QR code. The code is generated locally. **Stop** saves a recovery
 copy of unsaved kit edits before shutting down this host. If the final recovery write
