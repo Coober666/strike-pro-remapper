@@ -136,6 +136,7 @@
   <div style="flex:1;"></div>
 
   <span id="msg"></span>
+  <span id="editor-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
   <span id="kit-size-badge" style="display:none;font-size:.72rem;color:#668;flex-shrink:0;"></span>
   <span id="dirty-badge" style="display:none;">&#9679; Unsaved</span>
   <div style="position:relative;display:inline-flex;gap:2px;flex-shrink:0;">
@@ -398,7 +399,7 @@
       <button class="btn-secondary" style="font-size:.7rem;padding:4px 8px;flex-shrink:0;" onclick="toggleImportForm()" title="Import your own WAV files">&#43; WAV</button>
     </div>
     <div class="browser-toolbar">
-      <select id="inst-sort" onchange="savePref('instSort',this.value);instSort=this.value;renderInstruments()">
+      <select id="inst-sort" aria-label="Sort instruments" onchange="savePref('instSort',this.value);instSort=this.value;renderInstruments()">
         <option value="az">A–Z</option>
         <option value="used">Most used</option>
         <option value="recent">Recently added</option>
@@ -641,15 +642,15 @@
 </div>
 
 <!-- Kit FX editor modal -->
-<div id="kitfx-modal" onclick="if(event.target===this)this.classList.remove('open')">
+<dialog id="kitfx-modal" aria-labelledby="kitfx-title" onkeydown="event.stopPropagation()" onclose="this.classList.remove('open')" onclick="if(event.target===this)closeKitFxModal()">
   <div class="sin-box" style="width:min(560px,94vw);">
-    <h3>&#x1F39A; Kit FX</h3>
+    <h3 id="kitfx-title">&#x1F39A; Kit FX</h3>
     <div id="kitfx-body" style="display:flex;flex-direction:column;"></div>
     <div style="display:flex;justify-content:flex-end;">
-      <button class="btn-secondary" onclick="document.getElementById('kitfx-modal').classList.remove('open')">Close</button>
+      <button class="btn-secondary" onclick="closeKitFxModal()">Close</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Explicit activation; no MIDI permission or sends until the user acts. -->
 <dialog id="factory-card-dialog" aria-labelledby="factory-card-title"
