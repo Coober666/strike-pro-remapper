@@ -54,7 +54,7 @@ class RecoveryTests(unittest.TestCase):
         loaded = self.post('load', {'path':str(recovery)})
         self.assertTrue(loaded['dirty'])
         self.assertEqual(loaded['name'], 'Imported.skt')
-        self.assertEqual(Path(app.autosave_kit()), recovery)
+        self.assertEqual(Path(app.autosave_kit()), recovery.resolve())
         self.assertFalse(list(recovery.parent.glob('*.autosave.autosave.skt')))
         self.assertNotIn('error', self.post('save', {'path':loaded['lib_save_path']}))
         self.assertEqual(Path(loaded['lib_save_path']).read_bytes(), expected)

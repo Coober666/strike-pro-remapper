@@ -1,6 +1,7 @@
 """Synthetic balance measurements, stale evidence, explicit apply and single undo."""
 import copy
 import io
+import os
 from pathlib import Path
 import struct
 import sys
@@ -93,6 +94,12 @@ class BalanceTests(unittest.TestCase):
         tone(self.root / 'samples/Test/2.wav', 2000)
         with self.assertRaises(ValueError):
             app.apply_balance(fresh['token'], selected)
+
+    def test_library_aliases_have_the_same_evidence_token(self):
+        result = analyze(self.root, app.state)
+        for library in (self.root.resolve(), os.path.relpath(self.root)):
+            with self.subTest(library=library):
+                self.assertEqual(analyze(library, app.state)['token'], result['token'])
 
     def test_clipping_warning_muted_layers_and_truncated_wavs(self):
         pad = app.state['pads'][0]

@@ -109,6 +109,7 @@ def main():
     ttk.Label(frame, textvariable=status, wraplength=650, foreground='#d8b567').pack(anchor='w', pady=12)
     actions = ttk.Frame(footer)
     actions.pack(fill='x')
+    actions.columnconfigure((0, 1), weight=1)
     qr = tk.Canvas(frame, width=260, height=260, bg='#151916', highlightthickness=0)
     qr.pack(pady=(14, 0))
     pairing_note = ttk.Label(frame, text='Enable Wi-Fi, then Open editor to show your pairing code.', wraplength=650)
@@ -198,13 +199,13 @@ def main():
         window.clipboard_append(value)
 
     start = ttk.Button(actions, text='Open editor', command=start_host)
-    start.pack(side='left')
+    start.grid(row=0, column=0, sticky='ew', padx=(0, 6))
     stop = ttk.Button(actions, text='Stop', command=stop_host)
-    stop.pack(side='left', padx=6)
+    stop.grid(row=0, column=1, sticky='ew')
     demo = ttk.Button(actions, text='Try a demo', command=lambda: start_host(True))
-    demo.pack(side='left')
+    demo.grid(row=1, column=0, sticky='ew', padx=(0, 6), pady=(6, 0))
     copy_link = ttk.Button(actions, text='Copy link', command=lambda: copy_text(host.pair_url or host.url))
-    copy_link.pack(side='left', padx=6)
+    copy_link.grid(row=1, column=1, sticky='ew', pady=(6, 0))
     ttk.Button(footer, text='Copy diagnostics (no pairing token)', command=lambda: copy_text(host.diagnostics())).pack(anchor='w', pady=(10, 0))
 
     def poll():

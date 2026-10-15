@@ -206,9 +206,17 @@ the frozen Windows package continues to reject all libraries inside its app fold
 Preferences remember the chosen library/address, but Wi-Fi starts off every run. QR
 encoding is vendored, unmodified MIT Project Nayuki code; see `strike_remapper/vendor/`.
 No QR service receives the pairing token. The GUI/QR scan still need physical acceptance.
-The scrollable setup/pairing area keeps host controls in a fixed footer. Windows CI
+The scrollable setup/pairing area keeps host controls in a fixed footer.
+The footer actions use two columns so the longer Retry recovery save label fits at
+the minimum window size on macOS too. The regression job runs on Linux and macOS;
+macOS temporary paths may alias /var to /private/var, so compare canonical paths
+in file-identity assertions and fault injection. Balance evidence canonicalizes its
+library argument before hashing it, matching set_library_root(). Windows CI
 runs `tools/test_host_window.py` against real Tk widgets and a disposable loopback host;
 `STRIKE_REQUIRE_TK=1` makes unavailable Tk/display fail that job (other headless runs skip).
+Native WebKit downloads on macOS may decompose Unicode filenames: browser assertions
+compare NFC-normalized names. Release-polish paired tests log out in afterEach using
+the request context so failed assertions or aborted page routes cannot retain ownership.
 If the post-drain recovery flush fails, `Host.recovery_pending` retains the worker and
 active kit. Retry Stop flushes again; start cannot switch libraries until this succeeds.
 The window offers Retry recovery save and keeps closing blocked while recovery fails.

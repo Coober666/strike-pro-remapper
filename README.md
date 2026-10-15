@@ -92,6 +92,8 @@ Or double-click `launch.bat` (Windows) / `launch.command` (macOS).
 
 **Optional host window:** double-click `launch-host.bat` / `launch-host.command`, or run
 `python launch_editor.py` (`python3` on macOS). This requires Python 3.10+ with Tk.
+Launcher actions stay visible in two rows at the minimum window size, including
+**Retry recovery save** when a final recovery write fails.
 Choose your existing library folder, then **Start** and **Open editor**. The folder is
 remembered across launches. Choose a persistent folder separate from the application;
 the host rejects the source application's root, including a fresh extraction.

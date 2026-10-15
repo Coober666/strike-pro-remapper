@@ -24,7 +24,7 @@ def archive(entries):
 class BundleTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name); self.library = self.root / 'library'
+        self.root = Path(self.tmp.name).resolve(); self.library = self.root / 'library'
         self.library.mkdir()
         old, library = copy.deepcopy(app.state), app.LIBRARY_DIR
         self.addCleanup(lambda: (app.state.clear(), app.state.update(old), app.set_library_root(library)))

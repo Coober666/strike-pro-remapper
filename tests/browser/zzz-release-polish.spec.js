@@ -2,6 +2,14 @@ import {copyFile, mkdir, readFile, writeFile, unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {expect,test} from '@playwright/test';
 
+test.afterEach(async({page})=>{
+  const origin='http://127.0.0.1:8768';
+  if(page.url().startsWith(origin+'/')) {
+    // Release ownership even when an assertion fails; page routes may be aborted.
+    await page.request.post(origin+'/wifi/logout',{headers:{Origin:origin}});
+  }
+});
+
 test('kit JSON export downloads real saved kits with skipped-file warnings and survives failure',async({page},info)=>{
   await page.goto('/'); await expect(page.locator('#boot-screen')).toBeHidden();
   await page.evaluate(()=>closeStartScreen());
@@ -99,7 +107,8 @@ test('paired bundle export preserves Unicode filenames and reports missing asset
   const response=await responsePromise, download=await downloadPromise;
   expect(response.headers()['cache-control'].split(',').map(value=>value.trim())).toContain('no-store');
   expect(Number(response.headers()['x-strike-missing-assets'])).toBeGreaterThan(0);
-  expect(download.suggestedFilename()).toBe(`Export café-${info.project.name}.strike-bundle.zip`);
+  // Native macOS WebKit downloads can return canonically decomposed filenames.
+  expect(download.suggestedFilename().normalize('NFC')).toBe(`Export café-${info.project.name}.strike-bundle.zip`);
   expect(await download.failure()).toBeNull();
   const downloaded=await readFile(await download.path());
   expect(downloaded.equals(await response.body())).toBe(true);
@@ -340,6 +349,11 @@ test('support report and collection preview download with phone-sized controls',
 });
 
 test('lost balance response pauses paired editing without replaying the write',async({page})=>{
+  for(const folder of ['instruments','samples']) await mkdir(`.build/browser-library/${folder}/Balance`,{recursive:true});
+  for(let i=0;i<4;i++) {
+    await copyFile(`tests/fixtures/Balance/${i}.sin`,`.build/browser-library/instruments/Balance/${i}.sin`);
+    await copyFile(`tests/fixtures/Balance/${i}.wav`,`.build/browser-library/samples/Balance/${i}.wav`);
+  }
   await page.goto('http://127.0.0.1:8768/wifi/pair#pair=browser-wifi-pairing');
   await expect(page.locator('#boot-screen')).toBeHidden();
   await page.evaluate(async file=>{await openKit(file);closeStartScreen();openBalance();},path.resolve('tests/fixtures/balance.skt'));

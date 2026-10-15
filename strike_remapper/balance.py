@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import math
+from pathlib import Path
 import statistics
 import wave
 
@@ -52,6 +53,8 @@ def db(value):
 
 
 def analyze(library, state):
+    # Use the same identity as set_library_root(), including macOS /var aliases.
+    library = Path(library).resolve()
     if not state.get('kit_raw') or not state.get('pads'):
         raise ValueError('Open a kit first')
     if len(state['pads']) > 64:
