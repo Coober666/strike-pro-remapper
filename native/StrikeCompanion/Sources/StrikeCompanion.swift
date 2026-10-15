@@ -73,7 +73,7 @@ struct CompanionView: View {
                 if model.isLoading { ProgressView().controlSize(.small) }
                 Button("Try demo", action: model.showDemo).disabled(model.isLoading)
                 Button("Open setlist…", action: model.chooseFile).disabled(model.isLoading)
-                    .keyboardShortcut("o").buttonStyle(.borderedProminent).tint(Theme.brass)
+                    .buttonStyle(.borderedProminent).tint(Theme.brass)
             }
             .padding(18)
             Divider()
