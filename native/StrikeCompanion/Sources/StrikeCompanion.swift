@@ -9,6 +9,7 @@ final class CompanionModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var sourceName = ""
+    @Published var query = ""
 
     func showDemo() {
         guard !isLoading else { return }
@@ -17,6 +18,7 @@ final class CompanionModel: ObservableObject {
                 throw SetlistError.invalid("The demo is missing from this app. Rebuild the app bundle.")
             }
             session.open(try Setlist.read(url))
+            query = ""
             isDemo = true
             sourceName = "Demo setlist"
         } catch { errorMessage = error.localizedDescription }
@@ -43,6 +45,7 @@ final class CompanionModel: ObservableObject {
             do {
                 let document = try await Task.detached { try Setlist.read(url) }.value
                 session.open(document)
+                query = ""
                 sourceName = url.lastPathComponent
                 isDemo = false
             } catch {
@@ -60,7 +63,6 @@ private enum Theme {
 
 struct CompanionView: View {
     @ObservedObject var model: CompanionModel
-    @State private var query = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,12 +124,12 @@ struct CompanionView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(document.name).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
             Text("\(document.entries.count) songs").foregroundStyle(.secondary)
-            TextField("Find a song or kit", text: $query).textFieldStyle(.roundedBorder)
+            TextField("Find a song or kit", text: $model.query).textFieldStyle(.roundedBorder)
                 .accessibilityLabel("Find a song or kit")
             ScrollView {
                 LazyVStack(spacing: 4) {
                     ForEach(Array(document.entries.enumerated()), id: \.offset) { index, entry in
-                        if query.isEmpty || entry.title.localizedStandardContains(query) || entry.kit.localizedStandardContains(query) {
+                        if model.query.isEmpty || entry.title.localizedStandardContains(model.query) || entry.kit.localizedStandardContains(model.query) {
                             Button { model.session.select(index) } label: {
                                 HStack(alignment: .top, spacing: 12) {
                                     Text(String(format: "%02d", index + 1)).monospacedDigit().foregroundStyle(Theme.brass).frame(width: 26)
@@ -144,13 +146,12 @@ struct CompanionView: View {
                                 .accessibilityAddTraits(model.session.selected == index ? [.isSelected] : [])
                         }
                     }
-                    if !query.isEmpty && !document.entries.contains(where: { $0.title.localizedStandardContains(query) || $0.kit.localizedStandardContains(query) }) {
+                    if !model.query.isEmpty && !document.entries.contains(where: { $0.title.localizedStandardContains(model.query) || $0.kit.localizedStandardContains(model.query) }) {
                         Text("No matching songs").foregroundStyle(.secondary).padding()
                     }
                 }
             }
         }.padding(18).frame(width: 280)
-            .onChange(of: model.sourceName) { _, _ in query = "" }
     }
 
     private func performanceSheet(_ document: Setlist) -> some View {
