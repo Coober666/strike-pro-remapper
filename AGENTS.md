@@ -116,6 +116,21 @@ Tests: tools/test_setlists.py and tests/browser/zz-setlists.spec.js (Chromium/iP
 Removing a song restores focus to the adjacent Remove button (or the kit selector
 when empty); cancelling a kit copy returns focus to that song's Copy button.
 
+## Native Mac setlist companion
+
+`native/StrikeCompanion/` is a read-only SwiftUI setlist viewer. `Setlist.swift`
+owns bounded imports and selection, with the same version-1 shape and field/path
+limits as `setlists.py`. Kit references remain strings: never follow them, scan
+cards, connect to the editor or send MIDI. Import failure retains current state.
+Shared synthetic cases run against both Python and Swift; native contracts use
+a standalone compiler-built executable, avoiding the initial Mac's broken CLT
+Swift Testing integration. Build with `tools/build_macos_companion.py`; bundle
+is Apple Silicon/macOS14+, ad-hoc signed, not notarized. Demo rendering uses only
+bundled synthetic data and is not attended UI or physical-device acceptance.
+`tools/build_on_mac.py` / `build-on-mac.ps1` export only committed allowlisted
+inputs to a unique remote build folder over existing SSH, preserve checkouts,
+retrieve logs/artifacts and verify revision/checksum. No persistent CI runner.
+
 ## General MIDI toolkit
 
 `web/midi-toolkit/` is a separate ES-module page, exposed by an exact asset allowlist

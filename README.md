@@ -440,6 +440,15 @@ with confidence levels, and implementer notes. Methodology and community researc
 - The [alesisdrummer.com](https://www.alesisdrummer.com) community and the Alesis Strike
   Pro Owners group, whose research and pain points shaped the feature list
 
+## Native Mac setlist companion
+
+[Strike Companion](native/StrikeCompanion/README.md) is an experimental native
+SwiftUI viewer for Setlist Builder JSON exports. Browse the running order, kit
+references and performance notes with keyboard navigation. It is read-only and
+does not check kit availability or communicate with the drum module. Apple
+Silicon/macOS 14+ local builds and the Windows-to-Mac build command are documented
+in its guide; iPhone/iPad targets and attended usability acceptance remain pending.
+
 ## Contributing
 
 Bug reports and format discoveries are very welcome — especially hardware hex-diff

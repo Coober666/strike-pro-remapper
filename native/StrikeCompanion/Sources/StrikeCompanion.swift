@@ -1,0 +1,246 @@
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+final class CompanionModel: ObservableObject {
+    @Published var session = SetlistSession()
+    @Published var isDemo = false
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var sourceName = ""
+
+    func showDemo() {
+        guard !isLoading else { return }
+        do {
+            guard let url = Bundle.main.url(forResource: "Demo.setlist", withExtension: "json") else {
+                throw SetlistError.invalid("The demo is missing from this app. Rebuild the app bundle.")
+            }
+            session.open(try Setlist.read(url))
+            isDemo = true
+            sourceName = "Demo setlist"
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func chooseFile() {
+        guard !isLoading else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a JSON file exported from Strike’s Setlist Builder."
+        panel.prompt = "Open setlist"
+        panel.begin { [weak self] response in
+            if response == .OK, let url = panel.url { self?.open(url) }
+        }
+    }
+
+    func open(_ url: URL) {
+        guard !isLoading else { return }
+        isLoading = true
+        Task {
+            defer { isLoading = false }
+            do {
+                let document = try await Task.detached { try Setlist.read(url) }.value
+                session.open(document)
+                sourceName = url.lastPathComponent
+                isDemo = false
+            } catch {
+                errorMessage = "Couldn’t open this setlist. \(error.localizedDescription) Your current setlist is unchanged."
+            }
+        }
+    }
+}
+
+private enum Theme {
+    static let background = Color(red: 0.11, green: 0.13, blue: 0.15)
+    static let sheet = Color(red: 0.15, green: 0.17, blue: 0.20)
+    static let brass = Color(red: 0.85, green: 0.72, blue: 0.43)
+}
+
+struct CompanionView: View {
+    @ObservedObject var model: CompanionModel
+    @State private var query = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "music.note.list").font(.title2).foregroundStyle(Theme.brass)
+                Text("Strike Companion").font(.headline)
+                Spacer()
+                if model.isLoading { ProgressView().controlSize(.small) }
+                Button("Try demo", action: model.showDemo).disabled(model.isLoading)
+                Button("Open setlist…", action: model.chooseFile).disabled(model.isLoading)
+                    .keyboardShortcut("o").buttonStyle(.borderedProminent).tint(Theme.brass)
+            }
+            .padding(18)
+            Divider()
+            if let document = model.session.document {
+                HStack(spacing: 0) {
+                    sidebar(document)
+                    Divider()
+                    performanceSheet(document)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Theme.sheet)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 20) {
+                    Image(systemName: "music.note.list").font(.system(size: 50)).foregroundStyle(Theme.brass)
+                    Text("Your set, song by song.").font(.system(size: 34, weight: .semibold, design: .rounded))
+                    Text("Keep the running order, kit references and performance notes in view.")
+                        .font(.title3).foregroundStyle(.secondary)
+                    Text("In Strike Remapper, open Setlist Builder and choose Export. Then open that JSON file here.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Button("Open setlist…", action: model.chooseFile).buttonStyle(.borderedProminent).tint(Theme.brass)
+                        Button("Explore the demo", action: model.showDemo)
+                    }
+                    Text("Reference viewer · kit files are not included in a setlist export.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                .padding(40).frame(maxWidth: 680, maxHeight: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            Divider()
+            HStack {
+                Text(model.isDemo ? "Demo · fictional songs and kit references" : (model.sourceName.isEmpty ? "Open a Strike setlist export to begin" : model.sourceName))
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Text("Kit availability not checked").foregroundStyle(.secondary)
+            }.font(.caption).padding(.horizontal, 18).padding(.vertical, 10)
+        }
+        .background(Theme.background).preferredColorScheme(.dark)
+        .frame(minWidth: 780, minHeight: 540)
+        .alert("Setlist couldn’t be opened", isPresented: Binding(
+            get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+                Button("OK") { model.errorMessage = nil }
+            } message: { Text(model.errorMessage ?? "") }
+        .onOpenURL { model.open($0) }
+    }
+
+    private func sidebar(_ document: Setlist) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(document.name).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+            Text("\(document.entries.count) songs").foregroundStyle(.secondary)
+            TextField("Find a song or kit", text: $query).textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Find a song or kit")
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(Array(document.entries.enumerated()), id: \.offset) { index, entry in
+                        if query.isEmpty || entry.title.localizedStandardContains(query) || entry.kit.localizedStandardContains(query) {
+                            Button { model.session.select(index) } label: {
+                                HStack(alignment: .top, spacing: 12) {
+                                    Text(String(format: "%02d", index + 1)).monospacedDigit().foregroundStyle(Theme.brass).frame(width: 26)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(entry.title).fontWeight(.medium).multilineTextAlignment(.leading)
+                                        Text(entry.kit).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                    }
+                                    Spacer(minLength: 0)
+                                }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(model.session.selected == index ? Theme.brass.opacity(0.16) : .clear)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }.buttonStyle(.plain)
+                                .accessibilityLabel("Song \(index + 1): \(entry.title)")
+                                .accessibilityAddTraits(model.session.selected == index ? [.isSelected] : [])
+                        }
+                    }
+                    if !query.isEmpty && !document.entries.contains(where: { $0.title.localizedStandardContains(query) || $0.kit.localizedStandardContains(query) }) {
+                        Text("No matching songs").foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+        }.padding(18).frame(width: 280)
+            .onChange(of: model.sourceName) { _, _ in query = "" }
+    }
+
+    private func performanceSheet(_ document: Setlist) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if let index = model.session.selected, document.entries.indices.contains(index) {
+                        let entry = document.entries[index]
+                        Text("Song \(index + 1) of \(document.entries.count)")
+                            .font(.headline).foregroundStyle(Theme.brass)
+                        Text(entry.title).font(.system(size: 38, weight: .semibold, design: .rounded))
+                            .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Kit reference").font(.headline).foregroundStyle(.secondary)
+                            Text(entry.kit).font(.title3).textSelection(.enabled)
+                            if !entry.output.isEmpty { Text("Output label: \(entry.output)").foregroundStyle(.secondary) }
+                        }
+                        Divider()
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Performance notes").font(.headline).foregroundStyle(Theme.brass)
+                            Text(entry.notes.isEmpty ? "No notes for this song." : entry.notes)
+                                .font(.system(size: 22)).lineSpacing(7).textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        Text("No songs yet").font(.largeTitle.bold())
+                        Text("Add songs in Strike’s Setlist Builder, export again, and open the updated file here.")
+                            .foregroundStyle(.secondary)
+                    }
+                    if !document.notes.isEmpty {
+                        Divider()
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Show notes").font(.headline).foregroundStyle(.secondary)
+                            Text(document.notes).font(.body).lineSpacing(5).textSelection(.enabled)
+                        }
+                    }
+                }.padding(32).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider()
+            HStack {
+                Button { model.session.move(-1) } label: { Label("Previous", systemImage: "chevron.left") }
+                    .keyboardShortcut(.leftArrow, modifiers: .command)
+                    .disabled((model.session.selected ?? 0) == 0)
+                Spacer()
+                if let index = model.session.selected, index + 1 < document.entries.count {
+                    Text("Next: \(document.entries[index + 1].title)").lineLimit(1).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { model.session.move(1) } label: { Label("Next", systemImage: "chevron.right") }
+                    .keyboardShortcut(.rightArrow, modifiers: .command)
+                    .disabled(model.session.selected == nil || model.session.selected == document.entries.count - 1)
+            }.controlSize(.large).padding(20)
+        }
+    }
+}
+
+struct StrikeCompanionApp: App {
+    @StateObject private var model = CompanionModel()
+    var body: some Scene {
+        WindowGroup { CompanionView(model: model) }
+            .defaultSize(width: 1080, height: 740)
+            .commands { CommandGroup(replacing: .newItem) { Button("Open setlist…", action: model.chooseFile).keyboardShortcut("o") } }
+    }
+}
+
+@main
+enum CompanionMain {
+    @MainActor static func main() throws {
+        // Render only this app's synthetic demo, not the desktop or user documents.
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--render-demo" {
+            _ = NSApplication.shared
+            let model = CompanionModel()
+            model.showDemo()
+            guard model.session.document != nil else { throw SetlistError.invalid("Demo failed to load.") }
+            model.session.select(1)
+            let view = NSHostingView(rootView: CompanionView(model: model).frame(width: 1080, height: 740))
+            view.frame = NSRect(x: 0, y: 0, width: 1080, height: 740)
+            let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = view
+            view.layoutSubtreeIfNeeded()
+            guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+                throw SetlistError.invalid("Cannot render preview.")
+            }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:]) else {
+                throw SetlistError.invalid("Cannot encode preview.")
+            }
+            try data.write(to: URL(fileURLWithPath: CommandLine.arguments[2]), options: .withoutOverwriting)
+        } else {
+            StrikeCompanionApp.main()
+        }
+    }
+}
