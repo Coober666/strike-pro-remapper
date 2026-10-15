@@ -37,6 +37,8 @@ def build(output, revision, render_preview=False):
     contracts = output / 'companion-contracts'
     run([compiler, *target, source / 'Sources/Setlist.swift', source / 'Tests/Contracts.swift', '-o', contracts])
     run([contracts, source])
+    run(['xcrun', 'swift', 'run', '--package-path', source, '--scratch-path', output / 'package-build',
+         '-c', 'release', 'core-probe', source / 'Resources/Demo.setlist.json'])
     bundle = output / 'Strike Companion.app'
     executable = bundle / 'Contents/MacOS/StrikeCompanion'
     executable.parent.mkdir(parents=True)
@@ -47,8 +49,8 @@ def build(output, revision, render_preview=False):
     info = {
         'CFBundleExecutable': 'StrikeCompanion', 'CFBundleIdentifier': 'net.cooberlab.strike-companion',
         'CFBundleName': 'Strike Companion', 'CFBundleDisplayName': 'Strike Companion',
-        'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '0.1.0',
-        'CFBundleVersion': '1', 'LSMinimumSystemVersion': '14.0',
+        'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '0.2.0',
+        'CFBundleVersion': '2', 'LSMinimumSystemVersion': '14.0',
         'NSHighResolutionCapable': True, 'NSPrincipalClass': 'NSApplication',
         'StrikeSourceRevision': revision,
         'CFBundleDocumentTypes': [{'CFBundleTypeName': 'Strike setlist JSON',
@@ -62,12 +64,13 @@ def build(output, revision, render_preview=False):
     run(['codesign', '--verify', '--deep', '--strict', bundle])
     if render_preview:
         run([executable, '--render-demo', output / 'preview.png'])
+        run([executable, '--render-performance-demo', output / 'performance-preview.png'])
     archive = output / 'Strike-Companion-macOS-arm64.zip'
     run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', bundle, archive])
     receipt = {'revision': revision, 'architecture': 'arm64', 'minimum_macos': '14.0',
                'artifact': archive.name, 'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
                'bytes': archive.stat().st_size, 'swift': version,
-               'contracts': 'passed', 'signature': 'ad-hoc local build; not notarized',
+               'contracts': 'passed', 'swift_package_consumer': 'passed', 'signature': 'ad-hoc local build; not notarized',
                'demo_rendered': render_preview}
     (output / 'build-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(receipt, indent=2))

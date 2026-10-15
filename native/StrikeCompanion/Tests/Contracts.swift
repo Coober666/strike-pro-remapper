@@ -21,6 +21,21 @@ enum Contracts {
         let original = try Data(contentsOf: demoURL)
         let demo = try Setlist.read(demoURL)
         try require(demo.entries.count == 4 && demo.entries[1].song == "Paper Satellites", "demo order")
+        try require(demo.matchingIndices("  SATELLITES  ") == [1], "trimmed case-insensitive search")
+        try require(demo.matchingIndices(" \n ") == Array(demo.entries.indices), "blank search retains order")
+        let searchable = Setlist(name: "Search", notes: "", numbered: false, entries: [
+            SetlistEntry(kit: "A.skt", song: "First", output: "", notes: "Brushes for verse"),
+            SetlistEntry(kit: "B.skt", song: "Second", output: "Brushes", notes: "")])
+        try require(searchable.matchingIndices("brushes") == [0, 1], "notes and output search retain order")
+        try require(searchable.matchingIndices("absent").isEmpty, "no match")
+        var invalid = try JSONSerialization.jsonObject(with: original) as! [String: Any]
+        var rows = invalid["entries"] as! [[String: Any]]
+        rows[1]["kit"] = "../Bad.skt"
+        invalid["entries"] = rows
+        var rowError = ""
+        do { _ = try Setlist.decode(JSONSerialization.data(withJSONObject: invalid)) }
+        catch { rowError = error.localizedDescription }
+        try require(rowError.hasPrefix("Song 2:"), "invalid row error identifies running-order position")
         var session = SetlistSession()
         session.open(demo)
         try require(session.selected == 0, "opening selects first song")

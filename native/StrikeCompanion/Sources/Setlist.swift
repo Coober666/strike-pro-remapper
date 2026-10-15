@@ -1,27 +1,37 @@
 import Foundation
 import CoreFoundation
 
-enum SetlistError: LocalizedError {
+public enum SetlistError: LocalizedError {
     case invalid(String)
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self { case .invalid(let message): return message }
     }
 }
 
-struct SetlistEntry: Equatable, Sendable {
-    let kit: String
-    let song: String
-    let output: String
-    let notes: String
-    var title: String { song.isEmpty ? String(kit.split(separator: "/").last ?? "Kit") : song }
+public struct SetlistEntry: Equatable, Sendable {
+    public let kit: String
+    public let song: String
+    public let output: String
+    public let notes: String
+    public var title: String { song.isEmpty ? String(kit.split(separator: "/").last ?? "Kit") : song }
 }
 
-struct Setlist: Equatable, Sendable {
-    static let maximumBytes = 1_048_576
-    let name: String
-    let notes: String
-    let numbered: Bool
-    let entries: [SetlistEntry]
+public struct Setlist: Equatable, Sendable {
+    public static let maximumBytes = 1_048_576
+    public let name: String
+    public let notes: String
+    public let numbered: Bool
+    public let entries: [SetlistEntry]
+
+    /// Matching indices retain the original running order; navigation never uses this filter.
+    public func matchingIndices(_ query: String) -> [Int] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return entries.indices.filter { index in
+            let entry = entries[index]
+            return query.isEmpty || [entry.title, entry.kit, entry.output, entry.notes]
+                .contains { $0.localizedStandardContains(query) }
+        }
+    }
 
     static func text(_ value: Any?, label: String, limit: Int, required: Bool = false) throws -> String {
         guard let value = value as? String, value.unicodeScalars.count <= limit,
@@ -33,7 +43,7 @@ struct Setlist: Equatable, Sendable {
         return trimmed
     }
 
-    static func decode(_ data: Data) throws -> Setlist {
+    public static func decode(_ data: Data) throws -> Setlist {
         guard data.count <= maximumBytes else { throw SetlistError.invalid("Setlists must be 1 MiB or smaller.") }
         guard String(data: data, encoding: .utf8) != nil else { throw SetlistError.invalid("Choose a UTF-8 JSON setlist exported by Strike.") }
         let raw: Any
@@ -54,7 +64,8 @@ struct Setlist: Equatable, Sendable {
         }
         let name = try text(object["name"], label: "Setlist name", limit: 80, required: true)
         let notes = try text(object["notes"] ?? "", label: "Show notes", limit: 2000)
-        let entries = try rows.map { value -> SetlistEntry in
+        let entries = try rows.enumerated().map { index, value -> SetlistEntry in
+            do {
             guard let row = value as? [String: Any] else { throw SetlistError.invalid("Each song needs a kit reference.") }
             let kit = try text(row["kit"], label: "Kit reference", limit: 240, required: true)
             let parts = kit.components(separatedBy: "/")
@@ -68,11 +79,14 @@ struct Setlist: Equatable, Sendable {
                 song: try text(row["song"] ?? "", label: "Song title", limit: 100),
                 output: try text(row["output"] ?? "", label: "Output name", limit: 100),
                 notes: try text(row["notes"] ?? "", label: "Song notes", limit: 500))
+            } catch {
+                throw SetlistError.invalid("Song \(index + 1): \(error.localizedDescription)")
+            }
         }
         return Setlist(name: name, notes: notes, numbered: numbered.boolValue, entries: entries)
     }
 
-    static func read(_ url: URL) throws -> Setlist {
+    public static func read(_ url: URL) throws -> Setlist {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         let info = try url.resourceValues(forKeys: [.isRegularFileKey])
@@ -83,19 +97,20 @@ struct Setlist: Equatable, Sendable {
     }
 }
 
-struct SetlistSession {
-    private(set) var document: Setlist?
-    private(set) var selected: Int?
-    mutating func open(_ document: Setlist) {
+public struct SetlistSession {
+    public init() {}
+    public private(set) var document: Setlist?
+    public private(set) var selected: Int?
+    public mutating func open(_ document: Setlist) {
         self.document = document
         selected = document.entries.isEmpty ? nil : 0
     }
-    mutating func importData(_ data: Data) throws { open(try Setlist.decode(data)) }
-    mutating func select(_ index: Int) {
+    public mutating func importData(_ data: Data) throws { open(try Setlist.decode(data)) }
+    public mutating func select(_ index: Int) {
         guard let document, document.entries.indices.contains(index) else { return }
         selected = index
     }
-    mutating func move(_ delta: Int) {
+    public mutating func move(_ delta: Int) {
         guard let selected, let count = document?.entries.count, count > 0 else { return }
         // Only single-step navigation is exposed, avoiding overflow from arbitrary offsets.
         if delta == 1 && selected < count - 1 { self.selected = selected + 1 }

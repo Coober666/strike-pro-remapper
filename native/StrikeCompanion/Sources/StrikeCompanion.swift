@@ -10,9 +10,12 @@ final class CompanionModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var sourceName = ""
     @Published var query = ""
+    @Published var performanceMode = false
+    @Published var noteSize = 22.0
+    @Published var isChoosingFile = false
 
     func showDemo() {
-        guard !isLoading else { return }
+        guard !isLoading && !isChoosingFile else { return }
         do {
             guard let url = Bundle.main.url(forResource: "Demo.setlist", withExtension: "json") else {
                 throw SetlistError.invalid("The demo is missing from this app. Rebuild the app bundle.")
@@ -25,7 +28,8 @@ final class CompanionModel: ObservableObject {
     }
 
     func chooseFile() {
-        guard !isLoading else { return }
+        guard !isLoading && !isChoosingFile else { return }
+        isChoosingFile = true
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
@@ -33,12 +37,14 @@ final class CompanionModel: ObservableObject {
         panel.message = "Choose a JSON file exported from Strike’s Setlist Builder."
         panel.prompt = "Open setlist"
         panel.begin { [weak self] response in
-            if response == .OK, let url = panel.url { self?.open(url) }
+            guard let self else { return }
+            self.isChoosingFile = false
+            if response == .OK, let url = panel.url { self.open(url) }
         }
     }
 
     func open(_ url: URL) {
-        guard !isLoading else { return }
+        guard !isLoading && !isChoosingFile else { return }
         isLoading = true
         Task {
             defer { isLoading = false }
@@ -71,16 +77,18 @@ struct CompanionView: View {
                 Text("Strike Companion").font(.headline)
                 Spacer()
                 if model.isLoading { ProgressView().controlSize(.small) }
-                Button("Try demo", action: model.showDemo).disabled(model.isLoading)
-                Button("Open setlist…", action: model.chooseFile).disabled(model.isLoading)
+                Button("Try demo", action: model.showDemo).disabled(model.isLoading || model.isChoosingFile)
+                Button("Open setlist…", action: model.chooseFile).disabled(model.isLoading || model.isChoosingFile)
                     .buttonStyle(.borderedProminent).tint(Theme.brass)
             }
             .padding(18)
             Divider()
             if let document = model.session.document {
                 HStack(spacing: 0) {
-                    sidebar(document)
-                    Divider()
+                    if !model.performanceMode {
+                        sidebar(document)
+                        Divider()
+                    }
                     performanceSheet(document)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Theme.sheet)
@@ -124,12 +132,19 @@ struct CompanionView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(document.name).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
             Text("\(document.entries.count) songs").foregroundStyle(.secondary)
-            TextField("Find a song or kit", text: $model.query).textFieldStyle(.roundedBorder)
-                .accessibilityLabel("Find a song or kit")
+            HStack {
+                TextField("Search songs, kits or notes", text: $model.query).textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Search songs, kits, output labels and notes")
+                if !model.query.isEmpty {
+                    Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).accessibilityLabel("Clear search")
+                }
+            }
             ScrollView {
                 LazyVStack(spacing: 4) {
-                    ForEach(Array(document.entries.enumerated()), id: \.offset) { index, entry in
-                        if model.query.isEmpty || entry.title.localizedStandardContains(model.query) || entry.kit.localizedStandardContains(model.query) {
+                    ForEach(document.matchingIndices(model.query), id: \.self) { index in
+                        let entry = document.entries[index]
+                        Group {
                             Button { model.session.select(index) } label: {
                                 HStack(alignment: .top, spacing: 12) {
                                     Text(String(format: "%02d", index + 1)).monospacedDigit().foregroundStyle(Theme.brass).frame(width: 26)
@@ -143,10 +158,11 @@ struct CompanionView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                             }.buttonStyle(.plain)
                                 .accessibilityLabel("Song \(index + 1): \(entry.title)")
+                                .accessibilityValue("Kit: \(entry.kit)")
                                 .accessibilityAddTraits(model.session.selected == index ? [.isSelected] : [])
                         }
                     }
-                    if !model.query.isEmpty && !document.entries.contains(where: { $0.title.localizedStandardContains(model.query) || $0.kit.localizedStandardContains(model.query) }) {
+                    if !model.query.isEmpty && document.matchingIndices(model.query).isEmpty {
                         Text("No matching songs").foregroundStyle(.secondary).padding()
                     }
                 }
@@ -156,24 +172,39 @@ struct CompanionView: View {
 
     private func performanceSheet(_ document: Setlist) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button { model.performanceMode.toggle() } label: {
+                    Label(model.performanceMode ? "Show song list" : "Performance view",
+                          systemImage: model.performanceMode ? "sidebar.left" : "arrow.up.left.and.arrow.down.right")
+                }.keyboardShortcut("f", modifiers: [.command, .shift])
+                    .accessibilityHint("Hides or shows the song list. Navigation keeps the original set order.")
+                Spacer()
+                Picker("Notes", selection: $model.noteSize) {
+                    Text("Standard").tag(22.0)
+                    Text("Large").tag(28.0)
+                    Text("Extra large").tag(34.0)
+                }.frame(width: 195).accessibilityLabel("Performance and show notes text size")
+            }.padding(.horizontal, 20).padding(.vertical, 12)
+            Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if let index = model.session.selected, document.entries.indices.contains(index) {
                         let entry = document.entries[index]
                         Text("Song \(index + 1) of \(document.entries.count)")
                             .font(.headline).foregroundStyle(Theme.brass)
-                        Text(entry.title).font(.system(size: 38, weight: .semibold, design: .rounded))
+                        Text(entry.title).font(.system(size: model.performanceMode ? 46 : 38, weight: .semibold, design: .rounded))
+                            .accessibilityAddTraits(.isHeader)
                             .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Kit reference").font(.headline).foregroundStyle(.secondary)
+                            Text("Kit reference").accessibilityAddTraits(.isHeader).font(.headline).foregroundStyle(.secondary)
                             Text(entry.kit).font(.title3).textSelection(.enabled)
                             if !entry.output.isEmpty { Text("Output label: \(entry.output)").foregroundStyle(.secondary) }
                         }
                         Divider()
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Performance notes").font(.headline).foregroundStyle(Theme.brass)
+                            Text("Performance notes").accessibilityAddTraits(.isHeader).font(.headline).foregroundStyle(Theme.brass)
                             Text(entry.notes.isEmpty ? "No notes for this song." : entry.notes)
-                                .font(.system(size: 22)).lineSpacing(7).textSelection(.enabled)
+                                .font(.system(size: model.noteSize)).lineSpacing(7).textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
@@ -184,8 +215,8 @@ struct CompanionView: View {
                     if !document.notes.isEmpty {
                         Divider()
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Show notes").font(.headline).foregroundStyle(.secondary)
-                            Text(document.notes).font(.body).lineSpacing(5).textSelection(.enabled)
+                            Text("Show notes").accessibilityAddTraits(.isHeader).font(.headline).foregroundStyle(.secondary)
+                            Text(document.notes).font(.system(size: max(17, model.noteSize - 5))).lineSpacing(5).textSelection(.enabled)
                         }
                     }
                 }.padding(32).frame(maxWidth: .infinity, alignment: .leading)
@@ -193,6 +224,7 @@ struct CompanionView: View {
             Divider()
             HStack {
                 Button { model.session.move(-1) } label: { Label("Previous", systemImage: "chevron.left") }
+                    .accessibilityHint("Previous song in the original set order, regardless of search")
                     .keyboardShortcut(.leftArrow, modifiers: .command)
                     .disabled((model.session.selected ?? 0) == 0)
                 Spacer()
@@ -201,6 +233,7 @@ struct CompanionView: View {
                 }
                 Spacer()
                 Button { model.session.move(1) } label: { Label("Next", systemImage: "chevron.right") }
+                    .accessibilityHint("Next song in the original set order, regardless of search")
                     .keyboardShortcut(.rightArrow, modifiers: .command)
                     .disabled(model.session.selected == nil || model.session.selected == document.entries.count - 1)
             }.controlSize(.large).padding(20)
@@ -221,12 +254,14 @@ struct StrikeCompanionApp: App {
 enum CompanionMain {
     @MainActor static func main() throws {
         // Render only this app's synthetic demo, not the desktop or user documents.
-        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--render-demo" {
+        if CommandLine.arguments.count == 3, ["--render-demo", "--render-performance-demo"].contains(CommandLine.arguments[1]) {
             _ = NSApplication.shared
             let model = CompanionModel()
             model.showDemo()
             guard model.session.document != nil else { throw SetlistError.invalid("Demo failed to load.") }
             model.session.select(1)
+            model.performanceMode = CommandLine.arguments[1] == "--render-performance-demo"
+            if model.performanceMode { model.noteSize = 34 }
             let view = NSHostingView(rootView: CompanionView(model: model).frame(width: 1080, height: 740))
             view.frame = NSRect(x: 0, y: 0, width: 1080, height: 740)
             let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)

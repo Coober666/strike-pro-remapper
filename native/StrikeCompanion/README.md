@@ -10,6 +10,13 @@ to move through the original song order. Search filters the list without
 reordering it. Command-O opens another setlist. A rejected file preserves the
 current setlist and song selection; the viewer never saves changes to the file.
 
+Version 0.2 adds **Performance view** (Command-Shift-F) to hide the song list,
+and Standard/Large/Extra large note sizes. Show notes scale with song notes.
+Search covers titles, kit references, output labels and song notes; clearing
+search restores the full list. Previous/Next always follows the original order.
+Malformed entries identify their song number in the error. Display preferences
+last for the current app session; no document contents or access bookmarks are saved.
+
 Setlist exports contain references and notes, not the kits themselves. The
 companion does not check kit availability, load sounds, control the module,
 discover cards, send MIDI, or connect to the editor. Open an updated export to
@@ -70,6 +77,12 @@ references remain plain strings and are never followed. Validation fixtures in
 `Tests/Cases.json` run both against the existing Python setlist validator and the
 native Swift implementation, including Unicode, type, path and count boundaries.
 `Tests/Contracts.swift` additionally checks navigation and failed-import retention.
+
+`Package.swift` exposes the Foundation-only `StrikeSetlists` library for reuse
+in a future iPhone/iPad target. Every Mac build also compiles and runs a separate
+package consumer (`core-probe`) against the synthetic demo. This verifies the
+public library on macOS; it is not an iOS SDK build or device acceptance.
+The preview option additionally writes `performance-preview.png` with extra-large notes.
 
 Run `python tools/test_companion_format.py` and `python tools/test_mac_build.py`
 on either desktop. The macOS build runs the native contracts. These checks use

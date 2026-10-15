@@ -966,3 +966,10 @@ Its server_bind calls TCPServer's binding implementation and retains the actual
 bound address/port instead of HTTPServer's blocking reverse-DNS display-name lookup.
 test_host_launcher rejects any getfqdn call for local and paired starts; the beta
 subprocess prints bounded thread stacks if its existing 20-second deadline expires.
+# Native companion 0.2
+
+The read-only native companion now has a performance view, adjustable notes and
+search across song/kit/output/notes. Navigation retains original running order.
+Its Foundation-only StrikeSetlists Swift package is exercised by a separate
+consumer on each Mac build. iOS SDK and attended VoiceOver acceptance remain
+separate checks; a macOS package build does not establish those results.
