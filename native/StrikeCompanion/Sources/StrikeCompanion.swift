@@ -221,6 +221,8 @@ struct CompanionView: View {
                     }
                 }.padding(32).frame(maxWidth: .infinity, alignment: .leading)
             }
+            // A new song starts at its heading, even after scrolling long notes.
+            .id(model.session.selected)
             Divider()
             HStack {
                 Button { model.session.move(-1) } label: { Label("Previous", systemImage: "chevron.left") }
