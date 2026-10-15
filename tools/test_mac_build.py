@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('build_on_mac', Path(__file__).with_name('build_on_mac.py'))
@@ -13,6 +14,13 @@ spec.loader.exec_module(module)
 
 
 class MacBuildTests(unittest.TestCase):
+    def test_developer_build_commands_are_not_editor_utilities(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        import strike_remap
+        names = {item['name'] for item in strike_remap.list_tools()}
+        self.assertNotIn('build_on_mac.py', names)
+        self.assertNotIn('build_macos_companion.py', names)
+
     def test_shell_stdin_is_binary_to_preserve_unix_newlines(self):
         with patch.object(module.subprocess, 'run') as run:
             module.ssh_script('mac-mini', ['a'*24], module.PREPARE, 45)
