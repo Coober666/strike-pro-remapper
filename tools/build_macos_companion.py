@@ -29,8 +29,9 @@ def build(output, revision, render_preview=False):
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     compiler = subprocess.check_output(['xcrun', '--find', 'swiftc'], text=True).strip()
-    version = subprocess.check_output([compiler, '--version'], text=True).strip()
-    target = ['-target', 'arm64-apple-macosx14.0', '-swift-version', '6']
+    version = subprocess.check_output([compiler, '--version'], stderr=subprocess.STDOUT, text=True).strip()
+    sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
+    target = ['-sdk', sdk, '-target', 'arm64-apple-macosx14.0', '-swift-version', '6']
     # A standalone executable exercises production model/navigation code without
     # depending on the broken Swift Testing integration in some CLT releases.
     contracts = output / 'companion-contracts'
