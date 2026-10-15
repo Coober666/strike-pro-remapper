@@ -1,0 +1,36 @@
+name: Native Strike companion
+
+on:
+  push:
+    paths: ['native/StrikeCompanion/**', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+  pull_request:
+    paths: ['native/StrikeCompanion/**', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native-companion:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Export format parity
+        run: python tools/test_companion_format.py
+      - name: Native contracts and app bundle
+        shell: bash
+        run: |
+          set -o pipefail
+          python tools/build_macos_companion.py --output "$RUNNER_TEMP/strike-companion" --revision "$GITHUB_SHA" 2>&1 | tee "$RUNNER_TEMP/companion-build.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-strike-companion
+          path: |
+            ${{ runner.temp }}/strike-companion/*.zip
+            ${{ runner.temp }}/strike-companion/build-receipt.json
+            ${{ runner.temp }}/companion-build.log
+          retention-days: 14

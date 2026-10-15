@@ -1,0 +1,13 @@
+{
+  "format": "strike-setlist",
+  "version": 1,
+  "name": "Friday rehearsal",
+  "notes": "Demo setlist — fictional songs and kit references.\nRun the transitions before the full set.",
+  "numbered": true,
+  "entries": [
+    {"song": "Soundcheck", "kit": "Rehearsal/Studio.skt", "output": "Soundcheck", "notes": "Start with kick and snare.\nCheck the monitor mix before counting in."},
+    {"song": "Paper Satellites", "kit": "Rehearsal/Room.skt", "output": "Satellites", "notes": "Four-count intro.\nKeep the first verse light; open the hats for the chorus."},
+    {"song": "After the Last Train", "kit": "Rehearsal/Brushes.skt", "output": "Last Train", "notes": "Let the ending ring out.\nPause here for the guitar change."},
+    {"song": "Lights on the Water", "kit": "Rehearsal/Arena.skt", "output": "Lights", "notes": "Watch for the final double chorus.\nFinish together on the cue."}
+  ]
+}
