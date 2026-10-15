@@ -962,3 +962,7 @@ data-host-midi marker and host input/setup controls. Query strings do not bypass
 
 _Server uses a backlog of 64 for parallel toolkit module loads over the LAN;
 macOS with the default five showed connection resets during real browser checks.
+Its server_bind calls TCPServer's binding implementation and retains the actual
+bound address/port instead of HTTPServer's blocking reverse-DNS display-name lookup.
+test_host_launcher rejects any getfqdn call for local and paired starts; the beta
+subprocess prints bounded thread stacks if its existing 20-second deadline expires.

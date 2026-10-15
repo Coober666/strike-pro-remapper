@@ -49,6 +49,8 @@ see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
 **Host setup check** reports missing MIDI support, driver errors and visible inputs.
 The launcher demo retains host MIDI access after Wi-Fi pairing; the host accepts
 parallel toolkit asset loads over the LAN.
+Editor startup uses the bound address directly, so an unavailable reverse-DNS
+resolver cannot stall starting the offline host.
 [Mac + Strike acceptance](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md) verifies live
 CoreMIDI capture, idle capture lease/ownership/reopen behavior, and factory/user-card
 discovery; Windows hardware acceptance remains open.

@@ -115,6 +115,18 @@ class HostTests(unittest.TestCase):
         self.assertFalse(other.running)
         self.assertTrue(self.host.running)
 
+    def test_numeric_bind_does_not_require_reverse_dns(self):
+        # HTTPServer normally resolves its display name during bind. DNS must
+        # not gate an offline editor, including the paired loopback test host.
+        for bind in (None, '127.0.0.1'):
+            with self.subTest(bind=bind), patch('socket.getfqdn', side_effect=AssertionError('Unexpected reverse DNS')):
+                self.host.start(self.tmp.name, bind=bind, port=0)
+                self.assertEqual(self.host.server.server_name, '127.0.0.1')
+                self.assertGreater(self.host.server.server_port, 0)
+                self.assertEqual(self.host.server.server_port, self.host.server.socket.getsockname()[1])
+                self.assertEqual(self.request('/wifi/pair' if bind else '/api/session')[0], 200)
+                self.host.stop()
+
     def test_wrong_library_selection_suggests_parent_without_creating_nested_files(self):
         root = Path(self.tmp.name)
         (root / 'kits').mkdir()
