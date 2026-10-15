@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tools.build_beta import build, PREFIX
 
 PROBE = r'''
-import http.client, json, sys
+import faulthandler, http.client, json, sys
+faulthandler.dump_traceback_later(8, repeat=True)
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
@@ -64,8 +65,14 @@ class BetaPackageTests(unittest.TestCase):
                 self.assertNotIn(b'\r', archive.read(command))
                 archive.extractall(base / 'Relocated application')
             root = base / 'Relocated application' / PREFIX
-            result = subprocess.run([sys.executable, '-c', PROBE, str(root), str(base / 'External library')],
-                                    cwd=base, capture_output=True, text=True, timeout=20)
+            try:
+                result = subprocess.run([sys.executable, '-c', PROBE, str(root), str(base / 'External library')],
+                                        cwd=base, capture_output=True, text=True, timeout=20)
+            except subprocess.TimeoutExpired as exc:
+                diagnostic = exc.stderr or b''
+                if isinstance(diagnostic, bytes):
+                    diagnostic = diagnostic.decode('utf-8', errors='replace')
+                self.fail('Extracted beta exceeded 20 seconds. Child stacks:\n' + diagnostic)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             with self.assertRaises(FileExistsError):
                 build(first)

@@ -27,6 +27,7 @@ import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, quote, urlparse
 from strike_remapper.balance import analyze as analyze_balance, selected_changes as balance_changes, preview as balance_preview
 from strike_remapper.runtime import worker_command, hidden_process, UTILITIES
@@ -12731,6 +12732,12 @@ class _Server(ThreadingHTTPServer):
     # connection (macOS raises EADDRINUSE). Disable it there; the explicit
     # TIME_WAIT rebind it enables on POSIX doesn't apply to Windows anyway.
     allow_reuse_address = platform.system() != 'Windows'
+
+    def server_bind(self):
+        # HTTPServer's display-name reverse lookup can block offline startup
+        # (observed in macOS CI). Bind normally, then keep the actual address.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def server_close(self):
         try:
