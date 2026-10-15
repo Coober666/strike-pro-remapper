@@ -39,6 +39,13 @@ def valid_host(value):
     return value
 
 
+def ssh_script(host, arguments, script, timeout):
+    # Binary stdin prevents Windows subprocess text mode from converting LF to
+    # CRLF, which changes shell options and can create names ending in CR.
+    return subprocess.run(['ssh', *SSH_OPTIONS, host, 'bash -s -- ' + ' '.join(arguments)],
+                          input=script.encode('utf-8'), check=True, timeout=timeout)
+
+
 def verify_receipt(folder, revision):
     receipt = json.loads((folder / 'build-receipt.json').read_text(encoding='utf-8'))
     artifact = folder / ARTIFACT
@@ -74,14 +81,12 @@ def execute(args):
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     remote = 'Developer/Builds/strike-companion/' + run_id
     print(f'Building {revision} on {host}; remote directory ~/{remote}', flush=True)
-    subprocess.run(['ssh', *SSH_OPTIONS, host, 'bash -s -- ' + run_id], input=PREPARE,
-                   text=True, check=True, timeout=45)
+    ssh_script(host, [run_id], PREPARE, timeout=45)
     subprocess.run(['scp', *SSH_OPTIONS, str(archive), host + ':' + remote + '/source.tar'],
                    check=True, timeout=120)
     failure = None
     try:
-        subprocess.run(['ssh', *SSH_OPTIONS, host, f'bash -s -- {run_id} {revision} {digest}'],
-                       input=BUILD, text=True, check=True, timeout=900)
+        ssh_script(host, [run_id, revision, digest], BUILD, timeout=900)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         failure = error
     # Always attempt log retrieval, including when compiler/tests fail.

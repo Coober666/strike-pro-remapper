@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('build_on_mac', Path(__file__).with_name('build_on_mac.py'))
 module = importlib.util.module_from_spec(spec)
@@ -12,6 +13,14 @@ spec.loader.exec_module(module)
 
 
 class MacBuildTests(unittest.TestCase):
+    def test_shell_stdin_is_binary_to_preserve_unix_newlines(self):
+        with patch.object(module.subprocess, 'run') as run:
+            module.ssh_script('mac-mini', ['a'*24], module.PREPARE, 45)
+        options = run.call_args.kwargs
+        self.assertIsInstance(options['input'], bytes)
+        self.assertNotIn(b'\r', options['input'])
+        self.assertNotIn('text', options)
+
     def test_host_is_not_a_shell_or_ssh_option(self):
         for value in ['mac-mini', '192.168.1.192', 'mac.example.net']:
             self.assertEqual(module.valid_host(value), value)
