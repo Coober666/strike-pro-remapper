@@ -452,7 +452,7 @@ JavaScript linting and real-browser regression tests:
 ```bash
 npm ci
 npm run lint:js
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run test:browser
 ```
 
@@ -460,6 +460,8 @@ The browser suite runs the real embedded application against a throwaway library
 `.build/`; it does not access connected Strike cards or your working library. See
 [`docs/ARCHITECTURE_STABILIZATION.md`](docs/ARCHITECTURE_STABILIZATION.md) for the phased
 stabilization and decomposition roadmap.
+On macOS, the test launcher disables WebKit window animations for that process so
+long runs can finish with the display asleep; your saved macOS preferences stay unchanged.
 
 ## Release preparation tools
 

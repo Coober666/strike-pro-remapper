@@ -1,4 +1,5 @@
-import { defineConfig, devices } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, devices, webkit } from '@playwright/test';
 
 const port = 8767;
 
@@ -24,7 +25,17 @@ export default defineConfig({
     {
       name: 'ipad-webkit',
       testMatch: ['**/factory-controller.spec.js', '**/wifi-editor.spec.js', '**/workflow-polish.spec.js', '**/zz-recovery-touch.spec.js', '**/midi-toolkit.spec.js', '**/wifi-midi.spec.js', '**/zz-setlists.spec.js', '**/zzz-release-polish.spec.js'],
-      use: { ...devices['iPad Pro 11'], browserName: 'webkit' }
+      use: {
+        ...devices['iPad Pro 11'],
+        browserName: 'webkit',
+        // Sleeping macOS displays can strand AppKit window-animation threads in
+        // long WebKit runs: https://github.com/microsoft/playwright/issues/42385
+        // Pass the preference to this browser only; do not change user defaults.
+        launchOptions: process.platform === 'darwin' ? {
+          executablePath: fileURLToPath(new URL('./tools/playwright-webkit-macos.sh', import.meta.url)),
+          env: { ...process.env, STRIKE_PLAYWRIGHT_WEBKIT: webkit.executablePath() }
+        } : {}
+      }
     }
   ]
 });

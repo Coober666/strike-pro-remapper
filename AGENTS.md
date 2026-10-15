@@ -217,6 +217,9 @@ runs `tools/test_host_window.py` against real Tk widgets and a disposable loopba
 Native WebKit downloads on macOS may decompose Unicode filenames: browser assertions
 compare NFC-normalized names. Release-polish paired tests log out in afterEach using
 the request context so failed assertions or aborted page routes cannot retain ownership.
+On macOS, the WebKit test project passes -NSAutomaticWindowAnimationsEnabled NO
+to its browser process. This avoids the sleeping-display animation thread hang in
+Playwright issue #42385 without changing system/user defaults or retrying navigation.
 If the post-drain recovery flush fails, `Host.recovery_pending` retains the worker and
 active kit. Retry Stop flushes again; start cannot switch libraries until this succeeds.
 The window offers Retry recovery save and keeps closing blocked while recovery fails.
