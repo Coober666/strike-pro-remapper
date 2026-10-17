@@ -111,8 +111,15 @@ final class CompanionUITests: XCTestCase {
         app.buttons["next"].tap()
         app.buttons["import"].tap()
         let cancel = app.buttons["Cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        // Files is a separate system service; first launch on a clean hosted
+        // simulator can leave its remote view blank for more than ten seconds.
+        XCTAssertTrue(cancel.waitForExistence(timeout: 30))
         cancel.tap()
+        let dismissed = NSPredicate { _, _ in
+            !cancel.exists && app.buttons["import"].isEnabled
+        }
+        expectation(for: dismissed, evaluatedWith: nil)
+        waitForExpectations(timeout: 15)
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }

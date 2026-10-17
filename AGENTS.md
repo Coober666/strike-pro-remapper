@@ -1011,6 +1011,8 @@ that were not already booted when the helper started, including after failure;
 never shut down a preexisting user simulator. Lifecycle tests mock device access.
 Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
 OS sysdiagnose capture, which can outlast the CI job after an automation failure.
+Files-picker UI checks allow 30 seconds for the OS service's first launch, then
+require dismissal, Import re-enablement and selected-song retention after Cancel.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

@@ -120,3 +120,8 @@ this launch operation checks acceptance/rejection and source-byte preservation.
 Active-session selected-song retention remains covered by the production model
 tests and attended iPhone checks. Ordinary failure screenshots/logs/xcresult data
 remain enabled, while verbose OS sysdiagnose capture is disabled.
+
+The explicitly targeted file test passed in CI. A subsequent failure snapshot
+showed the native Files picker's remote view still blank at the ten-second
+startup deadline. Its test now allows a bounded 30-second OS-service startup and
+checks that Cancel dismisses the picker, re-enables Import and retains the song.
