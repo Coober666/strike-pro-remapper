@@ -43,6 +43,8 @@ The output directory must be new. This selects one installed iPhone and iPad fro
 the newest complete runtime pair supported by the selected Xcode simulator SDK,
 builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bundles
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
+Each test has a three-minute execution allowance so a stalled UI test fails with
+diagnostics before the overall CI job expires.
 Use `--device <simulator-UUID>` (repeatable) to select specific installed devices.
 The helper rejects input changes during a run and never downloads runtimes or configures signing. To list devices:
 

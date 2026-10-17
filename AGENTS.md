@@ -999,6 +999,9 @@ supported by the selected SDK; tests in `tools/test_ios_build.py` never access d
 Keep rejection, selected-song retention and source-byte assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
 the nested accessibility buttons produced by a framed image label on iOS 18.
+The search UI workflow submits its query before selection so a wide-iPad keyboard
+does not retain animation-idle waits during later toolbar actions. Each test has
+a 180-second execution allowance, keeping stalled UI diagnostics within the CI job.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

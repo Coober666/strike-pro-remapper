@@ -24,7 +24,7 @@ final class CompanionUITests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
-        search.typeText("guitar")
+        search.typeText("guitar\n")
         XCTAssertTrue(app.buttons["song-2"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["song-0"].exists)
         app.buttons["song-2"].tap()

@@ -66,7 +66,9 @@ def main():
         command = ['xcodebuild', 'test', '-project', str(root / 'native/StrikeCompanioniOS/StrikeCompanion.xcodeproj'),
                    '-scheme', 'StrikeCompanion', '-destination', f'platform=iOS Simulator,id={device}',
                    '-derivedDataPath', str(output / 'DerivedData'), '-resultBundlePath', str(result),
-                   '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=NO']
+                   '-parallel-testing-enabled', 'NO', '-test-timeouts-enabled', 'YES',
+                   '-default-test-execution-time-allowance', '180',
+                   '-maximum-test-execution-time-allowance', '180', 'CODE_SIGNING_ALLOWED=NO']
         print(f'Testing simulator {device}; log: {log}', flush=True)
         with log.open('w') as stream:
             completed = subprocess.run(command, cwd=root, stdout=stream, stderr=subprocess.STDOUT)

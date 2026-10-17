@@ -94,3 +94,13 @@ complete iPhone/iPad runtime pair supported by the selected SDK, rather than
 silently testing the first (possibly older) runtime. Three device-free helper
 selection tests cover SDK bounds, runtime pairing, unavailable devices and failure
 when no compatible pair exists.
+
+A supplemental local wide-iPad run was stopped after repeated 60-second animation
+waits following an unsubmitted search. It is not a passing full-suite result, and
+its receipt also rejects source edits made while it ran. The search workflow now
+submits its query before selecting a result. The same wide-iPad search,
+navigation, performance and rotation test then passed in 32 seconds; evidence is
+`.build/ci-pr75-fix-validation/submitted-search-ipad.log` and its `.xcresult`.
+Every test now has a 180-second execution allowance to retain diagnostics before
+the CI job's overall timeout. These changes do not disable app animations or add
+test-only app entry points.
