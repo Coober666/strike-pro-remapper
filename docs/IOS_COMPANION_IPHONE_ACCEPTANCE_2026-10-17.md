@@ -23,6 +23,8 @@ This is limited acceptance of the steps below, not full physical-device acceptan
   invalid test file was rejected and the open setlist was retained. After
   dismissing the error, the owner confirmed the same song and position, with
   **Watch for the final chorus. / Let the last note ring.** still displayed.
+- The owner chose **Notes size → Extra large** and confirmed that the performance
+  notes became larger and remained readable on the physical iPhone.
 
 Ignored local evidence lives under `.build/ios-device-20261017/`: build log,
 install/launch JSON and the signed development app under `DerivedData/`.
@@ -37,7 +39,7 @@ expiry. It is not an App Store, TestFlight or distribution release.
 
 ## Still to check
 
-Import through the in-app Files picker, search, notes sizes, performance view,
+Import through the in-app Files picker, search, performance view,
 rotation, backgrounding and VoiceOver remain
 unverified. Physical iPad behavior is also unverified. The companion is read-only,
 keeps current content for the app session, and never checks kit availability or

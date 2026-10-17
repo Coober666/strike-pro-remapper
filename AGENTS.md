@@ -993,7 +993,8 @@ separate attended checks; guide necessary owner steps one at a time.
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic
 AirDrop/Open In import, plus rejection of an invalid file retaining the open set,
-selected song and displayed performance notes. Files-picker imports,
+selected song and displayed performance notes. Extra-large notes were confirmed
+readable on the iPhone. Files-picker imports,
 physical iPad and accessibility acceptance remain separate; see
 `docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md`. Keep local device/signing
 metadata and owner-selected Xcode settings out of documentation commits.
