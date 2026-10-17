@@ -1,6 +1,8 @@
 """Simulator selection contracts; no Xcode or device access."""
 import json
+import io
 import unittest
+import subprocess
 from unittest.mock import patch
 
 import build_ios_companion
@@ -35,6 +37,24 @@ class SimulatorSelectionTests(unittest.TestCase):
     def test_missing_compatible_pair_fails_before_build(self):
         with self.assertRaisesRegex(ValueError, 'both an iPhone and iPad'):
             self.select({'com.apple.CoreSimulator.SimRuntime.iOS-27-0': pair('future')}, '26.2')
+
+
+class SimulatorLifecycleTests(unittest.TestCase):
+    def test_preserves_preexisting_booted_simulator_on_failure(self):
+        with patch('build_ios_companion.subprocess.run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'test failed'):
+                with build_ios_companion.ready_simulator('test-device', io.StringIO(), True):
+                    raise RuntimeError('test failed')
+        self.assertEqual(run.call_count, 1)
+
+    def test_cleans_up_owned_simulator_even_if_startup_fails(self):
+        with patch('build_ios_companion.subprocess.run', side_effect=[
+                subprocess.TimeoutExpired('bootstatus', 300),
+                subprocess.CompletedProcess('shutdown', 0)]) as run:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                with build_ios_companion.ready_simulator('test-device', io.StringIO(), False):
+                    self.fail('Startup failure must prevent testing')
+        self.assertEqual(run.call_args.args[0], ['xcrun', 'simctl', 'shutdown', 'test-device'])
 
 
 if __name__ == '__main__':

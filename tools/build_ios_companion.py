@@ -6,6 +6,7 @@ Without --device, choose an iPhone/iPad pair from the newest installed iOS runti
 supported by the selected Xcode simulator SDK. Never mix runtime versions.
 """
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -13,9 +14,13 @@ import subprocess
 import sys
 
 
-def simulator_ids():
-    inventory = json.loads(subprocess.check_output(
+def simulator_inventory():
+    return json.loads(subprocess.check_output(
         ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], text=True))
+
+
+def simulator_ids():
+    inventory = simulator_inventory()
     sdk = tuple(map(int, subprocess.check_output(
         ['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip().split('.')))
     sdk = (sdk + (0, 0, 0))[:3]
@@ -36,6 +41,24 @@ def simulator_ids():
     raise ValueError('No installed iOS runtime compatible with this Xcode SDK has both an iPhone and iPad simulator. Install one in Xcode first.')
 
 
+@contextmanager
+def ready_simulator(device, stream, already_booted):
+    """Wait for startup and release only a simulator this run needed to boot."""
+    try:
+        subprocess.run(['xcrun', 'simctl', 'bootstatus', device, '-b'], stdout=stream,
+                       stderr=subprocess.STDOUT, check=True, timeout=300)
+        yield
+    finally:
+        if not already_booted:
+            try:
+                result = subprocess.run(['xcrun', 'simctl', 'shutdown', device], stdout=stream,
+                                        stderr=subprocess.STDOUT, timeout=60)
+                if result.returncode:
+                    print(f'Could not shut down test simulator {device}; see its log.', file=sys.stderr)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                print(f'Could not shut down test simulator {device}: {error}', file=sys.stderr)
+
+
 def source_hashes(root):
     inputs = [path for folder in ('native/StrikeCompanion', 'native/StrikeCompanioniOS')
               for path in (root / folder).rglob('*')
@@ -54,6 +77,8 @@ def main():
         parser.error('Use macOS with full Xcode and installed iOS simulators.')
     root = Path(__file__).resolve().parent.parent
     devices = args.device or simulator_ids()
+    booted = {item['udid'] for group in simulator_inventory()['devices'].values()
+              for item in group if item['state'] == 'Booted'}
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     version = subprocess.check_output(['xcodebuild', '-version'], text=True).strip()
@@ -70,7 +95,7 @@ def main():
                    '-default-test-execution-time-allowance', '180',
                    '-maximum-test-execution-time-allowance', '180', 'CODE_SIGNING_ALLOWED=NO']
         print(f'Testing simulator {device}; log: {log}', flush=True)
-        with log.open('w') as stream:
+        with log.open('w') as stream, ready_simulator(device, stream, device in booted):
             completed = subprocess.run(command, cwd=root, stdout=stream, stderr=subprocess.STDOUT)
         runs.append({'device': device, 'exit_code': completed.returncode, 'log': log.name, 'result': result.name})
         unchanged = hashes == source_hashes(root)

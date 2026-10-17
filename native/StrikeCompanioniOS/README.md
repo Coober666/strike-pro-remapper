@@ -45,6 +45,9 @@ builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bund
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
 Each test has a three-minute execution allowance so a stalled UI test fails with
 diagnostics before the overall CI job expires.
+The helper waits for each simulator to finish booting before testing. It shuts
+down simulators it needed to start between runs, including on failure, and
+preserves any simulator that was already booted when the helper started.
 Use `--device <simulator-UUID>` (repeatable) to select specific installed devices.
 The helper rejects input changes during a run and never downloads runtimes or configures signing. To list devices:
 

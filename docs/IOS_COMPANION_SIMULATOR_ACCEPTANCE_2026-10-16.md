@@ -104,3 +104,10 @@ navigation, performance and rotation test then passed in 32 seconds; evidence is
 Every test now has a 180-second execution allowance to retain diagnostics before
 the CI job's overall timeout. These changes do not disable app animations or add
 test-only app entry points.
+
+The cancelled Xcode 27 CI artifact confirmed successful import/rejection UI tests
+on both devices, with all iPhone tests passing. Its iPad failure was the first
+app launch timing out on a cold simulator; the remaining iPad UI tests passed.
+The helper now explicitly waits for simulator boot readiness and shuts down only
+simulators it needed to start between device runs. Preexisting booted simulators
+are preserved. Two device-free lifecycle tests cover ownership and failure cleanup.
