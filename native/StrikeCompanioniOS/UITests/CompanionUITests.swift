@@ -63,17 +63,20 @@ final class CompanionUITests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: file) }
         let valid = Data(#"{"format":"strike-setlist","version":1,"name":"UI imported show","numbered":false,"entries":[{"kit":"UI.skt","song":"Imported opener","notes":"Four count"}]}"#.utf8)
         try valid.write(to: file)
-        app.open(file)
+        // Route the document through the OS. Xcode 16's app.open(file) relaunches
+        // the app without delivering the file URL to its scene.
+        XCUIDevice.shared.system.open(file)
+        app.activate()
         let imported = app.staticTexts["Imported opener"]
         XCTAssertTrue(imported.waitForExistence(timeout: 10))
         let invalid = Data("not JSON".utf8)
         try invalid.write(to: file)
-        // XCUIApplication.open is a launch operation, so it may start a new process.
-        // Active-session preservation is tested against the production model separately.
-        app.open(file)
+        XCUIDevice.shared.system.open(file)
+        app.activate()
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10))
         app.alerts.buttons["OK"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Imported opener")
         XCTAssertEqual(try Data(contentsOf: file), invalid)
     }
 

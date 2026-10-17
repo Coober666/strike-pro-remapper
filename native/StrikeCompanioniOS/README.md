@@ -53,8 +53,9 @@ Tests use the shared Python/Swift format cases and bundled fictional demo. They
 cover bounded file imports, successful replacement, failed-import preservation,
 empty lists, original-order navigation, search, note size, performance view,
 rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open In
-UI automation is a launch operation; active-session failed-import retention is
-covered against the production model. Simulator evidence does not establish physical
+UI tests route documents through the system rather than Xcode's app-launch API,
+and assert that a rejected import preserves the selected song. Model tests also
+cover failed-import retention. Simulator evidence does not establish physical
 Files/iCloud/AirDrop, signing, VoiceOver, or distance-reading acceptance.
 
 ## Physical device setup, after simulator validation

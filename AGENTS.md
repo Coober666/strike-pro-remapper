@@ -989,6 +989,11 @@ simulators, records source hashes/logs/xcresult screenshots and never sets up
 signing, installs dependencies or touches physical devices. Tests use shared
 synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
 separate attended checks; guide necessary owner steps one at a time.
+Open In UI tests use `XCUIDevice.shared.system.open` for OS document delivery;
+Xcode 16's `XCUIApplication.open(file)` launches without delivering the file URL.
+Keep rejection, selected-song retention and source-byte assertions. Reading options
+uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
+the nested accessibility buttons produced by a framed image label on iOS 18.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

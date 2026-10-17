@@ -64,3 +64,21 @@ Device setup follows simulator validation and requires owner actions one at a
 time. The app remains an offline, read-only reference viewer; it never verifies
 kit availability, loads sounds, controls the module, or sends MIDI. Imported
 content and display preferences are held for the current app session only.
+
+## October 17 CI follow-up
+
+The first PR #75 CI run used Xcode 16.4 / iOS 18.5 and failed two iPhone UI tests.
+Its diagnostics show `XCUIApplication.open(file)` relaunching the app without
+delivering the file URL, and the framed image Menu label exposing nested buttons
+whose outer accessibility element could not be tapped. Unit tests and the other
+UI tests passed; the helper stopped before the iPad run.
+
+The import UI test now uses `XCUIDevice.shared.system.open` to route the document
+through the OS and additionally checks selected-song retention after rejection.
+Reading options uses SwiftUI's standard labelled Menu with an icon-only display.
+Both affected tests passed locally on the installed iPhone 17e / iOS 27.0
+simulator with Xcode 27.1. Logs and results are retained in
+`.build/ci-pr75-fix-validation/targeted-iphone-2.log` and its `.xcresult` bundle.
+The initial targeted invocation selected zero tests; only the corrected run's
+two executed tests count as validation. Remote results for the fix are recorded
+by the PR checks, separately from these local results.

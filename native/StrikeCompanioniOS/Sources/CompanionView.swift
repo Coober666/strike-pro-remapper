@@ -103,7 +103,7 @@ struct MobileCompanionView: View {
     }
 
     private var displayMenu: some View {
-        Menu {
+        Menu("Reading options", systemImage: "textformat.size") {
             Button { model.performanceMode.toggle() } label: {
                 Label(model.performanceMode ? "Leave performance view" : "Performance view", systemImage: "arrow.up.left.and.arrow.down.right")
             }.accessibilityIdentifier("performance")
@@ -113,7 +113,9 @@ struct MobileCompanionView: View {
                 Text("Extra large").tag(1.6)
             }
             Button("Try demo", action: model.showDemo).disabled(model.isLoading || model.choosingFile)
-        } label: { Image(systemName: "textformat.size").frame(minWidth: 44, minHeight: 44) }
+        }
+            .labelStyle(.iconOnly)
+            .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("Reading options").accessibilityIdentifier("reading-options")
     }
 
