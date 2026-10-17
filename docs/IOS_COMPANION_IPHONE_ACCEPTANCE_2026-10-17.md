@@ -16,6 +16,9 @@ This is limited acceptance of the steps below, not full physical-device acceptan
   developer trust. After the owner completed trust, the second launch succeeded.
 - The owner tapped **Try demo** and confirmed **Soundcheck / Song 1 of 4**.
 - The owner confirmed that **Next** and **Previous** work on the physical phone.
+- A validated two-song synthetic version-1 JSON document was transferred by
+  AirDrop and opened in Strike Companion. The owner confirmed **Imported opener /
+  Song 1 of 2**, establishing physical Open In import acceptance.
 
 Ignored local evidence lives under `.build/ios-device-20261017/`: build log,
 install/launch JSON and the signed development app under `DerivedData/`.
@@ -30,13 +33,13 @@ expiry. It is not an App Store, TestFlight or distribution release.
 
 ## Still to check
 
-Physical JSON import through Files/Open In, rejected-import preservation, search,
+Import through the in-app Files picker, rejected-import preservation, search,
 notes sizes, performance view, rotation, backgrounding and VoiceOver remain
 unverified. Physical iPad behavior is also unverified. The companion is read-only,
 keeps current content for the app session, and never checks kit availability or
 communicates with the Strike module.
 
-A two-song synthetic import document is prepared locally in
+A two-song synthetic import document is retained locally in
 `.build/ios-device-20261017/import-fixtures/Strike-Companion-Import-Check.json`.
 It uses the unchanged version-1 format and passes the Python setlist validator.
-Preparation is not evidence that transfer or import worked.
+The confirmed AirDrop/Open In flow does not establish Files-provider behavior.
