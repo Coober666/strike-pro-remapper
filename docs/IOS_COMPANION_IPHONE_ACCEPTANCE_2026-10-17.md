@@ -19,6 +19,9 @@ This is limited acceptance of the steps below, not full physical-device acceptan
 - A validated two-song synthetic version-1 JSON document was transferred by
   AirDrop and opened in Strike Companion. The owner confirmed **Imported opener /
   Song 1 of 2**, establishing physical Open In import acceptance.
+- The owner selected **Imported finale / Song 2 of 2**, then reported that the
+  invalid test file was rejected and the open setlist was retained. The selected
+  song after rejection and its displayed notes still need explicit confirmation.
 
 Ignored local evidence lives under `.build/ios-device-20261017/`: build log,
 install/launch JSON and the signed development app under `DerivedData/`.
@@ -33,7 +36,7 @@ expiry. It is not an App Store, TestFlight or distribution release.
 
 ## Still to check
 
-Import through the in-app Files picker, rejected-import preservation, search,
+Import through the in-app Files picker, selected-song preservation after rejection, search,
 notes sizes, performance view, rotation, backgrounding and VoiceOver remain
 unverified. Physical iPad behavior is also unverified. The companion is read-only,
 keeps current content for the app session, and never checks kit availability or
@@ -43,3 +46,6 @@ A two-song synthetic import document is retained locally in
 `.build/ios-device-20261017/import-fixtures/Strike-Companion-Import-Check.json`.
 It uses the unchanged version-1 format and passes the Python setlist validator.
 The confirmed AirDrop/Open In flow does not establish Files-provider behavior.
+The invalid companion fixture, `Strike-Companion-Rejection-Check.json` in the
+same local folder, contains a traversal kit reference and is rejected by the
+Python setlist validator.
