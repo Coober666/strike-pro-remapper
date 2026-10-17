@@ -20,8 +20,9 @@ This is limited acceptance of the steps below, not full physical-device acceptan
   AirDrop and opened in Strike Companion. The owner confirmed **Imported opener /
   Song 1 of 2**, establishing physical Open In import acceptance.
 - The owner selected **Imported finale / Song 2 of 2**, then reported that the
-  invalid test file was rejected and the open setlist was retained. The selected
-  song after rejection and its displayed notes still need explicit confirmation.
+  invalid test file was rejected and the open setlist was retained. After
+  dismissing the error, the owner confirmed the same song and position, with
+  **Watch for the final chorus. / Let the last note ring.** still displayed.
 
 Ignored local evidence lives under `.build/ios-device-20261017/`: build log,
 install/launch JSON and the signed development app under `DerivedData/`.
@@ -36,8 +37,8 @@ expiry. It is not an App Store, TestFlight or distribution release.
 
 ## Still to check
 
-Import through the in-app Files picker, selected-song preservation after rejection, search,
-notes sizes, performance view, rotation, backgrounding and VoiceOver remain
+Import through the in-app Files picker, search, notes sizes, performance view,
+rotation, backgrounding and VoiceOver remain
 unverified. Physical iPad behavior is also unverified. The companion is read-only,
 keeps current content for the app session, and never checks kit availability or
 communicates with the Strike module.
