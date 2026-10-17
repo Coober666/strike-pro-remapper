@@ -989,14 +989,18 @@ simulators, records source hashes/logs/xcresult screenshots and never sets up
 signing, installs dependencies or touches physical devices. Tests use shared
 synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
 separate attended checks; guide necessary owner steps one at a time.
-Open In UI tests use `XCUIDevice.shared.system.open` for OS document delivery.
-Xcode 16's app URL launch drops the file URL; system URL opening times out on
-Xcode 16/26. Only that UI test explicitly skips on their older compilers. The Xcode 27 CI matrix
+Open In UI tests target the viewer explicitly with `XCUIApplication.open` on
+Xcode 27; default-app file dispatch can time out in hosted simulators. This is a
+launch operation, so active-session retention is covered by model tests and the
+attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
+opening times out on Xcode 16/26. Only that UI test explicitly skips on their
+older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
 The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
 Default simulator selection uses the newest installed iPhone/iPad runtime pair
 supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
-Keep rejection, selected-song retention and source-byte assertions. Reading options
+Keep import/rejection and source-byte UI assertions, plus selected-song retention
+model assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
 the nested accessibility buttons produced by a framed image label on iOS 18.
 The search UI workflow submits its query before selection so a wide-iPad keyboard
@@ -1005,6 +1009,8 @@ a 180-second execution allowance, keeping stalled UI diagnostics within the CI j
 Before each device run, wait for `simctl bootstatus -b`. Shut down only devices
 that were not already booted when the helper started, including after failure;
 never shut down a preexisting user simulator. Lifecycle tests mock device access.
+Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
+OS sysdiagnose capture, which can outlast the CI job after an automation failure.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

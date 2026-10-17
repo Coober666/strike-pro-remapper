@@ -45,6 +45,8 @@ builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bund
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
 Each test has a three-minute execution allowance so a stalled UI test fails with
 diagnostics before the overall CI job expires.
+Ordinary logs, screenshots and test results are retained; verbose OS sysdiagnose
+capture is disabled because it can exhaust the job after an automation timeout.
 The helper waits for each simulator to finish booting before testing. It shuts
 down simulators it needed to start between runs, including on failure, and
 preserves any simulator that was already booted when the helper started.
@@ -59,9 +61,10 @@ Tests use the shared Python/Swift format cases and bundled fictional demo. They
 cover bounded file imports, successful replacement, failed-import preservation,
 empty lists, original-order navigation, search, note size, performance view,
 rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open In
-UI tests route documents through the system rather than Xcode's app-launch API,
-and assert that a rejected import preserves the selected song. Model tests also
-cover failed-import retention. CI runs Xcode 16.4 and 27 separately. Xcode 16/26's
+UI tests explicitly target Strike Companion using Xcode 27's app-launch API;
+default-app file dispatch can time out on hosted simulators. Because the API
+relaunches the app, active-session import retention is covered by model tests and
+the attended iPhone check. CI runs Xcode 16.4 and 27 separately. Xcode 16/26's
 file-URL automation drops the document or times out, so only that Open In UI test
 explicitly skips on their older compilers; Xcode 27 must execute it. The modern
 job uses GitHub's `xcode-27` preview runner and its bundled toolchain/runtime.

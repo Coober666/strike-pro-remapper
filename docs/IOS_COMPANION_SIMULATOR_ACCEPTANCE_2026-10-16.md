@@ -111,3 +111,12 @@ app launch timing out on a cold simulator; the remaining iPad UI tests passed.
 The helper now explicitly waits for simulator boot readiness and shuts down only
 simulators it needed to start between device runs. Preexisting booted simulators
 are preserved. Two device-free lifecycle tests cover ownership and failure cleanup.
+
+On `3ddd575`, the Xcode 27 push job passed all 16 tests with no skips and unchanged
+source hashes. The duplicate PR job instead timed out in default-app file dispatch
+and spent its remaining job allowance collecting verbose diagnostics. The final
+test targets Strike Companion explicitly with Xcode 27's `XCUIApplication.open`;
+this launch operation checks acceptance/rejection and source-byte preservation.
+Active-session selected-song retention remains covered by the production model
+tests and attended iPhone checks. Ordinary failure screenshots/logs/xcresult data
+remain enabled, while verbose OS sysdiagnose capture is disabled.

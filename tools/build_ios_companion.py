@@ -92,6 +92,7 @@ def main():
                    '-scheme', 'StrikeCompanion', '-destination', f'platform=iOS Simulator,id={device}',
                    '-derivedDataPath', str(output / 'DerivedData'), '-resultBundlePath', str(result),
                    '-parallel-testing-enabled', 'NO', '-test-timeouts-enabled', 'YES',
+                   '-collect-test-diagnostics', 'never',
                    '-default-test-execution-time-allowance', '180',
                    '-maximum-test-execution-time-allowance', '180', 'CODE_SIGNING_ALLOWED=NO']
         print(f'Testing simulator {device}; log: {log}', flush=True)
