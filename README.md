@@ -461,7 +461,8 @@ test with installed simulators before physical-device setup. On October 17, basi
 [physical iPhone launch, navigation and AirDrop/Open In import](docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md)
 were confirmed; Files-picker imports, iPad behavior and accessibility acceptance remain pending.
 An invalid import also preserved the current setlist, selected song and performance notes
-on the physical iPhone.
+on the physical iPhone. Extra-large notes remained readable in portrait and landscape,
+with Previous/Next visible after rotation.
 
 ## Contributing
 

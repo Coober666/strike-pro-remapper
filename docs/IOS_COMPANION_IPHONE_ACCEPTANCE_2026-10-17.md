@@ -25,6 +25,9 @@ This is limited acceptance of the steps below, not full physical-device acceptan
   **Watch for the final chorus. / Let the last note ring.** still displayed.
 - The owner chose **Notes size → Extra large** and confirmed that the performance
   notes became larger and remained readable on the physical iPhone.
+- With extra-large notes selected, the owner rotated the phone to landscape and
+  confirmed that the layout rotated, notes remained readable, and **Previous**
+  and **Next** remained visible.
 
 Ignored local evidence lives under `.build/ios-device-20261017/`: build log,
 install/launch JSON and the signed development app under `DerivedData/`.
@@ -39,9 +42,9 @@ expiry. It is not an App Store, TestFlight or distribution release.
 
 ## Still to check
 
-Import through the in-app Files picker, search, performance view,
-rotation, backgrounding and VoiceOver remain
-unverified. Physical iPad behavior is also unverified. The companion is read-only,
+Import through the in-app Files picker, search, performance view, backgrounding
+and VoiceOver remain unverified on hardware. Physical iPad behavior is also
+unverified. The companion is read-only,
 keeps current content for the app session, and never checks kit availability or
 communicates with the Strike module.
 

@@ -53,6 +53,11 @@ python3 tools/build_ios_companion.py --output .build/ios-validation-new
 
 ## Remaining attended checks
 
+Subsequent [October 17 iPhone checks](IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md)
+record development installation, AirDrop/Open In import, safe rejection,
+navigation, extra-large notes and rotation on hardware. The list below records
+what remained unverified at the end of this simulator run.
+
 Physical-device installation/signing, actual Files providers/iCloud/AirDrop,
 VoiceOver, distance reading, and real-device backgrounding remain unverified.
 Device setup follows simulator validation and requires owner actions one at a

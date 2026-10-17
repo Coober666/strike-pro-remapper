@@ -72,6 +72,9 @@ using a personal show. Developer account and device prompts require the owner.
 [Initial iPhone acceptance, October 17](../../docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md)
 records a successful signed development install, launch and owner-confirmed demo
 Previous/Next plus a synthetic AirDrop/Open In import on iPhone 17 / iOS 26.6.2.
+The owner also confirmed that invalid imports preserve the selected song and
+notes, and that extra-large notes remain readable in portrait and landscape with
+navigation visible.
 Files-picker imports and broader device acceptance remain pending.
 The inspected profile expires October 24, 2026 and
 will require a fresh development build/profile after expiry.
