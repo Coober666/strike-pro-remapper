@@ -13,3 +13,7 @@ dist/
 
 # Chromium driver diagnostic output
 debug.log
+
+# Native Xcode user state
+xcuserdata/
+*.xcuserstate

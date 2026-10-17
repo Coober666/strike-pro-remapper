@@ -973,3 +973,19 @@ search across song/kit/output/notes. Navigation retains original running order.
 Its Foundation-only StrikeSetlists Swift package is exercised by a separate
 consumer on each Mac build. iOS SDK and attended VoiceOver acceptance remain
 separate checks; a macOS package build does not establish those results.
+
+## iPhone/iPad setlist companion
+
+`native/StrikeCompanioniOS/StrikeCompanion.xcodeproj` is a separate iOS/iPadOS17+
+SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
+companion; never duplicate or loosen the version-1 validator. Imports use the
+shared bounded, security-scoped reader off the main actor and replace state only
+after validation. Files and Open In are read-only; no kit path resolution, MIDI,
+card or network access. Current document/preferences last for the app session.
+The compact layout uses a Songs sheet; regular-width iPad windows >=760pt keep
+a sidebar unless Performance view is enabled. Navigation ignores search and resets reading scroll.
+`tools/build_ios_companion.py --output <new-folder>` tests installed iPhone/iPad
+simulators, records source hashes/logs/xcresult screenshots and never sets up
+signing, installs dependencies or touches physical devices. Tests use shared
+synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
+separate attended checks; guide necessary owner steps one at a time.

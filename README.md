@@ -222,6 +222,11 @@ double-click.
 
 ## Features
 
+**Setlist companion** — the [native iPhone/iPad app](native/StrikeCompanioniOS/README.md)
+imports Setlist Builder JSON for song navigation, performance/show notes, search,
+adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
+Swift library and version-1 format. Read-only; kit availability is not checked.
+
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome
   hoops/lugs, brass cymbals, hi-hat pedal); click a pad, assign instruments to Layer A/B,
@@ -442,14 +447,18 @@ with confidence levels, and implementer notes. Methodology and community researc
 - The [alesisdrummer.com](https://www.alesisdrummer.com) community and the Alesis Strike
   Pro Owners group, whose research and pain points shaped the feature list
 
-## Native Mac setlist companion
+## Native setlist companion
 
 [Strike Companion](native/StrikeCompanion/README.md) is an experimental native
 SwiftUI viewer for Setlist Builder JSON exports. Browse the running order, kit
 references and performance notes with keyboard navigation. It is read-only and
 does not check kit availability or communicate with the drum module. Apple
 Silicon/macOS 14+ local builds and the Windows-to-Mac build command are documented
-in its guide; iPhone/iPad targets and attended usability acceptance remain pending.
+in its guide. The [iPhone/iPad app](native/StrikeCompanioniOS/README.md) reuses the
+same Swift library and setlist format, with Files import, song navigation, performance
+and show notes, search, reading sizes, and adaptive phone/tablet layouts. Build and
+test with installed simulators before physical-device setup; device and attended
+accessibility acceptance remain pending.
 
 ## Contributing
 
