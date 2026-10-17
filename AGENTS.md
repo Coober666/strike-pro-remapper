@@ -989,3 +989,9 @@ simulators, records source hashes/logs/xcresult screenshots and never sets up
 signing, installs dependencies or touches physical devices. Tests use shared
 synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
 separate attended checks; guide necessary owner steps one at a time.
+
+Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
+install, launch, bundled demo and owner-confirmed Previous/Next only. Import,
+physical iPad and accessibility acceptance remain separate; see
+`docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md`. Keep local device/signing
+metadata and owner-selected Xcode settings out of documentation commits.

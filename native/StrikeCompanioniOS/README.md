@@ -69,4 +69,10 @@ After launch, check demo navigation, import a synthetic export through Files, re
 an invalid export, and check portrait, landscape, large text and VoiceOver before
 using a personal show. Developer account and device prompts require the owner.
 
+[Initial iPhone acceptance, October 17](../../docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md)
+records a successful signed development install, launch and owner-confirmed demo
+Previous/Next on iPhone 17 / iOS 26.6.2. Physical imports and broader device
+acceptance remain pending. The inspected profile expires October 24, 2026 and
+will require a fresh development build/profile after expiry.
+
 The existing Mac target, build artifacts, and remote build workflow remain separate.

@@ -457,8 +457,9 @@ Silicon/macOS 14+ local builds and the Windows-to-Mac build command are document
 in its guide. The [iPhone/iPad app](native/StrikeCompanioniOS/README.md) reuses the
 same Swift library and setlist format, with Files import, song navigation, performance
 and show notes, search, reading sizes, and adaptive phone/tablet layouts. Build and
-test with installed simulators before physical-device setup; device and attended
-accessibility acceptance remain pending.
+test with installed simulators before physical-device setup. On October 17, basic
+[physical iPhone launch and demo navigation](docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md)
+were confirmed; physical imports, iPad behavior and accessibility acceptance remain pending.
 
 ## Contributing
 
