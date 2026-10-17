@@ -2,7 +2,8 @@
 
 No downloads, signing setup, physical devices, library reads or publication.
 Supply installed simulator UUIDs with --device (repeat for iPhone and iPad).
-Without --device, choose one installed iPhone and one installed iPad.
+Without --device, choose an iPhone/iPad pair from the newest installed iOS runtime
+supported by the selected Xcode simulator SDK. Never mix runtime versions.
 """
 import argparse
 import hashlib
@@ -15,14 +16,24 @@ import sys
 def simulator_ids():
     inventory = json.loads(subprocess.check_output(
         ['xcrun', 'simctl', 'list', 'devices', 'available', '--json'], text=True))
-    devices = [device for group in inventory['devices'].values() for device in group]
-    chosen = []
-    for family in ('iPhone', 'iPad'):
-        device = next((item for item in devices if item['name'].startswith(family)), None)
-        if device is None:
-            raise ValueError(f'No installed {family} simulator. Install a runtime in Xcode first.')
-        chosen.append(device['udid'])
-    return chosen
+    sdk = tuple(map(int, subprocess.check_output(
+        ['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip().split('.')))
+    sdk = (sdk + (0, 0, 0))[:3]
+    runtimes = []
+    for identifier, devices in inventory['devices'].items():
+        prefix = 'com.apple.CoreSimulator.SimRuntime.iOS-'
+        if identifier.startswith(prefix):
+            version = tuple(map(int, identifier.removeprefix(prefix).split('-')))
+            version = (version + (0, 0, 0))[:3]
+            if version <= sdk:
+                runtimes.append((version, devices))
+    for _, devices in sorted(runtimes, key=lambda item: item[0], reverse=True):
+        chosen = [next((item['udid'] for item in devices
+                        if item.get('isAvailable', False) and item['name'].startswith(family)), None)
+                  for family in ('iPhone', 'iPad')]
+        if all(chosen):
+            return chosen
+    raise ValueError('No installed iOS runtime compatible with this Xcode SDK has both an iPhone and iPad simulator. Install one in Xcode first.')
 
 
 def source_hashes(root):

@@ -989,8 +989,12 @@ simulators, records source hashes/logs/xcresult screenshots and never sets up
 signing, installs dependencies or touches physical devices. Tests use shared
 synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
 separate attended checks; guide necessary owner steps one at a time.
-Open In UI tests use `XCUIDevice.shared.system.open` for OS document delivery;
-Xcode 16's `XCUIApplication.open(file)` launches without delivering the file URL.
+Open In UI tests use `XCUIDevice.shared.system.open` for OS document delivery.
+Xcode 16's app URL launch drops the file URL and system URL opening times out;
+only that UI test explicitly skips on its older compiler. The Xcode 26 CI matrix
+job must execute it; model import contracts and other UI tests run on both.
+Default simulator selection uses the newest installed iPhone/iPad runtime pair
+supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
 Keep rejection, selected-song retention and source-byte assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
 the nested accessibility buttons produced by a framed image label on iOS 18.

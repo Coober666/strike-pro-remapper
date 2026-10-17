@@ -39,7 +39,8 @@ From the repository root:
 python3 tools/build_ios_companion.py --output .build/ios-validation
 ```
 
-The output directory must be new. This selects one installed iPhone and iPad,
+The output directory must be new. This selects one installed iPhone and iPad from
+the newest complete runtime pair supported by the selected Xcode simulator SDK,
 builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bundles
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
 Use `--device <simulator-UUID>` (repeatable) to select specific installed devices.
@@ -55,7 +56,10 @@ empty lists, original-order navigation, search, note size, performance view,
 rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open In
 UI tests route documents through the system rather than Xcode's app-launch API,
 and assert that a rejected import preserves the selected song. Model tests also
-cover failed-import retention. Simulator evidence does not establish physical
+cover failed-import retention. CI runs Xcode 16.4 and 26.3 separately. Xcode 16's
+file-URL automation drops the document or times out, so only that Open In UI test
+explicitly skips on the older compiler; Xcode 26 must execute it. All model import
+contracts and other UI tests run on both. Simulator evidence does not establish physical
 Files/iCloud/AirDrop, signing, VoiceOver, or distance-reading acceptance.
 
 ## Physical device setup, after simulator validation

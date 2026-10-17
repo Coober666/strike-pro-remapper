@@ -58,13 +58,14 @@ final class CompanionUITests: XCTestCase {
     }
 
     func testOpenInImportAndInvalidFileRejection() throws {
+        #if compiler(<6.2)
+        throw XCTSkip("Xcode 16 file-URL automation does not deliver documents. The Xcode 26 CI job runs this test; model import contracts run on both.")
+        #else
         let app = launchDemo()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: file) }
         let valid = Data(#"{"format":"strike-setlist","version":1,"name":"UI imported show","numbered":false,"entries":[{"kit":"UI.skt","song":"Imported opener","notes":"Four count"}]}"#.utf8)
         try valid.write(to: file)
-        // Route the document through the OS. Xcode 16's app.open(file) relaunches
-        // the app without delivering the file URL to its scene.
         XCUIDevice.shared.system.open(file)
         app.activate()
         let imported = app.staticTexts["Imported opener"]
@@ -78,6 +79,7 @@ final class CompanionUITests: XCTestCase {
         XCTAssertFalse(app.alerts.firstMatch.exists)
         XCTAssertEqual(app.staticTexts["song-title"].label, "Imported opener")
         XCTAssertEqual(try Data(contentsOf: file), invalid)
+        #endif
     }
 
     func testAdaptiveLayoutAndScrollReset() {

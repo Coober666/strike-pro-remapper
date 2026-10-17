@@ -82,3 +82,14 @@ simulator with Xcode 27.1. Logs and results are retained in
 The initial targeted invocation selected zero tests; only the corrected run's
 two executed tests count as validation. Remote results for the fix are recorded
 by the PR checks, separately from these local results.
+
+The subsequent Xcode 16 run passed Reading options but timed out in the system's
+file-URL automation. CI now explicitly selects Xcode 16.4 and 26.3 in separate
+jobs. Only the file-handoff UI test skips on Xcode 16's older compiler, with a
+visible XCTest reason; the modern job must execute it. The model import contracts
+and other UI tests remain enabled on both. This does not establish attended
+Open In behavior on iOS 18. Default simulator discovery now picks the newest
+complete iPhone/iPad runtime pair supported by the selected SDK, rather than
+silently testing the first (possibly older) runtime. Three device-free helper
+selection tests cover SDK bounds, runtime pairing, unavailable devices and failure
+when no compatible pair exists.
