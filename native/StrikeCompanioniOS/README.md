@@ -56,9 +56,11 @@ empty lists, original-order navigation, search, note size, performance view,
 rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open In
 UI tests route documents through the system rather than Xcode's app-launch API,
 and assert that a rejected import preserves the selected song. Model tests also
-cover failed-import retention. CI runs Xcode 16.4 and 26.3 separately. Xcode 16's
+cover failed-import retention. CI runs Xcode 16.4 and 27 separately. Xcode 16/26's
 file-URL automation drops the document or times out, so only that Open In UI test
-explicitly skips on the older compiler; Xcode 26 must execute it. All model import
+explicitly skips on their older compilers; Xcode 27 must execute it. The modern
+job uses GitHub's `xcode-27` preview runner and its bundled toolchain/runtime.
+All model import
 contracts and other UI tests run on both. Simulator evidence does not establish physical
 Files/iCloud/AirDrop, signing, VoiceOver, or distance-reading acceptance.
 

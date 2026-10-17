@@ -84,11 +84,12 @@ two executed tests count as validation. Remote results for the fix are recorded
 by the PR checks, separately from these local results.
 
 The subsequent Xcode 16 run passed Reading options but timed out in the system's
-file-URL automation. CI now explicitly selects Xcode 16.4 and 26.3 in separate
-jobs. Only the file-handoff UI test skips on Xcode 16's older compiler, with a
-visible XCTest reason; the modern job must execute it. The model import contracts
+file-URL automation. Xcode 26.3 exhibited the same timeout. CI now explicitly
+selects Xcode 16.4 and GitHub's `xcode-27` preview runner in separate jobs. Only
+the file-handoff UI test skips on Xcode 16/26's older compilers, with a visible
+XCTest reason; the Xcode 27 job must execute it. The model import contracts
 and other UI tests remain enabled on both. This does not establish attended
-Open In behavior on iOS 18. Default simulator discovery now picks the newest
+Open In behavior on iOS 18 or 26 from those failed automation attempts. Default simulator discovery now picks the newest
 complete iPhone/iPad runtime pair supported by the selected SDK, rather than
 silently testing the first (possibly older) runtime. Three device-free helper
 selection tests cover SDK bounds, runtime pairing, unavailable devices and failure

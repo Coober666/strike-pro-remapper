@@ -58,8 +58,8 @@ final class CompanionUITests: XCTestCase {
     }
 
     func testOpenInImportAndInvalidFileRejection() throws {
-        #if compiler(<6.2)
-        throw XCTSkip("Xcode 16 file-URL automation does not deliver documents. The Xcode 26 CI job runs this test; model import contracts run on both.")
+        #if compiler(<6.3)
+        throw XCTSkip("Xcode 16/26 file-URL automation does not deliver documents. The Xcode 27 CI job runs this test; model import contracts run on both.")
         #else
         let app = launchDemo()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
