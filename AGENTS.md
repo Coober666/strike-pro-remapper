@@ -973,3 +973,52 @@ search across song/kit/output/notes. Navigation retains original running order.
 Its Foundation-only StrikeSetlists Swift package is exercised by a separate
 consumer on each Mac build. iOS SDK and attended VoiceOver acceptance remain
 separate checks; a macOS package build does not establish those results.
+
+## iPhone/iPad setlist companion
+
+`native/StrikeCompanioniOS/StrikeCompanion.xcodeproj` is a separate iOS/iPadOS17+
+SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
+companion; never duplicate or loosen the version-1 validator. Imports use the
+shared bounded, security-scoped reader off the main actor and replace state only
+after validation. Files and Open In are read-only; no kit path resolution, MIDI,
+card or network access. Current document/preferences last for the app session.
+The compact layout uses a Songs sheet; regular-width iPad windows >=760pt keep
+a sidebar unless Performance view is enabled. Navigation ignores search and resets reading scroll.
+`tools/build_ios_companion.py --output <new-folder>` tests installed iPhone/iPad
+simulators, records source hashes/logs/xcresult screenshots and never sets up
+signing, installs dependencies or touches physical devices. Tests use shared
+synthetic cases/demo only. Device, Files-provider and VoiceOver acceptance are
+separate attended checks; guide necessary owner steps one at a time.
+Open In UI tests target the viewer explicitly with `XCUIApplication.open` on
+Xcode 27; default-app file dispatch can time out in hosted simulators. This is a
+launch operation, so active-session retention is covered by model tests and the
+attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
+opening times out on Xcode 16/26. Only that UI test explicitly skips on their
+older compilers. The Xcode 27 CI matrix
+job must execute it; model import contracts and other UI tests run on both.
+The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
+Default simulator selection uses the newest installed iPhone/iPad runtime pair
+supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
+Keep import/rejection and source-byte UI assertions, plus selected-song retention
+model assertions. Reading options
+uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
+the nested accessibility buttons produced by a framed image label on iOS 18.
+The search UI workflow submits its query before selection so a wide-iPad keyboard
+does not retain animation-idle waits during later toolbar actions. Each test has
+a 180-second execution allowance, keeping stalled UI diagnostics within the CI job.
+Before each device run, wait for `simctl bootstatus -b`. Shut down only devices
+that were not already booted when the helper started, including after failure;
+never shut down a preexisting user simulator. Lifecycle tests mock device access.
+Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
+OS sysdiagnose capture, which can outlast the CI job after an automation failure.
+Files-picker UI checks allow 30 seconds for the OS service's first launch, then
+require dismissal, Import re-enablement and selected-song retention after Cancel.
+
+Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
+install, launch, bundled demo, owner-confirmed Previous/Next and synthetic
+AirDrop/Open In import, plus rejection of an invalid file retaining the open set,
+selected song and displayed performance notes. Extra-large notes were confirmed
+readable in portrait and landscape, with navigation visible. Files-picker imports,
+physical iPad and accessibility acceptance remain separate; see
+`docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md`. Keep local device/signing
+metadata and owner-selected Xcode settings out of documentation commits.

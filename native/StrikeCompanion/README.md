@@ -20,8 +20,8 @@ last for the current app session; no document contents or access bookmarks are s
 Setlist exports contain references and notes, not the kits themselves. The
 companion does not check kit availability, load sounds, control the module,
 discover cards, send MIDI, or connect to the editor. Open an updated export to
-see changes made in the editor. This first version is a Mac app; an iOS/iPadOS
-target and physical-device acceptance remain future work.
+see changes made in the editor. The [iPhone/iPad target](../StrikeCompanioniOS/README.md) reuses this library and
+format. Physical-device acceptance remains separate from simulator testing.
 
 ## Build on the Mac
 
@@ -79,7 +79,7 @@ native Swift implementation, including Unicode, type, path and count boundaries.
 `Tests/Contracts.swift` additionally checks navigation and failed-import retention.
 
 `Package.swift` exposes the Foundation-only `StrikeSetlists` library for reuse
-in a future iPhone/iPad target. Every Mac build also compiles and runs a separate
+in the sibling iPhone/iPad target. Every Mac build also compiles and runs a separate
 package consumer (`core-probe`) against the synthetic demo. This verifies the
 public library on macOS; it is not an iOS SDK build or device acceptance.
 The preview option additionally writes `performance-preview.png` with extra-large notes.

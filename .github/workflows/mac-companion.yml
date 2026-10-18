@@ -2,9 +2,9 @@ name: Native Strike companion
 
 on:
   push:
-    paths: ['native/StrikeCompanion/**', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
   pull_request:
-    paths: ['native/StrikeCompanion/**', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
 
 permissions:
   contents: read
@@ -33,4 +33,38 @@ jobs:
             ${{ runner.temp }}/strike-companion/*.zip
             ${{ runner.temp }}/strike-companion/build-receipt.json
             ${{ runner.temp }}/companion-build.log
+          retention-days: 14
+
+  ios-companion:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: '16.4'
+            runner: macos-15
+            developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
+          - xcode: '27'
+            runner: xcode-27
+            developer_dir: /Applications/Xcode.app/Contents/Developer
+    env:
+      DEVELOPER_DIR: ${{ matrix.developer_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Simulator selection contracts
+        run: python tools/test_ios_build.py
+      - name: iPhone and iPad simulator contracts and UI
+        run: python tools/build_ios_companion.py --output "$RUNNER_TEMP/ios-companion"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-strike-companion-tests-xcode-${{ matrix.xcode }}
+          path: |
+            ${{ runner.temp }}/ios-companion/*.log
+            ${{ runner.temp }}/ios-companion/*.xcresult
+            ${{ runner.temp }}/ios-companion/test-receipt.json
           retention-days: 14
