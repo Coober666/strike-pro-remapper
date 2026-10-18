@@ -1041,3 +1041,13 @@ Wide iPads show zone list/detail; compact windows navigate to detail. Inspector 
 and errors cannot replace the setlist. Synthetic parity resources and Demo.skt are
 owned by tools/test_kit_inspector_format.py (--write to regenerate); its no-arg CI
 check compares them to Python. Simulator tests cover parser/imports and UI routing.
+
+
+Attended 0.4 iPhone follow-up (October 18, iPhone 17 / iOS 26.6.2): the owner
+confirmed demo song/extra-large-note restoration after process relaunch, both
+synthetic kit layers, Done returning to the selected song, external synthetic
+.skt AirDrop/Open In and invalid-kit rejection retaining Snare Head details.
+See docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md. Do not generalize this
+to imported-setlist persistence, physical Files providers/iPad, VoiceOver or module
+behavior. Keep signing/device receipts private; acceptance is owner-reported UI
+paired with programmatic build/install/launch evidence.

@@ -54,10 +54,12 @@ explicitly skips the two document-handoff UI tests because its automation does
 not deliver file URLs; model import contracts and the other UI tests still run.
 The modern Xcode job must run both handoff tests.
 
-Physical cold-launch restoration, successful Files-provider imports, kit Open In,
-iPad hardware, VoiceOver and accessibility acceptance remain pending. The owner’s
-phone build was not replaced during this work. Guide any necessary installation
-or attended checks one step at a time.
+The phone was not replaced during the initial simulator run. A subsequent
+[attended iPhone session](IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md) verified
+demo song/reading-size restoration, synthetic kit inspection, external `.skt`
+AirDrop/Open In and invalid-kit retention. Successful in-app Files/provider imports,
+physical iPad, VoiceOver and broader accessibility acceptance remain pending.
+Guide any necessary installation or attended checks one step at a time.
 
 The inspector has no writer/export/editing, sound resolution, audio, host
 connection, MIDI or deployment. Retaining original bytes is not evidence for a

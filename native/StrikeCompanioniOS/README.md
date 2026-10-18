@@ -125,4 +125,11 @@ Files-picker imports and broader device acceptance remain pending.
 The inspected profile expires October 24, 2026 and
 will require a fresh development build/profile after expiry.
 
+[Companion 0.4 iPhone acceptance, October 18](../../docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
+records owner-confirmed cold-launch restoration of the demo's selected song and
+extra-large notes, both synthetic kit layers, return to the same song, external
+`.skt` AirDrop/Open In, and invalid-kit rejection retaining Snare Head details.
+Successful in-app Files/provider imports, imported-setlist persistence, physical
+iPad and broader accessibility checks remain separate.
+
 The existing Mac target, build artifacts, and remote build workflow remain separate.

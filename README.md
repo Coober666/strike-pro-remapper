@@ -229,6 +229,9 @@ Swift library and version-1 format. A local copy restores the setlist, selected 
 reading size and performance view after relaunch. Read-only; kit availability is not checked. The new kit inspector opens `.skt` files
 for pad-zone, Layer A/B reference and stored-setting inspection, with side-by-side
 details on wide iPads. It does not edit, resolve sounds, play audio or deploy kits.
+[Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
+confirmed demo song/reading-size restoration, synthetic kit inspection and external
+kit Open In/rejection retention; Files-provider, iPad and accessibility scope remains separate.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome
