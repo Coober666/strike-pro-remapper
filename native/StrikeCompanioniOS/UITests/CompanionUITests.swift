@@ -8,6 +8,7 @@ final class CompanionUITests: XCTestCase {
     private func launchDemo() -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
         app.launch()
         app.buttons["demo"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
@@ -106,6 +107,21 @@ final class CompanionUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["song-title"].label, "After the Last Train")
     }
 
+    func testColdLaunchRestoresSongAndReadingPreferences() {
+        let app = launchDemo()
+        app.buttons["next"].tap()
+        app.buttons["reading-options"].tap()
+        app.buttons["performance"].tap()
+        app.buttons["reading-options"].tap()
+        app.buttons["Extra large"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
+        app.buttons["reading-options"].tap()
+        XCTAssertTrue(app.buttons["Leave performance view"].exists)
+    }
+
     func testFilePickerCancellationPreservesSong() {
         let app = launchDemo()
         app.buttons["next"].tap()
@@ -123,4 +139,53 @@ final class CompanionUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
+    func testKitInspectorLayersAndReturnToSetlist() {
+        let app = launchDemo()
+        app.buttons["next"].tap()
+        app.buttons["kit-inspector"].tap()
+        app.buttons["kit-demo"].tap()
+        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        XCTAssertTrue(snare.waitForExistence(timeout: 10))
+        snare.tap()
+        XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["kit-layer-a"].label, "Synthetic/Snare.sin")
+        XCTAssertEqual(app.staticTexts["kit-layer-b"].label, "Synthetic/Brush Snare.sin")
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "Kit inspector layers"
+        shot.lifetime = .keepAlways
+        add(shot)
+        app.buttons["close-inspector"].tap()
+        XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
+    }
+
+    func testKitOpenInRoutesToInspector() throws {
+        #if compiler(<6.3)
+        throw XCTSkip("Explicit document launch requires Xcode 27; model import tests run on both.")
+        #else
+        let app = launchDemo()
+        let source = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".skt")
+        defer { try? FileManager.default.removeItem(at: source) }
+        var bytes = Data("KIT ".utf8) + Data([44, 0, 0, 0]) + Data(repeating: 0, count: 44)
+        bytes += Data("inst".utf8) + Data([64, 0, 0, 0])
+        var pad = Data(repeating: 0, count: 64)
+        pad.replaceSubrange(0..<4, with: Data("S1H ".utf8))
+        pad[24] = 255; pad[25] = 255
+        bytes += pad + Data("str ".utf8) + Data([9, 0, 0, 0]) + Data("Demo.sin\0".utf8)
+        try bytes.write(to: source)
+        app.open(source)
+        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        XCTAssertTrue(snare.waitForExistence(timeout: 10))
+        snare.tap()
+        XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["kit-layer-a"].label, "Demo.sin")
+        XCTAssertEqual(app.staticTexts["kit-layer-b"].label, "Unassigned")
+        XCTAssertEqual(try Data(contentsOf: source), bytes)
+        app.buttons["close-inspector"].tap()
+        XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
+        #endif
+    }
+
 }

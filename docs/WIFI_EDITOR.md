@@ -70,7 +70,8 @@ This does not make kit edits live on the module; deploy and reload the kit there
   copy; **Deploy to Module** copies to the user card and verifies it. Reload the kit on
   the Strike after a successful deployment. These UI and handover changes are covered by
   simulated browser/API tests; they have not yet had another physical hardware pass.
-- Direct USB from iPad to Strike needs the paused native iPad app and is not included here.
+- Direct USB from iPad to Strike remains unimplemented. The native Companion and
+  read-only kit inspector do not include it.
 
 The earlier “Read-only factory library detected” result confirms the host found a mounted,
 read-only volume with the factory content shape after activation. It is not a general

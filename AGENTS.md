@@ -981,7 +981,11 @@ SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
 companion; never duplicate or loosen the version-1 validator. Imports use the
 shared bounded, security-scoped reader off the main actor and replace state only
 after validation. Files and Open In are read-only; no kit path resolution, MIDI,
-card or network access. Current document/preferences last for the app session.
+card or network access. The iOS app atomically persists one bounded app-owned session snapshot in Application
+Support, with no source URLs/bookmarks. Revalidate using Setlist.decode before restore.
+Preserve failed imports and report disk failures without discarding current work.
+Close setlist removes the saved document while retaining reading preferences.
+UI tests use unique DEBUG-only app-container slots; unit tests inject disposable stores.
 The compact layout uses a Songs sheet; regular-width iPad windows >=760pt keep
 a sidebar unless Performance view is enabled. Navigation ignores search and resets reading scroll.
 `tools/build_ios_companion.py --output <new-folder>` tests installed iPhone/iPad
@@ -993,7 +997,7 @@ Open In UI tests target the viewer explicitly with `XCUIApplication.open` on
 Xcode 27; default-app file dispatch can time out in hosted simulators. This is a
 launch operation, so active-session retention is covered by model tests and the
 attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
-opening times out on Xcode 16/26. Only that UI test explicitly skips on their
+opening times out on Xcode 16/26. Only the two document-handoff UI tests explicitly skip on their
 older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
 The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
@@ -1022,3 +1026,28 @@ readable in portrait and landscape, with navigation visible. Files-picker import
 physical iPad and accessibility acceptance remain separate; see
 `docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md`. Keep local device/signing
 metadata and owner-selected Xcode settings out of documentation commits.
+
+
+## Native kit inspector 0.4
+
+The iOS app has a separate read-only Kit inspector. Foundation-only KitInspection.swift
+joins the StrikeSetlists package without changing the setlist validator or Mac app.
+Require bounded KIT/inst/str chunks before replacing state; limit files to 4 MiB,
+128 pads, 4096 references of 240 ASCII bytes. Keep original/header/payload/tail bytes.
+Reference text is never resolved or opened, including traversal/absolute references.
+Unknown IDs/enums and unresolved string indices remain explicit. No binary writer,
+export, MIDI, audio, card, host connection or kit persistence is part of this stage.
+Wide iPads show zone list/detail; compact windows navigate to detail. Inspector imports
+and errors cannot replace the setlist. Synthetic parity resources and Demo.skt are
+owned by tools/test_kit_inspector_format.py (--write to regenerate); its no-arg CI
+check compares them to Python. Simulator tests cover parser/imports and UI routing.
+
+
+Attended 0.4 iPhone follow-up (October 18, iPhone 17 / iOS 26.6.2): the owner
+confirmed demo song/extra-large-note restoration after process relaunch, both
+synthetic kit layers, Done returning to the selected song, external synthetic
+.skt AirDrop/Open In and invalid-kit rejection retaining Snare Head details.
+See docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md. Do not generalize this
+to imported-setlist persistence, physical Files providers/iPad, VoiceOver or module
+behavior. Keep signing/device receipts private; acceptance is owner-reported UI
+paired with programmatic build/install/launch evidence.

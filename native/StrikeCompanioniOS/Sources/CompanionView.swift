@@ -2,7 +2,7 @@ import SwiftUI
 import StrikeSetlists
 import UniformTypeIdentifiers
 
-private enum Stage {
+enum Stage {
     static let background = Color(red: 0.11, green: 0.13, blue: 0.15)
     static let sheet = Color(red: 0.15, green: 0.17, blue: 0.20)
     static let brass = Color(red: 0.85, green: 0.72, blue: 0.43)
@@ -10,6 +10,8 @@ private enum Stage {
 
 struct MobileCompanionView: View {
     @ObservedObject var model: MobileCompanionModel
+    @StateObject private var inspector = KitInspectorModel()
+    @State private var showingInspector = false
     @State private var showingSongs = false
     @State private var showingImportError = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -31,6 +33,16 @@ struct MobileCompanionView: View {
                         }
                     } else { welcome }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let warning = model.persistenceWarning {
+                        HStack {
+                            Text(warning).font(.footnote)
+                            if model.canRetryPersistence {
+                                Button("Retry save", action: model.persist).frame(minHeight: 44)
+                            }
+                        }.padding(.horizontal).background(Stage.sheet)
+                    }
+                }
                 .background(Stage.background)
                 .navigationTitle(model.session.document?.name ?? "Strike Companion")
                 .navigationBarTitleDisplayMode(.inline)
@@ -43,6 +55,9 @@ struct MobileCompanionView: View {
                         }
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button { showingInspector = true } label: { Image(systemName: "circle.grid.3x3") }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .accessibilityLabel("Kit inspector").accessibilityIdentifier("kit-inspector")
                         if model.isLoading { ProgressView().accessibilityLabel("Opening setlist") }
                         Button { model.choosingFile = true } label: { Image(systemName: "folder") }
                             .frame(minWidth: 44, minHeight: 44)
@@ -74,7 +89,18 @@ struct MobileCompanionView: View {
             case .failure(let error): model.report(error)
             }
         }
-        .onOpenURL { url in Task { await model.open(url) } }
+        .fullScreenCover(isPresented: $showingInspector) {
+            KitInspectorView(model: inspector) { showingInspector = false }
+        }
+        .onOpenURL { url in
+            if url.pathExtension.lowercased() == "skt" {
+                showingInspector = true
+                Task { await inspector.open(url) }
+            } else {
+                showingInspector = false
+                Task { await model.open(url) }
+            }
+        }
         .onChange(of: model.errorMessage) { _, message in showingImportError = message != nil }
         .alert("Setlist couldn’t be opened", isPresented: $showingImportError) {
             Button("OK", role: .cancel) { model.errorMessage = nil }
@@ -112,6 +138,8 @@ struct MobileCompanionView: View {
                 Text("Large").tag(1.3)
                 Text("Extra large").tag(1.6)
             }
+            Button("Close setlist", role: .destructive, action: model.closeSetlist)
+                .disabled(model.isLoading || model.choosingFile)
             Button("Try demo", action: model.showDemo).disabled(model.isLoading || model.choosingFile)
         }
             .labelStyle(.iconOnly)

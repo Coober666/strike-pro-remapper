@@ -99,3 +99,7 @@ Palette: graphite `#1C2126`, slate `#262B33`, brass `#D9B86E`, primary text
 order and a readable sheet, not a monitoring dashboard.
 
 Tracking: https://github.com/Coober666/strike-pro-remapper/issues/71
+
+The Foundation-only package also exports `KitInspection`, the bounded read-only
+KIT/inst/str parser used by the iPhone/iPad kit inspector. The Mac app continues
+to display setlists only; this does not add Mac kit editing or inspection UI.

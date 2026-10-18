@@ -11,12 +11,60 @@ final class MobileCompanionModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
     @Published var query = ""
-    @Published var performanceMode = false
-    @Published var noteScale = 1.0
+    @Published var performanceMode = false { didSet { persist() } }
+    @Published var noteScale = 1.0 { didSet { persist() } }
     @Published var choosingFile = false
 
-    func select(_ index: Int) { session.select(index) }
-    func move(_ delta: Int) { session.move(delta) }
+    @Published private(set) var persistenceWarning: String?
+    @Published private(set) var canRetryPersistence = false
+    private let store: CompanionSessionStore?
+    private var restoring = true
+
+    init(store: CompanionSessionStore? = .live) {
+        self.store = store
+        defer { restoring = false }
+        do {
+            if let saved = try store?.load() {
+                if let data = saved.document {
+                    session.open(try Setlist.decode(data))
+                    if let selected = saved.selected { session.select(selected) }
+                    sourceName = saved.sourceName
+                    isDemo = saved.isDemo
+                }
+                performanceMode = saved.performanceMode
+                noteScale = saved.noteScale
+            }
+        } catch {
+            persistenceWarning = "The saved session couldn’t be restored. Import your setlist again."
+        }
+    }
+
+    func select(_ index: Int) { session.select(index); persist() }
+    func move(_ delta: Int) { session.move(delta); persist() }
+
+    func closeSetlist() {
+        guard !isLoading && !choosingFile else { return }
+        session = SetlistSession()
+        sourceName = ""
+        isDemo = false
+        query = ""
+        documentID = UUID()
+        persist()
+    }
+
+    func persist() {
+        guard !restoring, let store else { return }
+        do {
+            let data = try session.document.map { try CompanionSessionStore.documentData($0) }
+            try store.save(.init(document: data, selected: session.selected, sourceName: String(sourceName.prefix(255)),
+                isDemo: isDemo, performanceMode: performanceMode, noteScale: noteScale))
+            persistenceWarning = nil
+            canRetryPersistence = false
+        } catch {
+            canRetryPersistence = true
+            persistenceWarning = "Changes couldn’t be saved on this device. Retry before closing the app; the previous saved session may return."
+        }
+    }
 
     func showDemo() {
         guard !isLoading && !choosingFile else { return }
@@ -50,6 +98,7 @@ final class MobileCompanionModel: ObservableObject {
         isDemo = demo
         query = ""
         errorMessage = nil
+        persist()
     }
 
     func report(_ error: Error) {
