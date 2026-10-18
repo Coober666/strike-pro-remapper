@@ -1,7 +1,9 @@
 # Release priorities
 
 Current direction: ship a dependable Strike editor, then add general drum-MIDI utilities.
-Native iPhone/iPad apps and direct mobile USB remain paused. Historical viewer-first
+Native iPhone/iPad Companion now supports setlist viewing and local session restoration.
+A read-only kit inspector begins the standalone remapper path; kit editing/export, sound
+libraries and direct mobile USB remain future work. Historical viewer-first
 research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a release gate.
 
 ## Integrated on main; physical acceptance pending
@@ -74,7 +76,7 @@ and physical module/mobile acceptance remain separate gates.
 - #56: Wi-Fi editing and touch changes implemented; physical mobile acceptance remains.
 - #35: card resilience has automated coverage; disposable-media interruption testing remains.
 - #57: Raspberry Pi host spike remains hardware-unverified.
-- #55: direct iPad USB research remains paused with native mobile development.
+- #55: direct iPad USB research remains deferred; the native kit inspector does not access USB.
 - #29: Kit Balance Assistant has a local sample-based MVP: bounded RMS/peak measurements, same-group and A/B warnings, audition and explicit one-Undo level adjustments. Physical listening acceptance remains open.
 - #30: MIDI measurement foundation is integrated; evidence-based Trigger Coach advice remains.
 

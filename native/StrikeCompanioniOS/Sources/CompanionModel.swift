@@ -16,6 +16,7 @@ final class MobileCompanionModel: ObservableObject {
     @Published var choosingFile = false
 
     @Published private(set) var persistenceWarning: String?
+    @Published private(set) var canRetryPersistence = false
     private let store: CompanionSessionStore?
     private var restoring = true
 
@@ -58,7 +59,9 @@ final class MobileCompanionModel: ObservableObject {
             try store.save(.init(document: data, selected: session.selected, sourceName: String(sourceName.prefix(255)),
                 isDemo: isDemo, performanceMode: performanceMode, noteScale: noteScale))
             persistenceWarning = nil
+            canRetryPersistence = false
         } catch {
+            canRetryPersistence = true
             persistenceWarning = "Changes couldn’t be saved on this device. Retry before closing the app; the previous saved session may return."
         }
     }

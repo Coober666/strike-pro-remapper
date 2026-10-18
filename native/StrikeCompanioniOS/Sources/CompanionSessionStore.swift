@@ -28,13 +28,18 @@ struct CompanionSessionStore {
         let data = try file.read(upToCount: Self.maximumBytes + 1) ?? Data()
         guard data.count <= Self.maximumBytes else { throw SetlistError.invalid("Saved session is too large.") }
         let snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
-        guard snapshot.version == 1, [1.0, 1.3, 1.6].contains(snapshot.noteScale),
-              snapshot.sourceName.count <= 255 else { throw SetlistError.invalid("Saved session is unsupported.") }
-        if let document = snapshot.document { _ = try Setlist.decode(document) }
+        try validate(snapshot)
         return snapshot
     }
 
+    private func validate(_ snapshot: Snapshot) throws {
+        guard snapshot.version == 1, [1.0, 1.3, 1.6].contains(snapshot.noteScale),
+              snapshot.sourceName.count <= 255 else { throw SetlistError.invalid("Saved session is unsupported.") }
+        if let document = snapshot.document { _ = try Setlist.decode(document) }
+    }
+
     func save(_ snapshot: Snapshot) throws {
+        try validate(snapshot)
         let data = try JSONEncoder().encode(snapshot)
         guard data.count <= Self.maximumBytes else { throw SetlistError.invalid("Saved session is too large.") }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

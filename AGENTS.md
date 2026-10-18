@@ -997,7 +997,7 @@ Open In UI tests target the viewer explicitly with `XCUIApplication.open` on
 Xcode 27; default-app file dispatch can time out in hosted simulators. This is a
 launch operation, so active-session retention is covered by model tests and the
 attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
-opening times out on Xcode 16/26. Only that UI test explicitly skips on their
+opening times out on Xcode 16/26. Only the two document-handoff UI tests explicitly skip on their
 older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
 The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
@@ -1026,3 +1026,18 @@ readable in portrait and landscape, with navigation visible. Files-picker import
 physical iPad and accessibility acceptance remain separate; see
 `docs/IOS_COMPANION_IPHONE_ACCEPTANCE_2026-10-17.md`. Keep local device/signing
 metadata and owner-selected Xcode settings out of documentation commits.
+
+
+## Native kit inspector 0.4
+
+The iOS app has a separate read-only Kit inspector. Foundation-only KitInspection.swift
+joins the StrikeSetlists package without changing the setlist validator or Mac app.
+Require bounded KIT/inst/str chunks before replacing state; limit files to 4 MiB,
+128 pads, 4096 references of 240 ASCII bytes. Keep original/header/payload/tail bytes.
+Reference text is never resolved or opened, including traversal/absolute references.
+Unknown IDs/enums and unresolved string indices remain explicit. No binary writer,
+export, MIDI, audio, card, host connection or kit persistence is part of this stage.
+Wide iPads show zone list/detail; compact windows navigate to detail. Inspector imports
+and errors cannot replace the setlist. Synthetic parity resources and Demo.skt are
+owned by tools/test_kit_inspector_format.py (--write to regenerate); its no-arg CI
+check compares them to Python. Simulator tests cover parser/imports and UI routing.

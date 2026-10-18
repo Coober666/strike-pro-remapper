@@ -30,6 +30,32 @@ Kit references are displayed as text. A setlist does not include kits or sounds.
 The companion does not check kit availability, follow kit paths, access cards,
 connect to the editor, or send MIDI.
 
+## Read-only kit inspector (0.4)
+
+Choose **Kit inspector** in the toolbar, then **Open kit** to select a `.skt` from
+Files. Open In also recognizes `.skt` files. **Try synthetic kit** needs no personal
+files. Wide iPad windows show the pad-zone list beside its details; narrow windows
+and iPhone use a list and detail screen. Layer A/B references, level, signed pan,
+pitch/fine, decay, velocity range, filter/loop and selected zone/MIDI settings are
+read from known offsets. Unknown enum values remain labelled with their raw number.
+Unassigned and unresolved string indices are explicit. No instrument/sample path
+is followed, so a displayed reference does not prove that sound is available.
+
+The Foundation-only parser lives beside the shared setlist core. It bounds input
+to 4 MiB, the KIT header to 44–4096 bytes, 128 pad zones of 62–4096 bytes, and 4096
+printable ASCII references of up to 240 bytes. Missing/truncated blocks and
+unterminated/unsupported strings are rejected before replacing the current kit.
+Unknown pad IDs and opaque trailing bytes are retained. All imported bytes are
+kept unchanged in memory. This is an inspector, with no writer/export/editing,
+playback, sound library, host connection or deployment. No kit is saved across
+launches. Closing the inspector returns to the same setlist and selected song.
+
+`tools/test_kit_inspector_format.py` checks committed synthetic demo/parity cases
+against Python; use `--write` only when intentionally regenerating them. Swift
+contracts check the same cases, all truncation boundaries, bounds, signed values,
+unknown zones, unresolved references and unchanged source bytes. These are format
+and simulator checks, not physical file-provider or module acceptance.
+
 ## Simulator build and tests
 
 Requires full Xcode with an installed iOS simulator runtime. Open
@@ -68,9 +94,10 @@ rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open
 UI tests explicitly target Strike Companion using Xcode 27's app-launch API;
 default-app file dispatch can time out on hosted simulators. Because the API
 relaunches the app, active-session import retention is covered by model tests and
-the attended iPhone check. CI runs Xcode 16.4 and 27 separately. Xcode 16/26's
-file-URL automation drops the document or times out, so only that Open In UI test
-explicitly skips on their older compilers; Xcode 27 must execute it. The modern
+the attended iPhone check. CI runs Xcode 16.4 and 27 separately. The job allows 35 minutes for both devices,
+including cold boots and the expanded UI suite. Xcode 16/26's
+file-URL automation drops the document or times out, so only the two document-handoff UI tests
+explicitly skip on their older compilers; Xcode 27 must execute it. The modern
 job uses GitHub's `xcode-27` preview runner and its bundled toolchain/runtime.
 All model import
 contracts and other UI tests run on both. Simulator evidence does not establish physical

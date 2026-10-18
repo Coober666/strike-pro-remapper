@@ -226,7 +226,9 @@ double-click.
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
 Swift library and version-1 format. A local copy restores the setlist, selected song,
-reading size and performance view after relaunch. Read-only; kit availability is not checked.
+reading size and performance view after relaunch. Read-only; kit availability is not checked. The new kit inspector opens `.skt` files
+for pad-zone, Layer A/B reference and stored-setting inspection, with side-by-side
+details on wide iPads. It does not edit, resolve sounds, play audio or deploy kits.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome
