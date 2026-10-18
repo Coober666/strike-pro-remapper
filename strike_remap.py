@@ -2748,7 +2748,8 @@ def list_tools() -> list:
     """Return [{name, label}] for runnable scripts in tools/."""
     tools_dir = Path(__file__).parent / 'tools'
     skip = {'hex_explorer.py', 'sin_inspector.py',
-            'build_factory_fingerprints.py', 'build_beta.py', 'build_windows.py', 'check_windows_package.py'}  # not user-facing runners
+            'build_factory_fingerprints.py', 'build_beta.py', 'build_windows.py', 'check_windows_package.py',
+            'build_macos_companion.py', 'build_on_mac.py'}  # not user-facing runners
     out = []
     for p in sorted(tools_dir.glob('*.py')):
         if p.name.startswith('_') or p.name in skip:
