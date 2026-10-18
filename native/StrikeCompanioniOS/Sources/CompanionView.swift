@@ -31,6 +31,14 @@ struct MobileCompanionView: View {
                         }
                     } else { welcome }
                 }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if let warning = model.persistenceWarning {
+                        HStack {
+                            Text(warning).font(.footnote)
+                            Button("Retry save", action: model.persist).frame(minHeight: 44)
+                        }.padding(.horizontal).background(Stage.sheet)
+                    }
+                }
                 .background(Stage.background)
                 .navigationTitle(model.session.document?.name ?? "Strike Companion")
                 .navigationBarTitleDisplayMode(.inline)
@@ -112,6 +120,8 @@ struct MobileCompanionView: View {
                 Text("Large").tag(1.3)
                 Text("Extra large").tag(1.6)
             }
+            Button("Close setlist", role: .destructive, action: model.closeSetlist)
+                .disabled(model.isLoading || model.choosingFile)
             Button("Try demo", action: model.showDemo).disabled(model.isLoading || model.choosingFile)
         }
             .labelStyle(.iconOnly)

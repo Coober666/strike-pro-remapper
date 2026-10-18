@@ -981,7 +981,11 @@ SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
 companion; never duplicate or loosen the version-1 validator. Imports use the
 shared bounded, security-scoped reader off the main actor and replace state only
 after validation. Files and Open In are read-only; no kit path resolution, MIDI,
-card or network access. Current document/preferences last for the app session.
+card or network access. The iOS app atomically persists one bounded app-owned session snapshot in Application
+Support, with no source URLs/bookmarks. Revalidate using Setlist.decode before restore.
+Preserve failed imports and report disk failures without discarding current work.
+Close setlist removes the saved document while retaining reading preferences.
+UI tests use unique DEBUG-only app-container slots; unit tests inject disposable stores.
 The compact layout uses a Songs sheet; regular-width iPad windows >=760pt keep
 a sidebar unless Performance view is enabled. Navigation ignores search and resets reading scroll.
 `tools/build_ios_companion.py --output <new-folder>` tests installed iPhone/iPad

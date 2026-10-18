@@ -18,9 +18,13 @@ and stops at either end. Each song starts at the top of the sheet. Hardware
 keyboard shortcuts: Command-O to import, Command-Left/Right to change songs.
 
 Performance notes and show notes come from the export. Update them in Setlist
-Builder and import again. This version holds the document and preferences in
-memory for this app session; reopen your export after a cold launch. It does not
-save imported documents, bookmarks, changes or personal content in preferences.
+Builder and import again. The app keeps one local copy in its private Application Support folder and restores
+the setlist, selected song, notes size and Performance view after relaunch. Search
+starts empty. The source file is never changed or reopened automatically, so later
+source edits need another import. No source URLs or bookmarks are saved. Use
+**Reading options → Close setlist** to remove the saved document; reading preferences
+remain. A failed save shows a Retry save warning and keeps the current state in memory.
+A corrupt or unsupported saved session opens the welcome screen with a warning.
 
 Kit references are displayed as text. A setlist does not include kits or sounds.
 The companion does not check kit availability, follow kit paths, access cards,

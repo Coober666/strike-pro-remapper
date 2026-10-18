@@ -225,7 +225,8 @@ double-click.
 **Setlist companion** — the [native iPhone/iPad app](native/StrikeCompanioniOS/README.md)
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
-Swift library and version-1 format. Read-only; kit availability is not checked.
+Swift library and version-1 format. A local copy restores the setlist, selected song,
+reading size and performance view after relaunch. Read-only; kit availability is not checked.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome

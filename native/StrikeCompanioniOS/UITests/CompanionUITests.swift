@@ -8,6 +8,7 @@ final class CompanionUITests: XCTestCase {
     private func launchDemo() -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
         app.launch()
         app.buttons["demo"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
@@ -104,6 +105,22 @@ final class CompanionUITests: XCTestCase {
         app.buttons["next"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].isHittable)
         XCTAssertEqual(app.staticTexts["song-title"].label, "After the Last Train")
+    }
+
+    func testColdLaunchRestoresSongAndReadingPreferences() {
+        let app = launchDemo()
+        app.buttons["next"].tap()
+        app.buttons["reading-options"].tap()
+        app.buttons["performance"].tap()
+        app.buttons["reading-options"].tap()
+        app.buttons["Extra large"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
+        app.buttons["reading-options"].tap()
+        XCTAssertTrue(app.buttons["Leave performance view"].exists)
+        app.tap()
     }
 
     func testFilePickerCancellationPreservesSong() {

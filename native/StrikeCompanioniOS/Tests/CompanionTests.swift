@@ -16,7 +16,7 @@ final class CompanionTests: XCTestCase {
 
     @MainActor
     func testImportPreservesCurrentSongOnFailureAndNeverWritesSource() async throws {
-        let model = MobileCompanionModel()
+        let model = MobileCompanionModel(store: nil)
         model.showDemo()
         let demo = try XCTUnwrap(model.session.document)
         model.select(1)
@@ -65,7 +65,7 @@ final class CompanionTests: XCTestCase {
 
     @MainActor
     func testNavigationIgnoresSearchAndClampsAtEnds() throws {
-        let model = MobileCompanionModel()
+        let model = MobileCompanionModel(store: nil)
         model.showDemo()
         XCTAssertNotNil(model.session.document)
         model.move(-1)
@@ -85,7 +85,7 @@ final class CompanionTests: XCTestCase {
 
     @MainActor
     func testEmptySetlistAndNewImportResetSelection() async throws {
-        let model = MobileCompanionModel()
+        let model = MobileCompanionModel(store: nil)
         model.showDemo()
         model.select(2)
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
@@ -99,4 +99,90 @@ final class CompanionTests: XCTestCase {
         model.showDemo()
         XCTAssertEqual(model.session.selected, 0)
     }
+    @MainActor
+    func testPersistenceRestoresImportedCopySongAndReadingOptions() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = CompanionSessionStore(url: folder.appendingPathComponent("saved/session.json"))
+        let source = folder.appendingPathComponent("original.json")
+        let demo = MobileCompanionModel(store: nil)
+        demo.showDemo()
+        let bytes = try CompanionSessionStore.documentData(XCTUnwrap(demo.session.document))
+        try bytes.write(to: source)
+        let model = MobileCompanionModel(store: store)
+        await model.open(source)
+        model.select(2)
+        model.performanceMode = true
+        model.noteScale = 1.6
+        model.query = "temporary filter"
+        let saved = try Data(contentsOf: store.url)
+        try Data("invalid".utf8).write(to: source)
+        await model.open(source)
+        XCTAssertEqual(try Data(contentsOf: store.url), saved, "Failed imports must not replace the saved session")
+        try FileManager.default.removeItem(at: source)
+        let restored = MobileCompanionModel(store: store)
+        XCTAssertEqual(restored.session.document, model.session.document)
+        XCTAssertEqual(restored.session.selected, 2)
+        XCTAssertEqual(restored.sourceName, "original.json")
+        XCTAssertFalse(restored.isDemo)
+        XCTAssertTrue(restored.performanceMode)
+        XCTAssertEqual(restored.noteScale, 1.6)
+        XCTAssertEqual(restored.query, "")
+        XCTAssertNil(restored.persistenceWarning)
+        restored.closeSetlist()
+        let closed = MobileCompanionModel(store: store)
+        XCTAssertNil(closed.session.document)
+        XCTAssertTrue(closed.performanceMode)
+        XCTAssertEqual(closed.noteScale, 1.6)
+    }
+
+    @MainActor
+    func testCorruptUnsupportedAndOversizedSnapshotsDoNotRestore() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = CompanionSessionStore(url: folder.appendingPathComponent("session.json"))
+        let model = MobileCompanionModel(store: store)
+        model.showDemo()
+        var snapshot = try XCTUnwrap(store.load())
+        snapshot.selected = Int.max
+        try store.save(snapshot)
+        XCTAssertEqual(MobileCompanionModel(store: store).session.selected, 0)
+        snapshot.version = 2
+        try store.save(snapshot)
+        for bad in [try Data(contentsOf: store.url), Data("broken".utf8),
+                    Data(repeating: 32, count: CompanionSessionStore.maximumBytes + 1)] {
+            try bad.write(to: store.url)
+            let restored = MobileCompanionModel(store: store)
+            XCTAssertNil(restored.session.document)
+            XCTAssertNotNil(restored.persistenceWarning)
+            XCTAssertEqual(try Data(contentsOf: store.url), bad, "Do not silently overwrite a failed restore")
+        }
+        snapshot.version = 1
+        snapshot.document = Data("{}".utf8)
+        try store.save(snapshot)
+        XCTAssertNil(MobileCompanionModel(store: store).session.document)
+        XCTAssertThrowsError(try store.load())
+    }
+
+    @MainActor
+    func testPersistenceFailureRetainsOpenWorkAndAllowsRetry() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let parent = folder.appendingPathComponent("blocked")
+        try Data("file, not directory".utf8).write(to: parent)
+        let store = CompanionSessionStore(url: parent.appendingPathComponent("session.json"))
+        let model = MobileCompanionModel(store: store)
+        model.showDemo()
+        model.select(1)
+        XCTAssertNotNil(model.session.document)
+        XCTAssertNotNil(model.persistenceWarning)
+        try FileManager.default.removeItem(at: parent)
+        model.persist()
+        XCTAssertNil(model.persistenceWarning)
+        XCTAssertEqual(MobileCompanionModel(store: store).session.selected, 1)
+    }
+
 }
