@@ -163,7 +163,7 @@ struct KitInspectorView: View {
                     Text(pad.label).font(.largeTitle.weight(.semibold)).accessibilityIdentifier("kit-pad-title")
                     Text("\(pad.id) · Stored kit settings").font(.subheadline).foregroundStyle(.secondary)
                     Text("Read-only. Sound availability not checked.").font(.footnote).foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), alignment: .topLeading)], alignment: .leading, spacing: 24) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 32, alignment: .topLeading)], alignment: .leading, spacing: 24) {
                         layer(kit, pad: pad, name: "Layer A", offset: 0, reference: pad.layerA)
                         layer(kit, pad: pad, name: "Layer B", offset: 20, reference: pad.layerB)
                     }
