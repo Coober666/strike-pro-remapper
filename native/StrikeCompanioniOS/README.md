@@ -112,7 +112,9 @@ The helper waits for each simulator to finish booting before testing. It shuts
 down simulators it needed to start between runs, including on failure, and
 preserves any simulator that was already booted when the helper started.
 Use `--device <simulator-UUID>` (repeatable) to select specific installed devices.
-The helper rejects input changes during a run and never downloads runtimes or configures signing. To list devices:
+The helper rejects input changes during a run and never downloads runtimes or configures signing.
+Generated-directory exclusions apply inside the native input folders; worktrees under
+a parent `.build` directory still receive complete source hashes. To list devices:
 
 ```sh
 xcrun simctl list devices available

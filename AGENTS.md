@@ -1013,6 +1013,8 @@ a 180-second execution allowance, keeping stalled UI diagnostics within the CI j
 Before each device run, wait for `simctl bootstatus -b`. Shut down only devices
 that were not already booted when the helper started, including after failure;
 never shut down a preexisting user simulator. Lifecycle tests mock device access.
+Receipt exclusions for .build/.swiftpm/xcuserdata apply only below each native input
+folder, so a worktree inside a parent .build still hashes all source files.
 Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
 OS sysdiagnose capture, which can outlast the CI job after an automation failure.
 Files-picker UI checks allow 30 seconds for the OS service's first launch, then

@@ -62,7 +62,7 @@ def ready_simulator(device, stream, already_booted):
 def source_hashes(root):
     inputs = [path for folder in ('native/StrikeCompanion', 'native/StrikeCompanioniOS')
               for path in (root / folder).rglob('*')
-              if path.is_file() and not any(part in ('.build', '.swiftpm', 'xcuserdata') for part in path.parts)]
+              if path.is_file() and not any(part in ('.build', '.swiftpm', 'xcuserdata') for part in path.relative_to(root / folder).parts)]
     inputs.append(Path(__file__).resolve())
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(inputs)}
