@@ -4,6 +4,8 @@ import os
 import ntpath
 from pathlib import Path, PureWindowsPath
 import subprocess
+import stat
+from types import SimpleNamespace
 import tarfile
 import tempfile
 import unittest
@@ -98,6 +100,43 @@ class SourceBackupTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "mount"):
                     check_destination(base / "backups", base / "different-share")
             self.assertFalse((base / "backups").exists())
+
+    def test_reparse_destination_and_ancestor_are_rejected_before_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            linked = base / "junction"
+            linked.mkdir()
+            original_lstat = Path.lstat
+            def metadata(path, *args, **kwargs):
+                if path == linked:
+                    return SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0x400)
+                return original_lstat(path, *args, **kwargs)
+            with mock.patch.object(Path, "lstat", metadata):
+                for destination in (linked, linked / "nested" / "backups"):
+                    with self.subTest(destination=str(destination)):
+                        with self.assertRaisesRegex(ValueError, "reparse"):
+                            backup(base, destination)
+            self.assertEqual(list(linked.iterdir()), [], "Never publish through a reparse destination")
+
+    @unittest.skipUnless(os.name == "nt", "Windows directory junction integration")
+    def test_real_windows_junction_cannot_redirect_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            target = base / "target"
+            target.mkdir()
+            sentinel = target / "keep.txt"
+            sentinel.write_bytes(b"preserve this file")
+            junction = base / "junction"
+            subprocess.run(["cmd", "/c", "mklink", "/J", str(junction), str(target)],
+                           check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                for destination in (junction, junction / "nested" / "backups"):
+                    with self.assertRaisesRegex(ValueError, "reparse"):
+                        backup(base, destination)
+                self.assertEqual(list(target.iterdir()), [sentinel])
+                self.assertEqual(sentinel.read_bytes(), b"preserve this file")
+            finally:
+                junction.rmdir()  # Remove only the disposable junction, never its target.
 
     def test_missing_mount_never_creates_a_local_shadow_backup(self):
         with tempfile.TemporaryDirectory() as temporary:

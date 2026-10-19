@@ -65,7 +65,8 @@ includes non-ignored untracked work and preserves symlinks without following the
 Ignored libraries, credentials, build products and simulator data are excluded;
 back these up separately if needed. Keep snapshots private because tracked local
 settings may include personal signing changes. It does not push, pull, commit,
-checkout or delete source files. It refuses linked backup destinations and a missing
+checkout or delete source files. It refuses linked backup destinations (including Windows directory junctions/reparse
+points) and a missing
 required mount, creates a new uniquely named snapshot, verifies archived bytes and
 NAS read-back SHA-256 hashes, and writes the completion manifest last. Mount
 validation uses the platform `os.path.ismount` check plus an accessible-directory

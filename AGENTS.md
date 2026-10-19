@@ -44,6 +44,9 @@ Use os.path.ismount plus a reachable-directory check for required mounts, includ
 Windows drive/UNC roots on Python 3.10/3.11; do not use Path.is_mount there. The
 Windows source-backup matrix covers both Python versions without real NAS access.
 Archive assertions compare original bytes, including native Windows CRLF endings.
+Reject st_file_attributes reparse points as well as symlinks in destination ancestry
+and source parent directories; old Windows Path.is_symlink misses junctions. Windows
+CI creates a disposable real junction and verifies no files reach its target.
 Incomplete snapshots cannot be restored. Never prune old backups or retry failed
 publication automatically. Source capture is not an atomic filesystem snapshot;
 stop if source changes. tools/test_source_backup.py uses disposable repositories,

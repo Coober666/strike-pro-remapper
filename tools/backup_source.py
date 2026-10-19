@@ -28,6 +28,15 @@ def digest(path):
     return result.hexdigest()
 
 
+def linked_path(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
 def source_state(root):
     names = sorted(set(os.fsdecode(p) for p in git(
         root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split(b"\0") if p))
@@ -35,7 +44,7 @@ def source_state(root):
     for name in names:
         path = root / name
         # Do not follow a tracked directory symlink to read an external file.
-        if any(parent.is_symlink() for parent in path.parents if parent != root and root in parent.parents):
+        if any(linked_path(parent) for parent in path.parents if parent != root and root in parent.parents):
             raise ValueError("A source path has a linked parent")
         try:
             info = path.lstat()
@@ -76,8 +85,8 @@ def available_mount(path):
 
 def check_destination(destination, mount):
     for path in [destination, *destination.parents]:
-        if path.is_symlink():
-            raise ValueError("Backup destinations cannot contain symlinks")
+        if linked_path(path):
+            raise ValueError("Backup destinations cannot contain symlinks or Windows reparse points")
     if mount is not None:
         if not available_mount(mount) or not destination.resolve().is_relative_to(mount.resolve()):
             raise ValueError("Required NAS mount is absent or does not contain the destination")
