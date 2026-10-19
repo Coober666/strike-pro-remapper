@@ -1076,7 +1076,9 @@ history. Kit edits are not restored after process termination; the UI says to ex
 before closing the app. The setlist session store is unchanged.
 
 KitCopyExporter is the only native kit write path. The user selects a Files folder;
-coordinate security-scoped reads/writes off the main actor. Prepare Documents/Kit Copies
+coordinate security-scoped reads/writes off the main actor. Reads use withoutChanges;
+new-file directory writes use ordinary coordination, never forMerging. Neither
+operation may ask other file presenters to save imported originals. Prepare Documents/Kit Copies
 as a local Files destination (UIFileSharingEnabled); session snapshots stay private in
 Application Support. Generate an ASCII
 Kit-edit-<8 lowercase hex>.skt name (21 characters). Use directory-relative exclusive

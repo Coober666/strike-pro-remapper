@@ -37,7 +37,7 @@ Files. Open In also recognizes `.skt`. **Try synthetic kit** needs no personal
 files. Wide iPad windows show the zone list beside its details; narrow windows and
 iPhone use a list and detail screen. Tap a setting, enter a value, and choose
 **Apply**. **Cancel** leaves the open copy unchanged. The original file is never
-written. Unknown stored values remain explicit until you deliberately change them.
+written, and file coordination never asks another open app to save it. Unknown stored values remain explicit until you deliberately change them.
 
 Both layers offer level, signed pan, decay, pitch/fine, filter cutoff/enable and
 loop. Expand **Velocity response** for the four velocity modulation settings and

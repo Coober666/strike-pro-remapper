@@ -16,7 +16,7 @@ OUTPUT = ROOT / 'native/StrikeCompanioniOS/Tests/KitEditingCases.json'
 
 def cases():
     # Read only the literal map, without importing server startup or mutable library state.
-    tree = ast.parse((ROOT / 'strike_remap.py').read_text())
+    tree = ast.parse((ROOT / 'strike_remap.py').read_text(encoding='utf-8'))
     node = next(n for n in tree.body if isinstance(n, ast.Assign)
                 and any(isinstance(t, ast.Name) and t.id == '_PARAM_MAP' for t in n.targets))
     param_map = eval(compile(ast.Expression(node.value), '<confirmed-param-map>', 'eval'),
@@ -80,10 +80,10 @@ def main():
     payload = cases()
     encoded = json.dumps(payload, indent=2) + '\n'
     if sys.argv[1:] == ['--write']:
-        OUTPUT.write_text(encoded)
+        OUTPUT.write_text(encoded, encoding='utf-8')
     else:
         assert not sys.argv[1:]
-        assert OUTPUT.read_text() == encoded, 'Regenerate with tools/test_kit_editing.py --write'
+        assert OUTPUT.read_text(encoding='utf-8') == encoded, 'Regenerate with tools/test_kit_editing.py --write'
     print(f"{len(payload['cases'])} synthetic editing cases match Python's confirmed map and binary writer.")
 
 

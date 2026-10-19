@@ -142,6 +142,28 @@ final class KitEditingTests: XCTestCase {
         XCTAssertNotNil(session.current.editingIssue)
         XCTAssertThrowsError(try session.assign(0, layer: 0, pad: 2))
     }
+    func testImportAndExportNeverAskOtherPresentersToSaveOriginals() throws {
+        let directory = try folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("original.skt")
+        let data = try oracle().source
+        try data.write(to: source)
+        let sourcePresenter = SaveObserver(url: source)
+        let folderPresenter = SaveObserver(url: directory)
+        NSFileCoordinator.addFilePresenter(sourcePresenter)
+        NSFileCoordinator.addFilePresenter(folderPresenter)
+        defer {
+            NSFileCoordinator.removeFilePresenter(sourcePresenter)
+            NSFileCoordinator.removeFilePresenter(folderPresenter)
+        }
+        XCTAssertEqual(try KitInspection.read(source).encoded(), data)
+        XCTAssertEqual(sourcePresenter.saveRequests, 0, "An import must not ask another app to save the source")
+        let copy = try KitCopyExporter.copy(data, to: directory)
+        XCTAssertEqual(try Data(contentsOf: copy), data)
+        XCTAssertEqual(try Data(contentsOf: source), data)
+        XCTAssertEqual(sourcePresenter.saveRequests, 0)
+        XCTAssertEqual(folderPresenter.saveRequests, 0, "Creating a new file must not request unrelated saves")
+    }
     func testExportCreatesVerifiedCopyNeverOverwritesOriginalOrLinksAndCleansPartialFailures() throws {
         let directory = try folder()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -247,3 +269,16 @@ final class KitEditingTests: XCTestCase {
     }
 }
 
+
+private final class SaveObserver: NSObject, NSFilePresenter, @unchecked Sendable {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue = OperationQueue()
+    private let lock = NSLock()
+    private var count = 0
+    var saveRequests: Int { lock.lock(); defer { lock.unlock() }; return count }
+    init(url: URL) { presentedItemURL = url; super.init() }
+    func savePresentedItemChanges(completionHandler: @escaping @Sendable (Error?) -> Void) {
+        lock.lock(); count += 1; lock.unlock()
+        completionHandler(nil)
+    }
+}

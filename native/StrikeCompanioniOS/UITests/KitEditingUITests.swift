@@ -134,9 +134,11 @@ final class KitEditingUITests: XCTestCase {
         replace(app.textFields["kit-edit-value"], with: "72")
         app.buttons["kit-edit-apply"].tap()
         menu("kit-export", app: app)
-        XCTAssertTrue(app.buttons["Browse"].waitForExistence(timeout: 30))
-        app.buttons["Browse"].tap()
         let local = app.staticTexts[UIDevice.current.userInterfaceIdiom == .pad ? "On My iPad" : "On My iPhone"]
+        // iPad shows Locations in a sidebar; the phone uses a Browse tab.
+        let pickerReady = NSPredicate { _, _ in local.exists || app.buttons["Browse"].exists }
+        expectation(for: pickerReady, evaluatedWith: nil); waitForExpectations(timeout: 30)
+        if !local.exists { app.buttons["Browse"].tap() }
         XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
         local.tap()
         let companion = app.staticTexts["Strike Companion"].firstMatch

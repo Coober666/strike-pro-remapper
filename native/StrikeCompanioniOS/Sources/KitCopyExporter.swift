@@ -9,7 +9,7 @@ enum KitCopyExporter {
         defer { if access { directory.stopAccessingSecurityScopedResource() } }
         var coordinationError: NSError?
         var outcome: Result<URL, Error>?
-        NSFileCoordinator().coordinate(writingItemAt: directory, options: .forMerging,
+        NSFileCoordinator().coordinate(writingItemAt: directory, options: [],
                                        error: &coordinationError) { coordinatedDirectory in
             outcome = Result { try create(data, in: coordinatedDirectory) }
         }

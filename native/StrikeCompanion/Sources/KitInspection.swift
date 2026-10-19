@@ -63,7 +63,7 @@ public struct KitInspection: Sendable {
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         var coordinationError: NSError?
         var outcome: Result<Self, Error>?
-        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+        NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { coordinatedURL in
             outcome = Result {
                 guard try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
                     throw SetlistError.invalid("Choose a regular .skt file.")
