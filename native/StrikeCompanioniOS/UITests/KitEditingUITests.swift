@@ -138,15 +138,21 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["kit-edit-apply"].tap()
         menu("kit-export", app: app)
         let local = app.staticTexts[UIDevice.current.userInterfaceIdiom == .pad ? "On My iPad" : "On My iPhone"]
-        // iPad shows Locations in a sidebar; the phone uses a Browse tab.
-        let pickerReady = NSPredicate { _, _ in local.exists || app.buttons["Browse"].exists }
+        // Files may restore our app folder directly or retain it behind the Browse tab.
+        let atDestination = {
+            app.buttons["Strike Companion, Actions Menu"].exists ||
+                app.navigationBars.staticTexts["Strike Companion"].exists
+        }
+        let pickerReady = NSPredicate { _, _ in atDestination() || local.exists || app.buttons["Browse"].exists }
         expectation(for: pickerReady, evaluatedWith: nil); waitForExpectations(timeout: 30)
-        if !local.exists { app.buttons["Browse"].tap() }
-        XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
-        local.tap()
-        let companion = app.staticTexts["Strike Companion"].firstMatch
-        XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
-        companion.tap()
+        if !atDestination() && !local.exists { app.buttons["Browse"].tap() }
+        if !atDestination() {
+            XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
+            local.tap()
+            let companion = app.staticTexts["Strike Companion"].firstMatch
+            XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
+            companion.tap()
+        }
         screenshot("Export destination")
         app.buttons["Open"].tap()
         XCTAssertTrue(app.staticTexts["kit-export-status"].waitForExistence(timeout: 10), app.debugDescription)
