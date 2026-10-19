@@ -1114,7 +1114,9 @@ first-focus typing replaces the selected number without Clear. Replacement helpe
 submit keyboard Done before toolbar actions: the iPad keyboard repositions the sheet
 before the remote accessibility frame catches up. Done must leave Apply explicit.
 Files may restore its last folder: UI tests recognize the app destination before
-navigating the sidebar.
+navigating the sidebar. Reopen the exported file using its image element in icon
+view or the cell in list view, letting XCTest reveal it. Avoid normalized coordinate
+taps through the hosted Files service.
 Use one fileImporter presenter for kit files and export folders; capture its purpose
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers
@@ -1128,6 +1130,14 @@ open More. An Other element labelled Cancel can point at the More launcher and
 must not be treated as the cancellation command. Assert the editor is usable again.
 Keep personal signing/device metadata out of commits. Build/test installed iPhone
 and iPad simulators before physical-device setup; guide owner steps one at a time.
+
+Initial attended 0.5 iPad Pro 12.9-inch (6th generation) / iPadOS 26.6 checks
+confirmed demo navigation, the wide zone/detail layout, Snare Head's A/B references,
+Level 100→73 Apply and Undo to 100. See
+docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md. The owner's numeric-input
+feedback prompted 0.5.1; its controls and physical export/reopen are not yet accepted.
+Do not access the physical iPad during its OS update. Wait for explicit completion
+and unlock confirmation before the next installation/launch.
 
 ## Native editor workspace and direct-USB direction
 

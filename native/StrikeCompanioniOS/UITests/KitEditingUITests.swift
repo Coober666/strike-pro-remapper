@@ -220,8 +220,11 @@ final class KitEditingUITests: XCTestCase {
         let file = app.cells.containing(.staticText, identifier: name).firstMatch
         XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
         screenshot("Select exported copy")
-        // Activate the file icon; tapping the filename child can leave the picker open.
-        file.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        // Let XCTest reveal/activate the actual image in icon view; coordinate taps can miss
+        // hosted Files items after it scrolls or relays accessibility through another process.
+        let icon = file.images.firstMatch
+        if icon.exists { icon.tap() }
+        else { file.tap() } // List view has one directly activatable row.
         XCTAssertTrue(app.alerts["Replace the edited kit?"].waitForExistence(timeout: 10))
         app.alerts.buttons["Discard edits and open kit"].tap()
         let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
