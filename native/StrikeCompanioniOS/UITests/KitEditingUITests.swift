@@ -33,15 +33,26 @@ final class KitEditingUITests: XCTestCase {
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         let scroll = app.scrollViews["kit-detail"]
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !app.buttons["kit-edit-apply"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        func visible() -> Bool {
+            guard element.exists else { return false }
+            let frame = element.frame
+            let viewport = scroll.frame.intersection(app.frame).insetBy(dx: 1, dy: 64)
+            // Hosted AX can throw instead of returning false for an offscreen activation point.
+            // Scroll its frame into the unobscured viewport before querying hittability.
+            guard !frame.isEmpty, !frame.isInfinite,
+                  viewport.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+            return element.isHittable
+        }
         for _ in 0..<9 {
-            if element.isHittable { return }
-            // Wait for sheet dismissal before scrolling; a fast first swipe can pass the target.
-            let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in element.isHittable }, object: nil)
-            if XCTWaiter.wait(for: [visible], timeout: 3) == .completed || element.isHittable { return }
-            if element.exists && element.frame.minY < scroll.frame.minY + 110 { scroll.swipeDown() }
+            if visible() { return }
+            if element.exists && element.frame.midY < scroll.frame.minY + 64 { scroll.swipeDown() }
             else { scroll.swipeUp() }
         }
-        XCTAssertTrue(element.isHittable)
+        XCTAssertTrue(visible(), "Could not reveal the requested kit control")
     }
     private func menu(_ action: String, app: XCUIApplication) {
         let menu = app.buttons["kit-actions"]
