@@ -16,6 +16,7 @@ struct KitEditSheet: View {
     @State private var input: String
     @State private var reference: Int
     @State private var query = ""
+    @FocusState private var valueFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(request: KitEditRequest, kit: KitInspection, apply: @escaping (Int) -> Bool) {
@@ -46,11 +47,13 @@ struct KitEditSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.frame(minHeight: 44).accessibilityIdentifier("kit-edit-cancel")
+                    Button("Cancel") { valueFocused = false; dismiss() }.frame(minHeight: 44).accessibilityIdentifier("kit-edit-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
-                        if apply(request.parameter == nil ? reference : value!) { dismiss() }
+                        guard valid, let candidate = request.parameter == nil ? reference : value else { return }
+                        valueFocused = false
+                        if apply(candidate) { dismiss() }
                     }.frame(minHeight: 44).disabled(!valid).accessibilityIdentifier("kit-edit-apply")
                 }
             }
@@ -74,7 +77,7 @@ struct KitEditSheet: View {
                         ForEach(Array(0...109) + [255], id: \.self) { Text(parameter.display($0)).tag(String($0)) }
                     }
                 } else {
-                    TextField(parameter.title, text: $input).keyboardType(.numbersAndPunctuation)
+                    TextField(parameter.title, text: $input).keyboardType(.numbersAndPunctuation).focused($valueFocused)
                         .accessibilityIdentifier("kit-edit-value")
                     Stepper("Adjust value", value: Binding(get: { value ?? parameter.range.lowerBound },
                         set: { input = String($0) }), in: parameter.range).frame(minHeight: 44)

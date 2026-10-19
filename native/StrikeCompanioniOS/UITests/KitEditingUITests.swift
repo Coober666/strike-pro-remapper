@@ -32,9 +32,13 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(element.isHittable)
     }
     private func menu(_ action: String, app: XCUIApplication) {
-        app.buttons["kit-actions"].tap()
-        XCTAssertTrue(app.buttons[action].waitForExistence(timeout: 5))
-        app.buttons[action].tap()
+        let menu = app.buttons["kit-actions"]
+        let item = app.buttons[action]
+        menu.tap()
+        // A first post-sheet tap can finish keyboard dismissal on iPad. Retry presentation only.
+        if !item.waitForExistence(timeout: 3) { menu.tap() }
+        XCTAssertTrue(item.waitForExistence(timeout: 5), app.debugDescription)
+        item.tap()
     }
     private func screenshot(_ name: String) {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

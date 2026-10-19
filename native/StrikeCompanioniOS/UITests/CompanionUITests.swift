@@ -199,8 +199,8 @@ extension XCUIApplication {
         let ready = NSPredicate { _, _ in cancel.exists || more.exists }
         let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 30), .completed, debugDescription)
-        // In compact restored folders, Files moves Cancel into its More menu.
-        // The host's generic AX Cancel proxy points at that launcher, not the command.
+        // Compact restored folders may need Recents or More → Cancel.
+        // The host's generic AX Cancel proxy can point at More, not the actual command.
         if !cancel.exists, buttons["Recents"].exists {
             buttons["Recents"].tap()
         }
