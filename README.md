@@ -240,10 +240,18 @@ remain future work.
 [Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
 confirmed demo song/reading-size restoration, synthetic kit inspection and external
 kit Open In/rejection retention. [Initial attended iPad checks](docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md)
-confirmed demo navigation, both layers, Level editing and Undo. New numeric controls,
-physical Files-provider and accessibility checks remain separate.
+confirmed demo navigation, both layers, Level editing and Undo. A subsequent
+[physical iPad/NAS check](docs/IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md)
+verified direct numeric replacement, Undo/Redo and real-kit NAS export/reopen with
+an unchanged original and exactly one intended byte changed. Accessibility, MIDI
+and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
+The native iPhone/iPad product is evolving into **Strike Remapper**, one app with
+performance and editing views. The existing full web editor is the feature target;
+the current Companion-named build is an incremental native implementation and does
+not yet have feature parity. The Mac setlist companion remains separate.
+
 The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)
 records passing editing/export checks on both sizes, the full iPhone result and
 the iPad search timeout with its focused follow-up.

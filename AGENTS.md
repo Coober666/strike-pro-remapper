@@ -1137,6 +1137,22 @@ Initial attended 0.5 iPad Pro 12.9-inch (6th generation) / iPadOS 26.6 checks
 confirmed demo navigation, the wide zone/detail layout, Snare Head's A/B references,
 Level 100→73 Apply and Undo to 100. See
 docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md. The owner's numeric-input
-feedback prompted 0.5.1; its controls and physical export/reopen are not yet accepted.
+feedback prompted 0.5.1. The subsequent agent-operated physical iPadOS 27.0.1 /
+NAS Files pass verified first-focus Level replacement 99→73, Apply, Undo/Redo and
+export/reopen of a real owner-provided kit. Independent readback found exactly the
+intended byte change and an unchanged original SHA-256. See
+docs/IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md. This is one-provider
+file-workflow evidence, not audio, MIDI, module or accessibility acceptance.
 Do not access the physical iPad during its OS update. Wait for explicit completion
 and unlock confirmation before the next installation/launch.
+
+
+## Native product identity
+
+The owner chose one native Strike Remapper app with performance and editing views,
+evolving the existing iPhone/iPad Companion. The full Strike Remapper web app is
+the feature target; current native builds are partial implementations, not feature
+parity. Do not start a separate full-editor iOS app. Keep the Mac setlist companion
+independent. Rename visible native branding in a verified follow-up while preserving
+bundle identity, document handling and saved app data. Native MIDI input is the next
+development milestone; direct storage/deployment still requires separate evidence.
