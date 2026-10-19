@@ -249,6 +249,8 @@ covers kit-copy editing, original-file preservation and local Files export/reope
 The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)
 records passing editing/export checks on both sizes, the full iPhone result and
 the iPad search timeout with its focused follow-up.
+The [drum-map prototype check](docs/NATIVE_EDITOR_MAP_SIMULATOR_FOLLOWUP_2026-10-18.md)
+records focused selection and zone-switching passes on both simulator sizes.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome

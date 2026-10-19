@@ -1160,3 +1160,6 @@ storage access. Direct user/factory storage, known activation on iPad and verifi
 new-copy deployment each need separate attended evidence. No device work while the
 owner updates the iPad OS; wait for explicit completion/unlock confirmation.
 See docs/NATIVE_STRIKE_EDITOR_PLAN.md for the current staged scope.
+The focused map/zone UI check passed on both installed simulator sizes at a81b3d2;
+see docs/NATIVE_EDITOR_MAP_SIMULATOR_FOLLOWUP_2026-10-18.md. This is not full-suite,
+physical-device, MIDI or module acceptance.
