@@ -23,11 +23,14 @@ final class KitEditingUITests: XCTestCase {
         field.tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (field.value as? String ?? "").count) + text)
     }
-    private func reveal(_ element: XCUIElement, app: XCUIApplication, up: Bool = true) {
+    private func reveal(_ element: XCUIElement, app: XCUIApplication) {
+        let scroll = app.scrollViews["kit-detail"]
         for _ in 0..<9 {
-            if element.isHittable { return }
-            if up { app.scrollViews["kit-detail"].swipeUp() }
-            else { app.scrollViews["kit-detail"].swipeDown() }
+            // Wait for sheet dismissal before scrolling; a fast first swipe can pass the target.
+            let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in element.isHittable }, object: nil)
+            if XCTWaiter.wait(for: [visible], timeout: 1) == .completed { return }
+            if element.exists && element.frame.minY < scroll.frame.minY + 110 { scroll.swipeDown() }
+            else { scroll.swipeUp() }
         }
         XCTAssertTrue(element.isHittable)
     }

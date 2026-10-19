@@ -8,6 +8,7 @@ struct KitInspectorView: View {
     @State private var path: [Int] = []
     @State private var editing: KitEditRequest?
     @State private var showReplacementConfirmation = false
+    @State private var exportingFolder = false
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -38,16 +39,18 @@ struct KitInspectorView: View {
             }
         }
         .tint(Stage.brass).preferredColorScheme(.dark)
-        .fileImporter(isPresented: $model.choosingFile,
-                      allowedContentTypes: [UTType(filenameExtension: "skt") ?? .data]) { result in
+        // One presenter serves both operations, including on older SwiftUI releases.
+        .fileImporter(isPresented: Binding(
+            get: { model.choosingFile || model.choosingExportFolder },
+            set: { if !$0 { model.choosingFile = false; model.choosingExportFolder = false } }),
+                      allowedContentTypes: exportingFolder ? [.folder] : [UTType(filenameExtension: "skt") ?? .data]) { result in
             switch result {
-            case .success(let url): Task { await model.open(url) }
-            case .failure(let error): model.report(error)
-            }
-        }
-        .fileImporter(isPresented: $model.choosingExportFolder, allowedContentTypes: [.folder]) { result in
-            switch result {
-            case .success(let folder): Task { await model.export(to: folder) }
+            case .success(let url):
+                let exportCopy = exportingFolder
+                Task {
+                    if exportCopy { await model.export(to: url) }
+                    else { await model.open(url) }
+                }
             case .failure(let error): model.report(error)
             }
         }
@@ -93,14 +96,17 @@ struct KitInspectorView: View {
                         .disabled(model.session?.undoLabel == nil).accessibilityIdentifier("kit-undo")
                     Button("Redo", systemImage: "arrow.uturn.forward", action: model.redo)
                         .disabled(model.session?.redoLabel == nil).accessibilityIdentifier("kit-redo")
-                    Button("Export new copy…", systemImage: "square.and.arrow.up", action: model.chooseExportFolder)
+                    Button("Export new copy…", systemImage: "square.and.arrow.up") {
+                        exportingFolder = true
+                        model.chooseExportFolder()
+                    }
                         .accessibilityIdentifier("kit-export")
                     Button("Try synthetic kit") { Task { await model.demo() } }
                         .accessibilityIdentifier("kit-reload-demo")
                 }.labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                     .accessibilityIdentifier("kit-actions").disabled(model.busy)
             }
-            Button("Open kit", systemImage: "folder") { model.choosingFile = true }
+            Button("Open kit", systemImage: "folder", action: chooseFile)
                 .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                 .accessibilityIdentifier("import-kit").disabled(model.busy)
         }
@@ -113,7 +119,7 @@ struct KitInspectorView: View {
                 Text("Make the kit yours.").font(.largeTitle.weight(.semibold))
                 Text("Open a Strike .skt file to edit its pad settings and Layer A/B assignments, then export a new copy.")
                     .font(.title3)
-                Button("Open kit", systemImage: "folder") { model.choosingFile = true }
+                Button("Open kit", systemImage: "folder", action: chooseFile)
                     .buttonStyle(.borderedProminent).foregroundStyle(.black).frame(minHeight: 44).disabled(model.busy)
                 Button("Try synthetic kit") { Task { await model.demo() } }
                     .frame(minHeight: 44).accessibilityIdentifier("kit-demo").disabled(model.busy)
@@ -121,6 +127,11 @@ struct KitInspectorView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }.padding(28).frame(maxWidth: 560, alignment: .leading).frame(maxWidth: .infinity)
         }
+    }
+
+    private func chooseFile() {
+        exportingFolder = false
+        model.choosingFile = true
     }
 
     private var status: some View {
