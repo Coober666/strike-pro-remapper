@@ -6,7 +6,7 @@ Imported originals are read only; exporting creates a new uniquely named `.skt`.
 
 ## Source and tools
 
-Tested source: `333a9d11f1c6b0784983264578efae6203c691d1`.
+Tested source: `8b01b6a15c385433be2bc70b60d8ece42f4afe29`.
 Xcode 27.1 (27A9275), installed iOS 27.0 iPhone 17e and iPad Pro 13-inch (M5).
 
 Each simulator passed 16 unit tests and 11 UI tests: **54 passed, zero failures,
@@ -14,7 +14,7 @@ zero skips** across the pair. The receipt covers all 30 native/build inputs,
 reports unchanged source hashes and exit code zero for both devices. A separate
 comparison after completion confirms those inputs still match the tested source.
 
-Evidence stays local in ignored `.build/ios-kit-editing-awake-final/`: logs,
+Evidence stays local in ignored `.build/ios-kit-editing-compat-final/`: logs,
 xcresults, the 30-input source receipt and screenshot exports. The Mac was unlocked
 and temporarily kept awake for the final run. Screenshots were inspected on phone
 portrait/landscape and wide iPad layouts. The helper stopped only simulators this
@@ -48,6 +48,10 @@ was installed or configured in this run.
   layer assignments, edit signed pan, undo/redo, retain edits after Done, and keep
   the setlist/song independent. Replacing a validated dirty kit requires explicit
   discard; cancellation and failed imports retain current work/history.
+- One Files presenter switches between kit files and export folders, retaining
+  its action before asynchronous work. It replaces stacked presenters after an
+  older SwiftUI run left the second picker inactive. The UI scroll helper waits for
+  dismissal, checks visibility immediately and reverses past targets.
 - Both simulator sizes complete edit → local Files-folder export → reopen the
   exact newly created file and display the changed value. Picker cancellation
   retains the open setlist or edited kit. Existing setlist persistence, navigation,
@@ -55,8 +59,8 @@ was installed or configured in this run.
 
 The Mac companion app, standalone contracts, independent package consumer and
 ad-hoc signature verification passed at `44ea3ef5a1820af4e07b25e5f226179933c995f6`;
-its shared core and Mac-specific sources are unchanged in the final tested source. Twelve Python
-format/build-helper tests, 17 inspector fixtures, the 169 editing oracle cases,
+its shared core and Mac-specific sources are unchanged in the final tested source.
+Twelve Python format/build-helper tests, 17 inspector fixtures, the 169 editing oracle cases,
 and three synthetic kit round trips pass. No personal kit library, sounds or
 cards were read. The original checkout's local signing file remains hash-identical.
 
@@ -69,6 +73,11 @@ older 0.4 acceptance note now qualifies its one-input receipt accurately.
 
 CI is separate evidence on PR #77. Xcode 16.4 intentionally skips the two existing
 Open In launch tests; Xcode 27 must execute them. Other contracts run on both.
+The export/reopen UI contract allows 300 seconds
+for cold hosted Files providers; all other tests default to 180 seconds and no
+test can exceed 300 seconds. The earlier hosted Xcode 27 recording completed all
+export/reopen assertions at about 201 seconds, after its old 180-second limit.
+The longer allowance retains every assertion and does not retry mutations.
 
 Kit edits are memory-only until export and are not restored after process exit.
 Export before closing the app; Done retains edits while it remains open. Handled
