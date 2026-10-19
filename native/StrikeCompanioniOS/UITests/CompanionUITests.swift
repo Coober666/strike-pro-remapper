@@ -123,6 +123,7 @@ final class CompanionUITests: XCTestCase {
     }
 
     func testFilePickerCancellationPreservesSong() {
+        executionTimeAllowance = 300 // Cold hosted Files accessibility can arrive after its window renders.
         let app = launchDemo()
         app.buttons["next"].tap()
         app.buttons["import"].tap()
@@ -198,7 +199,7 @@ extension XCUIApplication {
         let more = buttons["More"].firstMatch
         let ready = NSPredicate { _, _ in cancel.exists || more.exists }
         let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 30), .completed, debugDescription)
+        XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 90), .completed, debugDescription)
         // Compact restored folders may need Recents or More → Cancel.
         // The host's generic AX Cancel proxy can point at More, not the actual command.
         if !cancel.exists, buttons["Recents"].exists {

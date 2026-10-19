@@ -38,6 +38,12 @@ files. Wide iPad windows show the zone list beside its details; narrow windows a
 iPhone use a list and detail screen. Tap a setting, enter a value, and choose
 **Apply**. **Cancel** leaves the open copy unchanged. The original file is never
 written, and file coordination never asks another open app to save it. Unknown stored values remain explicit until you deliberately change them.
+Numeric settings show a large **Type a value** field: first focus selects its whole
+number so typing replaces it immediately. You can also use **Clear value** to
+replace it. **Quick adjustment** provides a whole-number
+slider; **Fine adjustment (±1)** keeps precise one-step buttons available. These
+controls change the pending value only; Apply is still required. Unsupported typed
+values stay visible with Apply disabled rather than silently changing to a limit.
 
 Both layers offer level, signed pan, decay, pitch/fine, filter cutoff/enable and
 loop. Expand **Velocity response** for the four velocity modulation settings and
@@ -104,8 +110,9 @@ The output directory must be new. This selects one installed iPhone and iPad fro
 the newest complete runtime pair supported by the selected Xcode simulator SDK,
 builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bundles
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
-Each test has a three-minute execution allowance so a stalled UI test fails with
-diagnostics before the overall CI job expires.
+Tests default to a three-minute execution allowance; the three Files-provider tests
+allow five minutes for a cold provider. Every test is capped at five minutes so
+a stalled UI test fails before the overall CI job expires.
 Ordinary logs, screenshots and test results are retained; verbose OS sysdiagnose
 capture is disabled because it can exhaust the job after an automation timeout.
 The helper waits for each simulator to finish booting before testing. It shuts

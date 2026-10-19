@@ -1017,7 +1017,7 @@ Receipt exclusions for .build/.swiftpm/xcuserdata apply only below each native i
 folder, so a worktree inside a parent .build still hashes all source files.
 Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
 OS sysdiagnose capture, which can outlast the CI job after an automation failure.
-Files-picker UI checks allow 30 seconds for the OS service's first launch, then
+Files-picker UI checks allow 90 seconds for the OS service's first accessibility tree, then
 require dismissal, Import re-enablement and selected-song retention after Cancel.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
@@ -1095,14 +1095,27 @@ and formats.build_skt. Swift tests compare exact output bytes for every field,
 signed bounds/assignments/rejections, history, unknown-byte preservation, export
 collisions/partial failures and reopen. XCUITests cover explicit editing, both layers,
 undo/redo, retained edits after Done, replacement confirmation, export cancellation and a Files export/reopen workflow.
-Value-edit sheets clear keyboard focus on Apply/Cancel. Files may restore its last
-folder: UI tests recognize the app destination before navigating the sidebar.
+Value-edit sheets clear keyboard focus on Apply/Cancel.
+Numeric editors expose a large rounded text field, explicit Clear, whole-number
+slider and ±1 stepper. All controls edit pending text only; Apply/Cancel and model
+validation remain the mutation boundary.
+First focus selects the whole numeric value after the initiating tap completes,
+so direct typing replaces it instead of prepending to right-aligned digits.
+Clamp only the slider thumb's display
+when text is unsupported; never silently clamp or replace the typed input. Dragging
+the slider dismisses keyboard focus. UI coverage includes coarse changes, Clear,
+direct typing, invalid-value retention and Cancel leaving the kit untouched.
+Replacement helpers use the visible Clear action and assert the resulting text;
+they must not assume where a tap places the caret. A separate check verifies that
+first-focus typing replaces the selected number without Clear.
+Files may restore its last folder: UI tests recognize the app destination before
+navigating the sidebar.
 Use one fileImporter presenter for kit files and export folders; capture its purpose
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers
 wait for dismissal and reverse direction when the target is above the viewport.
-Keep an immediate hittability check before predicate waits. The Files export/reopen
-UI test has a 300-second allowance for cold hosted providers; other tests default
+Keep an immediate hittability check before predicate waits. The three Files-provider
+UI tests have a 300-second allowance for cold hosted providers; other tests default
 to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
 or retry file mutations to accommodate a slow provider.
 For cancellation, use the real Cancel button; if hidden, return to Recents and

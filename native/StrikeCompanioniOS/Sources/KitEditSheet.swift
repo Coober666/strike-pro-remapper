@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import StrikeSetlists
 
 struct KitEditRequest: Identifiable {
@@ -77,11 +78,53 @@ struct KitEditSheet: View {
                         ForEach(Array(0...109) + [255], id: \.self) { Text(parameter.display($0)).tag(String($0)) }
                     }
                 } else {
-                    TextField(parameter.title, text: $input).keyboardType(.numbersAndPunctuation).focused($valueFocused)
-                        .accessibilityIdentifier("kit-edit-value")
-                    Stepper("Adjust value", value: Binding(get: { value ?? parameter.range.lowerBound },
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Type a value", systemImage: "keyboard").font(.headline)
+                        HStack(spacing: 12) {
+                            TextField("Value", text: $input)
+                                .font(.largeTitle.monospacedDigit()).textFieldStyle(.roundedBorder)
+                                .multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation)
+                                .focused($valueFocused).submitLabel(.done).onSubmit { valueFocused = false }
+                                .accessibilityLabel(parameter.title).accessibilityIdentifier("kit-edit-value")
+                                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
+                                    guard let field = notification.object as? UITextField,
+                                          field.accessibilityIdentifier == "kit-edit-value" || valueFocused else { return }
+                                    // Finish the initiating tap before selecting; otherwise it can move the caret again.
+                                    DispatchQueue.main.async { [weak field] in
+                                        guard let field, field.isFirstResponder else { return }
+                                        field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
+                                                                                  to: field.endOfDocument)
+                                    }
+                                }
+                            Button {
+                                input = ""
+                                valueFocused = true
+                            } label: { Image(systemName: "xmark.circle.fill").font(.title2) }
+                                .buttonStyle(.borderless).frame(minWidth: 44, minHeight: 44)
+                                .accessibilityLabel("Clear value").accessibilityIdentifier("kit-edit-clear")
+                                .disabled(input.isEmpty)
+                        }
+                        Text("Tap the number to replace it, or drag the slider below.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }.padding(.vertical, 8)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Quick adjustment").font(.subheadline)
+                        Slider(value: Binding(
+                            // Bound the thumb only; unsupported text stays intact until an explicit adjustment.
+                            get: { Double(min(max(value ?? parameter.range.lowerBound, parameter.range.lowerBound), parameter.range.upperBound)) },
+                            set: { input = String(Int($0.rounded())) }),
+                            in: Double(parameter.range.lowerBound)...Double(parameter.range.upperBound), step: 1,
+                            onEditingChanged: { if $0 { valueFocused = false } })
+                            .accessibilityLabel("\(parameter.title), quick adjustment")
+                            .accessibilityIdentifier("kit-edit-slider")
+                        HStack {
+                            Text(String(parameter.range.lowerBound))
+                            Spacer()
+                            Text(String(parameter.range.upperBound))
+                        }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }.padding(.vertical, 8)
+                    Stepper("Fine adjustment (±1)", value: Binding(get: { value ?? parameter.range.lowerBound },
                         set: { input = String($0) }), in: parameter.range).frame(minHeight: 44)
-                    Text("\(parameter.range.lowerBound) to \(parameter.range.upperBound)").foregroundStyle(.secondary)
                     if parameter == .aVelocityMinimum || parameter == .aVelocityMaximum || parameter == .bVelocityMinimum {
                         Text("Velocity minimum must not exceed maximum.").font(.footnote).foregroundStyle(.secondary)
                     }

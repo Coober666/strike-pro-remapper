@@ -20,8 +20,12 @@ final class KitEditingUITests: XCTestCase {
         return app
     }
     private func replace(_ field: XCUIElement, with text: String) {
-        field.tap()
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (field.value as? String ?? "").count) + text)
+        // Use the visible replacement action instead of assuming a caret position in a right-aligned field.
+        let clear = XCUIApplication().buttons["kit-edit-clear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        field.typeText(text)
+        XCTAssertEqual(field.value as? String, text)
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         let scroll = app.scrollViews["kit-detail"]
@@ -53,9 +57,19 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["kit-edit-aLevel"].tap()
         let field = app.textFields["kit-edit-value"]
         XCTAssertEqual(field.value as? String, "100")
-        replace(field, with: "128")
+        let slider = app.sliders["kit-edit-slider"]
+        XCTAssertTrue(slider.isHittable)
+        slider.adjust(toNormalizedSliderPosition: 0.25)
+        let quickValue = Int(field.value as? String ?? "")
+        XCTAssertNotNil(quickValue)
+        XCTAssertTrue((1...59).contains(quickValue ?? -1))
+        screenshot("Quick numeric adjustment")
+        field.tap() // First focus selects the whole number, including when the tap is left of its digits.
+        field.typeText("128")
         XCTAssertFalse(app.buttons["kit-edit-apply"].isEnabled)
-        replace(field, with: "73")
+        XCTAssertEqual(field.value as? String, "128") // Moving the thumb's display must not clamp typed input.
+        app.buttons["kit-edit-clear"].tap()
+        field.typeText("73")
         screenshot("Layer A value editor")
         app.buttons["kit-edit-cancel"].tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("100"))
@@ -112,6 +126,7 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["kit-layer-b"].label, "Synthetic/Brush Snare.sin")
     }
     func testReplacementRequiresDiscardAndExportFolderCancellationKeepsEdits() {
+        executionTimeAllowance = 300
         let app = launchKit()
         app.buttons["kit-edit-aLevel"].tap()
         replace(app.textFields["kit-edit-value"], with: "71")

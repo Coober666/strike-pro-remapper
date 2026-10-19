@@ -229,7 +229,8 @@ Swift library and version-1 format. A local copy restores the setlist, selected 
 reading size and performance view after relaunch. Setlists remain read-only.
 The native kit editor opens `.skt` files for confirmed pad settings and Layer A/B
 assignments to references already in the kit, with undo/redo and side-by-side details
-on wide iPads. **Export new copy** creates a uniquely named kit in a chosen Files
+on wide iPads. Numeric settings offer a large text-entry field with Clear, a slider
+for larger changes, and ±1 buttons for fine adjustment. **Export new copy** creates a uniquely named kit in a chosen Files
 folder, verifies its bytes and never replaces an existing file. Imported originals
 stay untouched. Kit edits remain in memory until export; export before closing the
 app. Sound availability is not checked; sound libraries, playback and deployment
