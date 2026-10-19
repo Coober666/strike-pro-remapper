@@ -246,6 +246,9 @@ confirmed demo navigation, both layers, Level editing and Undo. New numeric cont
 physical Files-provider and accessibility checks remain separate.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
+The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)
+records passing editing/export checks on both sizes, the full iPhone result and
+the iPad search timeout with its focused follow-up.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome
