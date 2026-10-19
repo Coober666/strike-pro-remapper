@@ -5,6 +5,28 @@ setlist performance view available and never makes imported originals save targe
 The Mac setlist companion stays independent. This plan is implementation scope,
 not a claim of physical acceptance or feature completion.
 
+## One product, with the full web editor as the feature target
+
+The owner chose one native **Strike Remapper** app with performance and editing
+views on October 18, 2026. Evolve the existing iPhone/iPad Companion implementation;
+do not build a separate competing editor app. The full Strike Remapper web/PWA
+workflow is the feature target, including kit/pad editing, instrument and sample
+workflows, sound search/assignment/preview, drum-map/setup controls, kit FX,
+setlists, MIDI tools and verified module delivery. Native implementation may adapt
+the layout to iPad and iPhone. Current builds do not have full feature parity.
+
+The Companion name describes the initial setlist milestone. Change visible native
+branding to Strike Remapper in a tested follow-up, preserving bundle identity,
+existing setlist data, document associations and the shared format contracts. Keep
+the Mac read-only companion independent. Preserve the working web app throughout.
+
+The present milestone has real-kit import, confirmed per-pad settings, existing
+reference assignment, Undo/Redo and new-copy export. The optional drum map is
+simulator-tested. The physical NAS import/edit/export/reopen result is recorded in
+[the iPad follow-up](IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md).
+Native MIDI input is next; broader library/instrument/FX features follow the gates
+below. MIDI output, audio routing and module storage each require their own evidence.
+
 ## Direct iPad-to-Strike connection comes first
 
 The intended everyday setup is an iPad connected directly to the powered Strike,
