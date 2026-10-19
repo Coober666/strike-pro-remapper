@@ -1119,8 +1119,10 @@ taps through the hosted Files service.
 Use one fileImporter presenter for kit files and export folders; capture its purpose
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers
-wait for dismissal and reverse direction when the target is above the viewport.
-Keep an immediate hittability check before predicate waits. The three Files-provider
+wait for the edit sheet to disappear and reverse direction when the target is above
+the viewport. Check an element's frame is inside the unobscured scroll viewport before
+asking isHittable: hosted accessibility can fail the test for offscreen activation
+points rather than returning false. Keep the final visibility assertion. The three Files-provider
 UI tests have a 300-second allowance for cold hosted providers; other tests default
 to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
 or retry file mutations to accommodate a slow provider.
