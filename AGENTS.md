@@ -1086,6 +1086,9 @@ Kit-edit-<8 lowercase hex>.skt name (21 characters). Use directory-relative excl
 creation with O_EXCL/O_NOFOLLOW, never replacement or an imported source URL. Flush,
 read back and parse the same descriptor before reporting success. Reject existing
 files/links; clean up only this attempt's matching file identity on handled failure.
+The shared Files presenter routes export-folder provider failures through the same
+export reporter as write failures, clearing stale success while retaining edits/history.
+Cancellation remains quiet; import failures retain their separate message.
 No automatic retries. An interrupted process can leave an incomplete copy; errors
 ask users to check the destination. Export retains edits and undo history. Cloud
 sync, physical provider behavior and module playback are separate acceptance gates.
