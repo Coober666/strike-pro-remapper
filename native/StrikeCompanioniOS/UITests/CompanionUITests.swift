@@ -126,17 +126,12 @@ final class CompanionUITests: XCTestCase {
         let app = launchDemo()
         app.buttons["next"].tap()
         app.buttons["import"].tap()
-        // Restored Files folders can expose the system close control as Other rather than Button.
-        let cancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Cancel'")).firstMatch
-        // Files is a separate system service; first launch on a clean hosted
-        // simulator can leave its remote view blank for more than ten seconds.
-        XCTAssertTrue(cancel.waitForExistence(timeout: 30))
-        cancel.tap()
+        app.cancelFilesPicker()
         let dismissed = NSPredicate { _, _ in
-            !cancel.exists && app.buttons["import"].isEnabled
+            app.buttons["import"].isHittable && app.buttons["import"].isEnabled
         }
-        expectation(for: dismissed, evaluatedWith: nil)
-        waitForExpectations(timeout: 15)
+        let resumed = XCTNSPredicateExpectation(predicate: dismissed, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 15), .completed, app.debugDescription)
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
@@ -194,4 +189,23 @@ final class CompanionUITests: XCTestCase {
         #endif
     }
 
+}
+
+@MainActor
+extension XCUIApplication {
+    func cancelFilesPicker() {
+        let cancel = buttons["Cancel"]
+        let more = buttons["More"].firstMatch
+        let ready = NSPredicate { _, _ in cancel.exists || more.exists }
+        let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 30), .completed, debugDescription)
+        // In compact restored folders, Files moves Cancel into its More menu.
+        // The host's generic AX Cancel proxy points at that launcher, not the command.
+        if !cancel.exists, buttons["Recents"].exists {
+            buttons["Recents"].tap()
+        }
+        if !cancel.waitForExistence(timeout: 2) { more.tap() }
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), debugDescription)
+        cancel.tap()
+    }
 }
