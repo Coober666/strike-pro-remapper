@@ -33,7 +33,10 @@ and the repository's [captured factory-card evidence](FACTORY_SD_ACTIVATION.md).
 
 ## Music and monitoring audio
 
-The intended wired setup uses the hub's USB data connection for Strike MIDI and
+The iPad's single USB-C port connects to a hub. The hub supplies USB data for the
+Strike, an audio output (built in or a USB DAC), and optionally charging input.
+These are peripherals, not a separate computer service. The intended wired setup
+uses the hub's USB data connection for Strike MIDI and
 an iPad audio output/DAC into the module's AUX IN for music. The module produces
 its own drum sound. A MIDI event does not itself produce audio, but any software
 drums/preview generated on the iPad can mix with music on its shared output.

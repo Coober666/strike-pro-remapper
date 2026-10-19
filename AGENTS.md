@@ -599,7 +599,8 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   probes**, and does not prove USB identity. Never claim Windows/Linux/iPad hardware
   validation from simulated tests. See `docs/IPAD_FACTORY_CONTROLLER.md` and
   `tools/test_factory_bridge.py`; `tests/browser/factory-controller.spec.js` runs in
-  Chromium and iPad WebKit. Direct-USB native iPad app work is paused and not included.
+  Chromium and iPad WebKit. Direct USB is outside this bridge. Native iPad work has resumed in
+  docs/NATIVE_STRIKE_EDITOR_PLAN.md; direct MIDI/storage remain unverified.
 - **Full Wi-Fi editor** is a separate opt-in `strike_remapper.wifi_editor` entry point.
   It subclasses `Handler` with pairing/session and exact Host/Origin guards; normal
   `strike_remap.py` remains localhost-only. Every editor API and stream requires a valid
