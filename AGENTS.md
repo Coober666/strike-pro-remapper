@@ -1007,8 +1007,9 @@ Keep import/rejection and source-byte UI assertions, plus selected-song retentio
 model assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
 the nested accessibility buttons produced by a framed image label on iOS 18.
-The search UI workflow submits its query before selection so a wide-iPad keyboard
-does not retain animation-idle waits during later toolbar actions. Each test has
+The search UI workflow enters its query and submits Return as separate keyboard
+events before selection, so a wide-iPad keyboard does not retain animation-idle
+waits during later toolbar actions. Each test has
 a 180-second execution allowance, keeping stalled UI diagnostics within the CI job.
 Before each device run, wait for `simctl bootstatus -b`. Shut down only devices
 that were not already booted when the helper started, including after failure;
