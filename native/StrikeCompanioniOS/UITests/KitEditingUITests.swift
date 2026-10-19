@@ -56,6 +56,37 @@ final class KitEditingUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
+    func testDrumMapSelectionZoneSwitchAndZonesFallback() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.launch()
+        app.buttons["demo"].tap()
+        app.buttons["kit-inspector"].tap()
+        app.buttons["kit-demo"].tap()
+        let map = app.buttons["Drum map"]
+        XCTAssertTrue(map.waitForExistence(timeout: 10))
+        map.tap()
+        let snare = app.buttons["kit-zone-S1H"]
+        XCTAssertTrue(snare.waitForExistence(timeout: 5))
+        screenshot("Native drum map")
+        snare.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
+        app.buttons["kit-detail-zone-S1R"].tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        XCTAssertTrue(app.buttons["kit-edit-aLevel"].isEnabled)
+        app.buttons["close-inspector"].tap()
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
+        app.buttons["kit-inspector"].tap()
+        app.buttons["Zones"].tap()
+        let rim = app.descendants(matching: .any).matching(identifier: "kit-zone-S1R").firstMatch
+        XCTAssertTrue(rim.waitForExistence(timeout: 5))
+        rim.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        XCTAssertTrue(app.staticTexts["kit-edit-status"].label.contains("Original imported"))
+        screenshot("Native zone selection")
+    }
+
     func testExplicitApplyCancelBoundsUndoRedoAndRetainedEditsAfterDone() {
         let app = launchKit()
         app.buttons["kit-edit-aLevel"].tap()

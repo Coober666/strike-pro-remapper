@@ -4,8 +4,11 @@ Current direction: ship a dependable Strike editor, then add general drum-MIDI u
 Native iPhone/iPad Companion now supports setlist viewing and local session restoration.
 The first standalone editing milestone adds confirmed per-pad settings, existing-reference
 assignments, undo/redo and verified export to a new `.skt` copy. Imported originals
-stay untouched; edits are memory-only until export. Sound libraries, playback, the
-visual drum map, kit-edit recovery and direct mobile USB remain future work.
+stay untouched; edits are memory-only until export. The native workspace adds a
+selectable standard drum map and zone switching. The next priority is direct native
+MIDI input, then proving module-storage access, toward iPad + Strike operation
+without a computer. See [the native editor plan](docs/NATIVE_STRIKE_EDITOR_PLAN.md).
+Sound libraries, playback, kit-edit recovery and direct mobile storage remain future work.
 Physical iPad/Files-provider and module acceptance of native edited copies remain open. Historical viewer-first
 research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a release gate.
 

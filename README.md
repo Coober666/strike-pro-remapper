@@ -229,7 +229,9 @@ Swift library and version-1 format. A local copy restores the setlist, selected 
 reading size and performance view after relaunch. Setlists remain read-only.
 The native kit editor opens `.skt` files for confirmed pad settings and Layer A/B
 assignments to references already in the kit, with undo/redo and side-by-side details
-on wide iPads. Numeric settings offer a large text-entry field with Clear, a slider
+on wide iPads. A **Drum map** view selects pads in a standard arrangement; zone
+buttons switch head/rim and cymbal zones, with the complete Zones list available.
+Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
 it for replacement; Apply confirms the edit and Cancel discards it.
 **Export new copy** creates a uniquely named kit in a chosen Files

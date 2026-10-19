@@ -93,6 +93,20 @@ UI tests cover explicit edits, both layers, signed pan, undo/redo, retention aft
 Done, replacement protection, export-folder cancellation and a complete Files export/reopen. Simulator evidence
 is separate from physical Files-provider, iPad, accessibility and module acceptance.
 
+## Native editor workspace (0.6)
+
+Switch **Zones → Drum map** to select pads in a standard drum arrangement. It shows
+only pads present in the open kit. Swipe across the map in narrow windows; wide
+iPads keep the selected pad’s inspector alongside it. On iPhone, selecting a pad
+opens its detail screen. Buttons above the layer controls switch between that
+pad’s head/rim or bow/edge/bell zones. The **Zones** list remains available for all
+zones, including unknown identifiers. The arrangement is a selection aid, not a
+record of your physical rack, and selection never changes kit bytes or sends MIDI.
+
+The full native editor is being developed toward direct iPad-to-Strike operation.
+Native MIDI input and direct module storage are separate acceptance gates; neither
+is provided by the drum map. See [the implementation plan](../../docs/NATIVE_STRIKE_EDITOR_PLAN.md).
+
 ## Simulator build and tests
 
 Requires full Xcode with an installed iOS simulator runtime. Open

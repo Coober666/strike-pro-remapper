@@ -1127,3 +1127,22 @@ open More. An Other element labelled Cancel can point at the More launcher and
 must not be treated as the cancellation command. Assert the editor is usable again.
 Keep personal signing/device metadata out of commits. Build/test installed iPhone
 and iPad simulators before physical-device setup; guide owner steps one at a time.
+
+## Native editor workspace and direct-USB direction
+
+The 0.6 workspace adds optional Drum map beside the complete Zones list.
+KitDrumMap renders only pad groups present in the open kit, in standard positions;
+never imply it describes the physical rack. Map/zone buttons select the existing
+model index, opening compact detail or updating the wide inspector. Detail buttons
+switch sibling zones; unknown identifiers remain reachable in Zones. Selection is
+read-only and must preserve kit bytes/history. Touch targets stay at least 44pt;
+use Zones when a larger text size makes the spatial view impractical.
+
+The owner requested eventual standalone iPad + Strike operation. Prioritize an
+explicit native MIDI input proof before further broad editor work. Core MIDI
+capability and desktop class-compliant MIDI are not physical direct-iPad acceptance.
+Do not invent live-edit commands from binary offsets or treat MIDI success as
+storage access. Direct user/factory storage, known activation on iPad and verified
+new-copy deployment each need separate attended evidence. No device work while the
+owner updates the iPad OS; wait for explicit completion/unlock confirmation.
+See docs/NATIVE_STRIKE_EDITOR_PLAN.md for the current staged scope.
