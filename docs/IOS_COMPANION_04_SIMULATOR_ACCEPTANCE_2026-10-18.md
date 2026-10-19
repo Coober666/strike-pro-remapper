@@ -13,6 +13,12 @@ zero failures, zero skips**. The helper receipt reports unchanged source hashes
 and exit code zero for each device. Logs, xcresults, screenshots and the receipt
 are retained locally under the ignored `.build/ios-inspector-final/` output.
 
+Receipt qualification discovered during 0.5 work: this run's receipt contains only
+the build-helper hash. The earlier exclusion check also matched the checkout's
+parent `.build` directory and skipped native inputs. The named test run/logs remain
+observations, but that receipt does not establish native source stability. The
+0.5 helper fixes this and has a nested-worktree regression test.
+
 The subsequent UI-only refinement increases the gap between the inspector's two
 layer columns from the default to 32 points. The focused iPad inspector
 UI recheck passed, and its screenshot was inspected; the full-run result above refers to the named commit.

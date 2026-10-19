@@ -237,6 +237,8 @@ remain future work.
 [Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
 confirmed demo song/reading-size restoration, synthetic kit inspection and external
 kit Open In/rejection retention; Files-provider, iPad and accessibility scope remains separate.
+The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
+covers kit-copy editing, original-file preservation and local Files export/reopen.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome

@@ -1095,5 +1095,10 @@ and formats.build_skt. Swift tests compare exact output bytes for every field,
 signed bounds/assignments/rejections, history, unknown-byte preservation, export
 collisions/partial failures and reopen. XCUITests cover explicit editing, both layers,
 undo/redo, retained edits after Done, replacement confirmation, export cancellation and a Files export/reopen workflow.
+Value-edit sheets clear keyboard focus on Apply/Cancel. Files may restore its last
+folder: UI tests recognize the app destination before navigating the sidebar.
+For cancellation, use the real Cancel button; if hidden, return to Recents and
+open More. An Other element labelled Cancel can point at the More launcher and
+must not be treated as the cancellation command. Assert the editor is usable again.
 Keep personal signing/device metadata out of commits. Build/test installed iPhone
 and iPad simulators before physical-device setup; guide owner steps one at a time.
