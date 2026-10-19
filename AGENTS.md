@@ -40,6 +40,9 @@ tools/backup_source.py snapshots every registered worktree plus all Git refs, di
 binary patches and non-ignored untracked source. Ignored libraries/builds/secrets are
 excluded. Require the expected mount for NAS publication, create an exclusive new
 snapshot, check source/archive bytes and read-back hashes, and write completion last.
+Use os.path.ismount plus a reachable-directory check for required mounts, including
+Windows drive/UNC roots on Python 3.10/3.11; do not use Path.is_mount there. The
+Windows source-backup matrix covers both Python versions without real NAS access.
 Incomplete snapshots cannot be restored. Never prune old backups or retry failed
 publication automatically. Source capture is not an atomic filesystem snapshot;
 stop if source changes. tools/test_source_backup.py uses disposable repositories,

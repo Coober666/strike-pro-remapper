@@ -67,12 +67,19 @@ def worktrees(repo):
             if record.startswith(b"worktree ")]
 
 
+def available_mount(path):
+    # pathlib.Path.is_mount() does not support Windows on Python 3.10/3.11.
+    # Windows drive/UNC roots are syntactic mounts even when disconnected, so
+    # require an accessible directory as well as the platform mount check.
+    return os.path.isdir(path) and os.path.ismount(path)
+
+
 def check_destination(destination, mount):
     for path in [destination, *destination.parents]:
         if path.is_symlink():
             raise ValueError("Backup destinations cannot contain symlinks")
     if mount is not None:
-        if not mount.is_mount() or not destination.resolve().is_relative_to(mount.resolve()):
+        if not available_mount(mount) or not destination.resolve().is_relative_to(mount.resolve()):
             raise ValueError("Required NAS mount is absent or does not contain the destination")
 
 

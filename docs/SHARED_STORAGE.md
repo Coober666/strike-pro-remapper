@@ -67,7 +67,10 @@ back these up separately if needed. Keep snapshots private because tracked local
 settings may include personal signing changes. It does not push, pull, commit,
 checkout or delete source files. It refuses linked backup destinations and a missing
 required mount, creates a new uniquely named snapshot, verifies archived bytes and
-NAS read-back SHA-256 hashes, and writes the completion manifest last. Handled failed
+NAS read-back SHA-256 hashes, and writes the completion manifest last. Mount
+validation uses the platform `os.path.ismount` check plus an accessible-directory
+check, including mapped drive roots and UNC share roots on Windows/Python 3.10+.
+A disconnected Windows root is rejected even though its pathname identifies a mount. Handled failed
 publication retains a marked incomplete snapshot. An interrupted or disconnected
 write may leave partial data; only a fully verified snapshot is eligible for restore.
 There is no automatic pruning or retry. Before/after source checks detect changes;

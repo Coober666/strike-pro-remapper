@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Disposable repository restore, ignored-file, collision and corruption checks."""
 import os
-from pathlib import Path
+import ntpath
+from pathlib import Path, PureWindowsPath
 import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
-from backup_source import backup, git, verify_backup
+from backup_source import available_mount, backup, check_destination, git, verify_backup
 
 
 class SourceBackupTests(unittest.TestCase):
@@ -65,6 +67,37 @@ class SourceBackupTests(unittest.TestCase):
             (output / "repository.bundle").write_bytes(b"corrupted")
             with self.assertRaisesRegex(ValueError, "checksum"):
                 verify_backup(output)
+
+    def test_drive_root_works_without_pathlib_windows_mount_support(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            # A real accessible drive root on Windows, / on Unix. Python 3.10/3.11
+            # pathlib returns False on Windows; the os.path check must still work.
+            with mock.patch.object(Path, "is_mount", return_value=False):
+                check_destination(base / "backups", Path(base.anchor))
+            self.assertFalse((base / "backups").exists(), "Validation must not create directories")
+
+    def test_windows_drive_and_unc_roots_require_a_reachable_directory(self):
+        windows_ismount = ntpath.ismount
+        for root in (PureWindowsPath("Z:/"), PureWindowsPath("//backup.invalid/strike")):
+            with self.subTest(root=str(root)):
+                # Exercise Windows root recognition on every CI platform without
+                # contacting a real network share or mounting a developer drive.
+                with mock.patch("backup_source.os.path.ismount", side_effect=windows_ismount):
+                    with mock.patch("backup_source.os.path.isdir", return_value=True):
+                        self.assertTrue(available_mount(root))
+                    with mock.patch("backup_source.os.path.isdir", return_value=False):
+                        self.assertFalse(available_mount(root), "Disconnected roots are not available mounts")
+
+    def test_required_mount_rejects_ordinary_folder_and_outside_destination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            with self.assertRaisesRegex(ValueError, "mount"):
+                check_destination(base / "backups", base)
+            with mock.patch("backup_source.available_mount", return_value=True):
+                with self.assertRaisesRegex(ValueError, "mount"):
+                    check_destination(base / "backups", base / "different-share")
+            self.assertFalse((base / "backups").exists())
 
     def test_missing_mount_never_creates_a_local_shadow_backup(self):
         with tempfile.TemporaryDirectory() as temporary:
