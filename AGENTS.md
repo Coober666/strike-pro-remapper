@@ -1109,7 +1109,9 @@ the slider dismisses keyboard focus. UI coverage includes coarse changes, Clear,
 direct typing, invalid-value retention and Cancel leaving the kit untouched.
 Replacement helpers use the visible Clear action and assert the resulting text;
 they must not assume where a tap places the caret. A separate check verifies that
-first-focus typing replaces the selected number without Clear.
+first-focus typing replaces the selected number without Clear. Replacement helpers
+submit keyboard Done before toolbar actions: the iPad keyboard repositions the sheet
+before the remote accessibility frame catches up. Done must leave Apply explicit.
 Files may restore its last folder: UI tests recognize the app destination before
 navigating the sidebar.
 Use one fileImporter presenter for kit files and export folders; capture its purpose

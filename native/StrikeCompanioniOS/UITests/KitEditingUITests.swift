@@ -26,6 +26,10 @@ final class KitEditingUITests: XCTestCase {
         clear.tap()
         field.typeText(text)
         XCTAssertEqual(field.value as? String, text)
+        // The iPad keyboard moves this sheet before the remote AX frame catches up.
+        // Done ends text entry without applying; then the explicit toolbar action is stable.
+        field.typeText("\n")
+        XCTAssertTrue(XCUIApplication().buttons["kit-edit-apply"].exists)
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         let scroll = app.scrollViews["kit-detail"]
