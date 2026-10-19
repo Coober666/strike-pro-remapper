@@ -56,11 +56,11 @@ class SourceBackupTests(unittest.TestCase):
             self.assertFalse((restored / "delete.txt").exists())
             with tarfile.open(output / "worktree-01-source.tar.gz") as archive:
                 self.assertNotIn("ignored/credential", archive.getnames())
-                self.assertEqual(archive.extractfile("untracked.txt").read(), b"unsaved to Git\n")
+                self.assertEqual(archive.extractfile("untracked.txt").read(), (repo / "untracked.txt").read_bytes())
                 if os.name != "nt":
                     self.assertTrue(archive.getmember("external-link").issym())
             with tarfile.open(output / "worktree-02-source.tar.gz") as archive:
-                self.assertEqual(archive.extractfile("prototype.txt").read(), b"unfinished prototype\n")
+                self.assertEqual(archive.extractfile("prototype.txt").read(), (second / "prototype.txt").read_bytes())
             second_backup = backup(repo, base / "backups")
             self.assertNotEqual(output, second_backup)
             verify_backup(output)

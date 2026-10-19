@@ -43,6 +43,7 @@ snapshot, check source/archive bytes and read-back hashes, and write completion 
 Use os.path.ismount plus a reachable-directory check for required mounts, including
 Windows drive/UNC roots on Python 3.10/3.11; do not use Path.is_mount there. The
 Windows source-backup matrix covers both Python versions without real NAS access.
+Archive assertions compare original bytes, including native Windows CRLF endings.
 Incomplete snapshots cannot be restored. Never prune old backups or retry failed
 publication automatically. Source capture is not an atomic filesystem snapshot;
 stop if source changes. tools/test_source_backup.py uses disposable repositories,
