@@ -142,7 +142,8 @@ no SD card present — e.g. on a laptop away from your kit.
 **Across computers:** keep code/builds local and exchange committed branches through
 GitHub. A NAS can hold shared kits, sounds, setlists, exports and backups while local
 copies support offline work. The [shared-storage guide](docs/SHARED_STORAGE.md)
-describes an additive layout and a verified source-backup helper with reachable
+describes an additive layout and a verified source-backup helper with raw restorable
+patches even when Git text converters or display preferences are configured, plus reachable
 Windows drive/UNC mount checks and junction rejection on Python 3.10+ that preserves Git
 history, dirty edits and untracked source from every worktree. A shared folder does
 not automatically synchronize an open Companion document.

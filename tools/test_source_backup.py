@@ -5,6 +5,8 @@ import ntpath
 from pathlib import Path, PureWindowsPath
 import subprocess
 import stat
+import shlex
+import sys
 from types import SimpleNamespace
 import tarfile
 import tempfile
@@ -69,6 +71,43 @@ class SourceBackupTests(unittest.TestCase):
             (output / "repository.bundle").write_bytes(b"corrupted")
             with self.assertRaisesRegex(ValueError, "checksum"):
                 verify_backup(output)
+
+    def test_restore_raw_staged_and_working_bytes_with_textconv_and_display_preferences(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary).resolve()
+            repo = base / "repo"
+            repo.mkdir()
+            git(repo, "init", "-b", "main")
+            git(repo, "config", "user.name", "Backup test")
+            git(repo, "config", "user.email", "backup@example.invalid")
+            converter = base / "text converter.py"
+            converter.write_text("from pathlib import Path\nimport sys\n"
+                                 "sys.stdout.write(Path(sys.argv[1]).read_text().upper())\n")
+            # Git runs configured converters through its shell, including Git for Windows.
+            command = shlex.join([Path(sys.executable).as_posix(), converter.as_posix()])
+            git(repo, "config", "diff.backup-test.textconv", command)
+            git(repo, "config", "color.ui", "always")
+            git(repo, "config", "diff.noprefix", "true")
+            (repo / ".gitattributes").write_text("raw.dat -text diff=backup-test\n")
+            raw = repo / "raw.dat"
+            raw.write_bytes(b"original raw data\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-m", "Raw source with a display converter")
+            raw.write_bytes(b"staged raw data\n")
+            git(repo, "add", "raw.dat")
+            raw.write_bytes(b"working raw data\n")
+            self.assertIn(b"STAGED RAW DATA", git(repo, "diff", "--cached", "--binary", "--no-ext-diff"))
+            self.assertIn(b"WORKING RAW DATA", git(repo, "diff", "--binary", "--no-ext-diff"))
+            output = backup(repo, base / "backups")
+            verify_backup(output)
+            restored = base / "restored"
+            subprocess.run(["git", "clone", str(output / "repository.bundle"), str(restored)],
+                           check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            git(restored, "apply", "--index", str(output / "worktree-01-index_patch"))
+            self.assertEqual((restored / "raw.dat").read_bytes(), b"staged raw data\n")
+            git(restored, "apply", str(output / "worktree-01-working_patch"))
+            self.assertEqual((restored / "raw.dat").read_bytes(), raw.read_bytes())
+            self.assertEqual(git(restored, "show", ":raw.dat"), b"staged raw data\n")
 
     def test_drive_root_works_without_pathlib_windows_mount_support(self):
         with tempfile.TemporaryDirectory() as temporary:

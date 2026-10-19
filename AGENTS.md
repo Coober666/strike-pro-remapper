@@ -47,6 +47,9 @@ Archive assertions compare original bytes, including native Windows CRLF endings
 Reject st_file_attributes reparse points as well as symlinks in destination ancestry
 and source parent directories; old Windows Path.is_symlink misses junctions. Windows
 CI creates a disposable real junction and verifies no files reach its target.
+Staged and working patches disable textconv, external diff and color and force a/b
+prefixes so Git display configuration cannot replace restorable raw hunks. A real
+clone/apply regression enables a converter, forced color and no-prefix preferences.
 Incomplete snapshots cannot be restored. Never prune old backups or retry failed
 publication automatically. Source capture is not an atomic filesystem snapshot;
 stop if source changes. tools/test_source_backup.py uses disposable repositories,

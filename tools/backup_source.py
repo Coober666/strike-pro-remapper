@@ -61,10 +61,13 @@ def source_state(root):
 
 
 def worktree_state(root):
+    # Backups need applyable raw patches, independent of display preferences.
+    patch_options = ("--binary", "--no-ext-diff", "--no-textconv", "--no-color",
+                     "--src-prefix=a/", "--dst-prefix=b/")
     return {
         "head": git(root, "rev-parse", "HEAD").decode().strip(),
-        "index_patch": git(root, "diff", "--cached", "--binary", "--no-ext-diff"),
-        "working_patch": git(root, "diff", "--binary", "--no-ext-diff"),
+        "index_patch": git(root, "diff", "--cached", *patch_options),
+        "working_patch": git(root, "diff", *patch_options),
         "status": git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all"),
         "files": source_state(root),
     }

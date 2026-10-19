@@ -62,6 +62,10 @@ python3 tools/backup_source.py --verify "/path/to/new/snapshot"
 The standard-library helper records all registered worktrees, a verified Git bundle
 of all refs, current source archives, staged/unstaged binary patches and status. It
 includes non-ignored untracked work and preserves symlinks without following them.
+Both patches disable text conversion, external diff and color, and use standard a/b
+path prefixes so configured Git display drivers/preferences cannot transform restore
+data. A disposable clone/apply test exercises staged and working bytes with a text
+converter enabled.
 Ignored libraries, credentials, build products and simulator data are excluded;
 back these up separately if needed. Keep snapshots private because tracked local
 settings may include personal signing changes. It does not push, pull, commit,
