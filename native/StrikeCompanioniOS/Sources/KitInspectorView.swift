@@ -45,14 +45,16 @@ struct KitInspectorView: View {
             get: { model.choosingFile || model.choosingExportFolder },
             set: { if !$0 { model.choosingFile = false; model.choosingExportFolder = false } }),
                       allowedContentTypes: exportingFolder ? [.folder] : [UTType(filenameExtension: "skt") ?? .data]) { result in
+            let exportCopy = exportingFolder
             switch result {
             case .success(let url):
-                let exportCopy = exportingFolder
                 Task {
                     if exportCopy { await model.export(to: url) }
                     else { await model.open(url) }
                 }
-            case .failure(let error): model.report(error)
+            case .failure(let error):
+                if exportCopy { model.reportExportFailure(error) }
+                else { model.report(error) }
             }
         }
         .sheet(item: $editing, onDismiss: {

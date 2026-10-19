@@ -249,6 +249,9 @@ an unchanged original and exactly one intended byte changed. Accessibility, MIDI
 and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
+Export-folder provider errors use export-specific destination guidance and clear stale
+success messages while retaining edits and Undo history; cancellation stays quiet.
+
 The native iPhone/iPad product is evolving into **Strike Remapper**, one app with
 performance and editing views. The existing full web editor is the feature target;
 the current Companion-named build is an incremental native implementation and does

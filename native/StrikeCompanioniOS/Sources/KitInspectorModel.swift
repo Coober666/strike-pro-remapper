@@ -89,11 +89,13 @@ final class KitInspectorModel: ObservableObject {
         do {
             let url = try await Task.detached { try KitCopyExporter.copy(data, to: folder) }.value
             exportMessage = "Created \(url.lastPathComponent) in the selected folder. Your original is untouched."
-        } catch {
-            if isCancellation(error) { return }
-            errorTitle = "Copy couldn’t be exported"
-            errorMessage = "Copy couldn’t be exported. \(error.localizedDescription) Your edits are still open. Check the destination before trying again."
-        }
+        } catch { reportExportFailure(error) }
+    }
+    func reportExportFailure(_ error: Error) {
+        if isCancellation(error) { return }
+        exportMessage = nil
+        errorTitle = "Copy couldn’t be exported"
+        errorMessage = "Copy couldn’t be exported. \(error.localizedDescription) Your edits are still open. Check the destination before trying again."
     }
     func report(_ error: Error) {
         if isCancellation(error) { return }
