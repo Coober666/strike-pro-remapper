@@ -2,8 +2,11 @@
 
 Current direction: ship a dependable Strike editor, then add general drum-MIDI utilities.
 Native iPhone/iPad Companion now supports setlist viewing and local session restoration.
-A read-only kit inspector begins the standalone remapper path; kit editing/export, sound
-libraries and direct mobile USB remain future work. Historical viewer-first
+The first standalone editing milestone adds confirmed per-pad settings, existing-reference
+assignments, undo/redo and verified export to a new `.skt` copy. Imported originals
+stay untouched; edits are memory-only until export. Sound libraries, playback, the
+visual drum map, kit-edit recovery and direct mobile USB remain future work.
+Physical iPad/Files-provider and module acceptance of native edited copies remain open. Historical viewer-first
 research is preserved in [the roadmap archive](docs/ROADMAP_ARCHIVE.md), not a release gate.
 
 ## Integrated on main; physical acceptance pending

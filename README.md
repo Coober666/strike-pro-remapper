@@ -226,9 +226,14 @@ double-click.
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
 Swift library and version-1 format. A local copy restores the setlist, selected song,
-reading size and performance view after relaunch. Read-only; kit availability is not checked. The new kit inspector opens `.skt` files
-for pad-zone, Layer A/B reference and stored-setting inspection, with side-by-side
-details on wide iPads. It does not edit, resolve sounds, play audio or deploy kits.
+reading size and performance view after relaunch. Setlists remain read-only.
+The native kit editor opens `.skt` files for confirmed pad settings and Layer A/B
+assignments to references already in the kit, with undo/redo and side-by-side details
+on wide iPads. **Export new copy** creates a uniquely named kit in a chosen Files
+folder, verifies its bytes and never replaces an existing file. Imported originals
+stay untouched. Kit edits remain in memory until export; export before closing the
+app. Sound availability is not checked; sound libraries, playback and deployment
+remain future work.
 [Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
 confirmed demo song/reading-size restoration, synthetic kit inspection and external
 kit Open In/rejection retention; Files-provider, iPad and accessibility scope remains separate.

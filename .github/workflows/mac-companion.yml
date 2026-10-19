@@ -2,9 +2,9 @@ name: Native Strike companion
 
 on:
   push:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
   pull_request:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
 
 permissions:
   contents: read
@@ -57,6 +57,10 @@ jobs:
           python-version: '3.12'
       - name: Simulator selection contracts
         run: python tools/test_ios_build.py
+      - name: Kit inspection and editing parity
+        run: |
+          python tools/test_kit_inspector_format.py
+          python tools/test_kit_editing.py
       - name: iPhone and iPad simulator contracts and UI
         run: python tools/build_ios_companion.py --output "$RUNNER_TEMP/ios-companion"
       - uses: actions/upload-artifact@v4

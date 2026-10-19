@@ -149,7 +149,12 @@ final class CompanionUITests: XCTestCase {
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["kit-layer-a"].label, "Synthetic/Snare.sin")
-        XCTAssertEqual(app.staticTexts["kit-layer-b"].label, "Synthetic/Brush Snare.sin")
+        let layerB = app.staticTexts["kit-layer-b"]
+        for _ in 0..<6 {
+            if layerB.isHittable { break }
+            app.scrollViews["kit-detail"].swipeUp()
+        }
+        XCTAssertEqual(layerB.label, "Synthetic/Brush Snare.sin")
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "Kit inspector layers"

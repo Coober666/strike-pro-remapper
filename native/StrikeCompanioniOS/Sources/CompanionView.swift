@@ -57,7 +57,7 @@ struct MobileCompanionView: View {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button { showingInspector = true } label: { Image(systemName: "circle.grid.3x3") }
                             .frame(minWidth: 44, minHeight: 44)
-                            .accessibilityLabel("Kit inspector").accessibilityIdentifier("kit-inspector")
+                            .accessibilityLabel("Kit editor").accessibilityIdentifier("kit-inspector")
                         if model.isLoading { ProgressView().accessibilityLabel("Opening setlist") }
                         Button { model.choosingFile = true } label: { Image(systemName: "folder") }
                             .frame(minWidth: 44, minHeight: 44)

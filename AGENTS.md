@@ -980,7 +980,7 @@ separate checks; a macOS package build does not establish those results.
 SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
 companion; never duplicate or loosen the version-1 validator. Imports use the
 shared bounded, security-scoped reader off the main actor and replace state only
-after validation. Files and Open In are read-only; no kit path resolution, MIDI,
+after validation. Setlist Files/Open In imports are read-only; no kit path resolution, MIDI,
 card or network access. The iOS app atomically persists one bounded app-owned session snapshot in Application
 Support, with no source URLs/bookmarks. Revalidate using Setlist.decode before restore.
 Preserve failed imports and report disk failures without discarding current work.
@@ -1028,9 +1028,9 @@ physical iPad and accessibility acceptance remain separate; see
 metadata and owner-selected Xcode settings out of documentation commits.
 
 
-## Native kit inspector 0.4
+## Native kit inspector 0.4 (historical baseline)
 
-The iOS app has a separate read-only Kit inspector. Foundation-only KitInspection.swift
+The 0.4 iOS app introduced a separate read-only Kit inspector. Foundation-only KitInspection.swift
 joins the StrikeSetlists package without changing the setlist validator or Mac app.
 Require bounded KIT/inst/str chunks before replacing state; limit files to 4 MiB,
 128 pads, 4096 references of 240 ASCII bytes. Keep original/header/payload/tail bytes.
@@ -1051,3 +1051,45 @@ See docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md. Do not generalize thi
 to imported-setlist persistence, physical Files providers/iPad, VoiceOver or module
 behavior. Keep signing/device receipts private; acceptance is owner-reported UI
 paired with programmatic build/install/launch evidence.
+
+
+## Native kit editing 0.5
+
+The iPhone/iPad kit editor reuses KitInspection plus Foundation-only KitEditing.swift
+in StrikeSetlists. encoded() rebuilds chunks losslessly, retaining exact KIT/str blocks,
+pad payload lengths, all reserved bytes and the opaque tail. Only the 38 confirmed
+writable per-pad parameters and A/B indices may change. Layer B maximum velocity,
+kit-header FX and unknown offsets stay untouched. Assign only a current string-table
+index or 65535; never add/resolve references or open sounds/cards. Unknown zones,
+duplicate identifiers and noncanonical empty string slots remain inspectable/copyable
+but cannot be edited. Invalid existing values remain raw until explicitly edited.
+Validate value/range/velocity consistency before changing state or history. Undo/redo
+stores at most 20 small byte patches; new edits clear redo, invalid/no-op edits do not.
+
+Imported kit bytes are immutable in KitEditingSession. App edits require explicit
+Apply; Cancel leaves state unchanged. Done and external setlist routing retain the
+memory-only kit session. Replacing a dirty kit requires explicit discard after the
+candidate has validated; cancellation and failed imports retain edits, selection and
+history. Kit edits are not restored after process termination; the UI says to export
+before closing the app. The setlist session store is unchanged.
+
+KitCopyExporter is the only native kit write path. The user selects a Files folder;
+coordinate security-scoped reads/writes off the main actor. Prepare Documents/Kit Copies
+as a local Files destination (UIFileSharingEnabled); session snapshots stay private in
+Application Support. Generate an ASCII
+Kit-edit-<8 lowercase hex>.skt name (21 characters). Use directory-relative exclusive
+creation with O_EXCL/O_NOFOLLOW, never replacement or an imported source URL. Flush,
+read back and parse the same descriptor before reporting success. Reject existing
+files/links; clean up only this attempt's matching file identity on handled failure.
+No automatic retries. An interrupted process can leave an incomplete copy; errors
+ask users to check the destination. Export retains edits and undo history. Cloud
+sync, physical provider behavior and module playback are separate acceptance gates.
+
+tools/test_kit_editing.py owns synthetic KitEditingCases.json; --write regenerates
+it, no-arg CI checks it against the Python editor's literal confirmed parameter map
+and formats.build_skt. Swift tests compare exact output bytes for every field,
+signed bounds/assignments/rejections, history, unknown-byte preservation, export
+collisions/partial failures and reopen. XCUITests cover explicit editing, both layers,
+undo/redo, retained edits after Done, replacement confirmation, export cancellation and a Files export/reopen workflow.
+Keep personal signing/device metadata out of commits. Build/test installed iPhone
+and iPad simulators before physical-device setup; guide owner steps one at a time.

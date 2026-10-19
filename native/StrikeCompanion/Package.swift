@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14), .iOS(.v16)],
     products: [.library(name: "StrikeSetlists", targets: ["StrikeSetlists"])],
     targets: [
-        .target(name: "StrikeSetlists", path: "Sources", exclude: ["StrikeCompanion.swift"], sources: ["Setlist.swift", "KitInspection.swift"]),
+        .target(name: "StrikeSetlists", path: "Sources", exclude: ["StrikeCompanion.swift"], sources: ["Setlist.swift", "KitInspection.swift", "KitEditing.swift"]),
         .executableTarget(name: "core-probe", dependencies: ["StrikeSetlists"], path: "PackageProbe")
     ]
 )
