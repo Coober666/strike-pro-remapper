@@ -51,7 +51,7 @@ struct KitDrumMap: View {
     private func primaryIndex(_ group: String) -> Int? {
         // Prefer head/bow over the order stored in the file, then retain any surviving zone.
         let preferred = group + (group == "R1" || group == "H1" || group.hasPrefix("C") ? "B" : "H")
-        return kit.pads.firstIndex { $0.id == preferred } ?? kit.pads.firstIndex { String($0.id.prefix(2)) == group }
+        return kit.pads.firstIndex { $0.id == preferred } ?? kit.pads.firstIndex { $0.isKnownZone && String($0.id.prefix(2)) == group }
     }
 
     private func pad(_ position: Position, index: Int) -> some View {

@@ -172,16 +172,16 @@ struct KitInspectorView: View {
                     }.padding(.bottom)
                 }
             } else {
-            List(kit.pads.indices, id: \.self) { index in
-                let pad = kit.pads[index]
-                Group {
-                    if wide {
-                        Button { model.selected = index } label: { zoneLabel(pad) }
-                            .accessibilityAddTraits(model.selected == index ? [.isSelected] : [])
-                    } else { NavigationLink(value: index) { zoneLabel(pad) } }
-                }.accessibilityIdentifier("kit-zone-\(pad.id)")
-                    .listRowBackground(wide && model.selected == index ? Stage.brass.opacity(0.14) : Stage.background)
-            }.listStyle(.plain).scrollContentBackground(.hidden)
+                List(kit.pads.indices, id: \.self) { index in
+                    let pad = kit.pads[index]
+                    Group {
+                        if wide {
+                            Button { model.selected = index } label: { zoneLabel(pad) }
+                                .accessibilityAddTraits(model.selected == index ? [.isSelected] : [])
+                        } else { NavigationLink(value: index) { zoneLabel(pad) } }
+                    }.accessibilityIdentifier("kit-zone-\(pad.id)")
+                        .listRowBackground(wide && model.selected == index ? Stage.brass.opacity(0.14) : Stage.background)
+                }.listStyle(.plain).scrollContentBackground(.hidden)
             }
             if kit.pads.isEmpty { Text("This kit has no pad zones.").padding() }
         }

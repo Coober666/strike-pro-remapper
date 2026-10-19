@@ -1131,7 +1131,7 @@ and iPad simulators before physical-device setup; guide owner steps one at a tim
 ## Native editor workspace and direct-USB direction
 
 The 0.6 workspace adds optional Drum map beside the complete Zones list.
-KitDrumMap renders only pad groups present in the open kit, in standard positions;
+KitDrumMap renders only known pad groups present in the open kit, in standard positions;
 never imply it describes the physical rack. Map/zone buttons select the existing
 model index, opening compact detail or updating the wide inspector. Detail buttons
 switch sibling zones; unknown identifiers remain reachable in Zones. Selection is
