@@ -27,6 +27,24 @@ Standard-library Python web app (`strike_remap.py`) for editing Alesis Strike Pr
 discovery lands, or the verification status of an offset changes, update README.md in the
 same commit (Features list, Format status table, or Credits as appropriate).
 
+## Shared storage and source backups
+
+Code and builds stay local; GitHub exchanges committed branches. NAS storage is for
+shared kits/instruments/samples/setlists, fresh exports and versioned backups, not a
+shared live Git checkout. See docs/SHARED_STORAGE.md. Identify the source library;
+copy additively, preserve relative paths and never overwrite/delete source or existing
+destination files. Do not repoint the active/recovery library or claim automatic
+Companion document sync from a NAS folder. Keep personal NAS/account paths private.
+
+tools/backup_source.py snapshots every registered worktree plus all Git refs, dirty
+binary patches and non-ignored untracked source. Ignored libraries/builds/secrets are
+excluded. Require the expected mount for NAS publication, create an exclusive new
+snapshot, check source/archive bytes and read-back hashes, and write completion last.
+Incomplete snapshots cannot be restored. Never prune old backups or retry failed
+publication automatically. Source capture is not an atomic filesystem snapshot;
+stop if source changes. tools/test_source_backup.py uses disposable repositories,
+performs a real clone/patch restore, checks worktrees and refuses missing mounts.
+
 ## Quick start
 
 ```powershell
