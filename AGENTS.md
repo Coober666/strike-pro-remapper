@@ -1100,7 +1100,9 @@ Numeric editors expose a large rounded text field, explicit Clear, whole-number
 slider and ±1 stepper. All controls edit pending text only; Apply/Cancel and model
 validation remain the mutation boundary.
 First focus selects the whole numeric value after the initiating tap completes,
-so direct typing replaces it instead of prepending to right-aligned digits.
+so direct typing replaces it instead of prepending to right-aligned digits. A private
+UIViewRepresentable owns its UITextField delegate, focus and selection; never observe
+global text-field notifications to manage this field.
 Clamp only the slider thumb's display
 when text is unsupported; never silently clamp or replace the typed input. Dragging
 the slider dismisses keyboard focus. UI coverage includes coarse changes, Clear,

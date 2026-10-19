@@ -17,7 +17,7 @@ struct KitEditSheet: View {
     @State private var input: String
     @State private var reference: Int
     @State private var query = ""
-    @FocusState private var valueFocused: Bool
+    @State private var valueFocused = false
     @Environment(\.dismiss) private var dismiss
 
     init(request: KitEditRequest, kit: KitInspection, apply: @escaping (Int) -> Bool) {
@@ -81,21 +81,8 @@ struct KitEditSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Type a value", systemImage: "keyboard").font(.headline)
                         HStack(spacing: 12) {
-                            TextField("Value", text: $input)
-                                .font(.largeTitle.monospacedDigit()).textFieldStyle(.roundedBorder)
-                                .multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation)
-                                .focused($valueFocused).submitLabel(.done).onSubmit { valueFocused = false }
-                                .accessibilityLabel(parameter.title).accessibilityIdentifier("kit-edit-value")
-                                .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { notification in
-                                    guard let field = notification.object as? UITextField,
-                                          field.accessibilityIdentifier == "kit-edit-value" || valueFocused else { return }
-                                    // Finish the initiating tap before selecting; otherwise it can move the caret again.
-                                    DispatchQueue.main.async { [weak field] in
-                                        guard let field, field.isFirstResponder else { return }
-                                        field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
-                                                                                  to: field.endOfDocument)
-                                    }
-                                }
+                            NumericValueField(text: $input, isFocused: $valueFocused, title: parameter.title)
+                                .frame(maxWidth: .infinity, minHeight: 52)
                             Button {
                                 input = ""
                                 valueFocused = true
@@ -154,5 +141,70 @@ struct KitEditSheet: View {
                 if reference == index { Image(systemName: "checkmark").foregroundStyle(Stage.brass) }
             }.frame(minHeight: 44)
         }.accessibilityIdentifier("kit-reference-\(index)").accessibilityAddTraits(reference == index ? [.isSelected] : [])
+    }
+}
+
+/// Own the field's focus and selection together instead of observing every keyboard field in the app.
+private struct NumericValueField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var isFocused: Bool
+    let title: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        field.borderStyle = .roundedRect
+        field.textAlignment = .right
+        field.keyboardType = .numbersAndPunctuation
+        field.returnKeyType = .done
+        field.font = UIFontMetrics(forTextStyle: .largeTitle).scaledFont(
+            for: .monospacedDigitSystemFont(ofSize: 34, weight: .regular))
+        field.adjustsFontForContentSizeCategory = true
+        field.tintColor = UIColor(Stage.brass)
+        field.accessibilityIdentifier = "kit-edit-value"
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        field.accessibilityLabel = title
+        if isFocused && !field.isFirstResponder { field.becomeFirstResponder() }
+        else if !isFocused && field.isFirstResponder { field.resignFirstResponder() }
+    }
+
+    static func dismantleUIView(_ field: UITextField, coordinator: Coordinator) {
+        field.delegate = nil
+        field.resignFirstResponder()
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: NumericValueField
+        init(_ parent: NumericValueField) { self.parent = parent }
+
+        @objc func textChanged(_ field: UITextField) {
+            let text = field.text ?? ""
+            if parent.text != text { parent.text = text }
+        }
+        func textFieldDidBeginEditing(_ field: UITextField) {
+            if !parent.isFocused { parent.isFocused = true }
+            // Finish the initiating tap before selecting; otherwise it can move the caret again.
+            DispatchQueue.main.async { [weak field] in
+                guard let field, field.isFirstResponder else { return }
+                field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
+                                                          to: field.endOfDocument)
+            }
+        }
+        func textFieldDidEndEditing(_ field: UITextField) {
+            if parent.isFocused { parent.isFocused = false }
+        }
+        func textFieldShouldReturn(_ field: UITextField) -> Bool {
+            field.resignFirstResponder()
+            return true
+        }
     }
 }
