@@ -1101,6 +1101,10 @@ Use one fileImporter presenter for kit files and export folders; capture its pur
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers
 wait for dismissal and reverse direction when the target is above the viewport.
+Keep an immediate hittability check before predicate waits. The Files export/reopen
+UI test has a 300-second allowance for cold hosted providers; other tests default
+to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
+or retry file mutations to accommodate a slow provider.
 For cancellation, use the real Cancel button; if hidden, return to Recents and
 open More. An Other element labelled Cancel can point at the More launcher and
 must not be treated as the cancellation command. Assert the editor is usable again.

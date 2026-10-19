@@ -26,9 +26,10 @@ final class KitEditingUITests: XCTestCase {
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         let scroll = app.scrollViews["kit-detail"]
         for _ in 0..<9 {
+            if element.isHittable { return }
             // Wait for sheet dismissal before scrolling; a fast first swipe can pass the target.
             let visible = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in element.isHittable }, object: nil)
-            if XCTWaiter.wait(for: [visible], timeout: 1) == .completed { return }
+            if XCTWaiter.wait(for: [visible], timeout: 3) == .completed || element.isHittable { return }
             if element.exists && element.frame.minY < scroll.frame.minY + 110 { scroll.swipeDown() }
             else { scroll.swipeUp() }
         }
@@ -135,6 +136,8 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("100"))
     }
     func testEditExportThroughFilesAndReopenCopy() {
+        // Cold hosted Files providers can take over three minutes; all assertions remain required.
+        executionTimeAllowance = 300
         let app = launchKit()
         app.buttons["kit-edit-aLevel"].tap()
         replace(app.textFields["kit-edit-value"], with: "72")
