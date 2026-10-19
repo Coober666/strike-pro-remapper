@@ -113,7 +113,8 @@ final class KitEditingUITests: XCTestCase {
         app.alerts.buttons["Keep editing"].tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("71"))
         menu("kit-export", app: app)
-        let cancel = app.buttons["Cancel"]
+        // Restored Files folders can expose the system close control as Other rather than Button.
+        let cancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Cancel'")).firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 30))
         screenshot("Choose export folder")
         cancel.tap()

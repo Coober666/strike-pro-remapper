@@ -126,7 +126,8 @@ final class CompanionUITests: XCTestCase {
         let app = launchDemo()
         app.buttons["next"].tap()
         app.buttons["import"].tap()
-        let cancel = app.buttons["Cancel"]
+        // Restored Files folders can expose the system close control as Other rather than Button.
+        let cancel = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Cancel'")).firstMatch
         // Files is a separate system service; first launch on a clean hosted
         // simulator can leave its remote view blank for more than ten seconds.
         XCTAssertTrue(cancel.waitForExistence(timeout: 30))
