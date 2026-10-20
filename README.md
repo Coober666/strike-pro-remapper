@@ -240,7 +240,8 @@ The native kit editor opens `.skt` files for confirmed pad settings and Layer A/
 assignments to references already in the kit, with undo/redo and side-by-side details
 on wide iPads. A **Drum map** view selects pads in a standard arrangement; zone
 buttons switch head/rim and cymbal zones, with the complete Zones list available.
-Accessibility text sizes use Zones automatically. The welcome screen offers kit
+Accessibility text sizes use Zones automatically. The large-text UI check also verifies
+that Done dismisses the editor after zone navigation. The welcome screen offers kit
 editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
 Numeric settings offer a large text-entry field with Clear, a slider

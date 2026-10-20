@@ -127,8 +127,16 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Drum map"].exists)
         snare.tap()
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
-        XCTAssertTrue(app.buttons["close-inspector"].isHittable)
+        let done = app.buttons["close-inspector"]
+        // The detail title can appear before the navigation toolbar finishes transitioning.
+        let actionable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            done.exists && done.isEnabled && done.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [actionable], timeout: 10), .completed)
         screenshot("Accessible zone list and detail")
+        done.tap()
+        XCTAssertTrue(app.buttons["welcome-kit"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["close-inspector"].exists, "Done must actually dismiss the editor")
     }
 
     func testExplicitApplyCancelBoundsUndoRedoAndRetainedEditsAfterDone() {

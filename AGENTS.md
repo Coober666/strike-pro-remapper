@@ -1258,3 +1258,11 @@ net.cooberlab.strike-companion.ios bundle identifier, document types, internal
 Xcode product/scheme/module names, and StrikeCompanion/session-v1.json store path.
 The welcome screen offers Edit a kit alongside setlist import; both use the same app. Native MIDI input is the next
 development milestone; direct storage/deployment still requires separate evidence.
+
+
+The largest accessibility-text UI check waits up to 10 seconds for Done to become
+enabled/hittable after compact zone navigation, then taps once and verifies the
+editor dismisses back to the welcome screen. The detail title appears before the
+navigation toolbar finishes transitioning on hosted Xcode 27.1 iPhones; checking
+isHittable immediately can fail while Done remains visible in the test video.
+Retain the final action and dismissal assertions; do not retry the tap.
