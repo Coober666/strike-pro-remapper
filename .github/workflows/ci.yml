@@ -19,6 +19,20 @@ jobs:
           STRIKE_REQUIRE_TK: '1'
         run: python tools/test_host_window.py
 
+  source-backup-windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Source backup restore and mount guards
+        run: python tools/test_source_backup.py
+
   test:
     strategy:
       fail-fast: false
