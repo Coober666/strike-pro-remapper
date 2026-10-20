@@ -225,9 +225,18 @@ final class KitEditingUITests: XCTestCase {
         menu("kit-export", app: app)
         screenshot("Choose export folder")
         app.cancelFilesPicker()
-        let dismissed = NSPredicate { _, _ in app.buttons["kit-actions"].isHittable && app.buttons["kit-actions"].isEnabled }
+        let actions = app.buttons["kit-actions"]
+        let dismissed = NSPredicate { _, _ in
+            // A hosted Files dismissal can leave AX briefly publishing no toolbar.
+            // Avoid forced lookups/retries until the editor's real control returns.
+            guard actions.exists, let snapshot = try? actions.snapshot(), snapshot.isEnabled else { return false }
+            let frame = snapshot.frame
+            guard !frame.isEmpty, !frame.isInfinite,
+                  app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+            return actions.isHittable
+        }
         let resumed = XCTNSPredicateExpectation(predicate: dismissed, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 15), .completed, app.debugDescription)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 60), .completed, app.debugDescription)
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("71"))
         XCTAssertFalse(app.alerts.firstMatch.exists)
         menu("kit-reload-demo", app: app)

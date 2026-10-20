@@ -220,9 +220,13 @@ extension XCUIApplication {
         // Hosted XCTest has failed foreground termination with stale PID errors.
         // Complete backgrounding and explicit termination before a new launch.
         if state == .runningForeground { XCUIDevice.shared.press(.home) }
-        // A hosted Files session can report a stale foreground state even after
-        // Home is visible. Require the final stopped state, not a transient one.
-        if state != .notRunning { terminate() }
+        // The previous test's process may already be exiting while XCTest still
+        // reports its old PID. Let the stopped state arrive before requesting
+        // termination; never retry a failed terminate or launch over a live app.
+        let alreadyStopped = wait(for: .notRunning, timeout: 5)
+        // Files can report stale foreground state even after Home is visible.
+        // Require the final stopped state, not an intermediate background flag.
+        if !alreadyStopped && state != .notRunning { terminate() }
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             self.state == .notRunning
         }, object: nil)

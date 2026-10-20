@@ -1266,3 +1266,13 @@ editor dismisses back to the welcome screen. The detail title appears before the
 navigation toolbar finishes transitioning on hosted Xcode 27.1 iPhones; checking
 isHittable immediately can fail while Done remains visible in the test video.
 Retain the final action and dismissal assertions; do not retry the tap.
+
+Hosted Xcode 27.1 can report an old app PID while the previous test's process is
+already exiting. After Home, wait up to five seconds for notRunning before deciding
+to terminate once; retain the final stopped-state assertion and never retry a failed
+termination or launch over a running process. After export-folder cancellation,
+wait up to 60 seconds for the actual kit-actions button to exist with an enabled,
+onscreen snapshot and hittability. Guard existence before forced AX lookups: hosted
+Files dismissal can briefly publish no toolbar, and forced finds consume the wait
+budget in internal retries. Keep edited-value retention and actual subsequent
+replacement/menu assertions. No file-write retry or weakened mutation check.
