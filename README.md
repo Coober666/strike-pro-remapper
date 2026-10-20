@@ -139,6 +139,15 @@ no SD card present — e.g. on a laptop away from your kit.
 **Without an SD card:** the app runs entirely against a local `library/` folder
 (`kits/`, `instruments/`, `samples/`).
 
+**Across computers:** keep code/builds local and exchange committed branches through
+GitHub. A NAS can hold shared kits, sounds, setlists, exports and backups while local
+copies support offline work. The [shared-storage guide](docs/SHARED_STORAGE.md)
+describes an additive layout and a verified source-backup helper with raw restorable
+patches even when Git text converters or display preferences are configured, plus reachable
+Windows drive/UNC mount checks and junction rejection on Python 3.10+ that preserves Git
+history, dirty edits and untracked source from every worktree. A shared folder does
+not automatically synchronize an open Companion document.
+
 Saving keeps a working copy in the local library. When you are ready, **Deploy to Module**
 runs a preflight, shows the exact kit/assets and destination, backs up a replaced kit,
 copies to the writable Strike SD card, and verifies the result. Put the card back in the
