@@ -1295,3 +1295,9 @@ Xcode 27.1 iPad spindump showed the app main thread blocked in XCTest value-fetc
 logging to stderr. Retain Any for older SwiftUI's element-type differences, but
 query only the actual accessibilityIdentifier. Selection, layer/source-byte,
 value and return/dismissal assertions remain; no query-timeout suppression.
+
+The valid/invalid setlist Open In UI workflow uses the existing 300-second ceiling:
+it performs three cold launches and hosted Xcode 27.1 spent over 100 seconds setting
+up the final document launch before successfully presenting its rejection alert.
+Keep the alert dismissal, restored imported-song and unchanged-source assertions.
+Other non-provider tests retain their 180-second default; do not retry handoffs.

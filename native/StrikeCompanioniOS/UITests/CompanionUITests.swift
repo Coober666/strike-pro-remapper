@@ -91,6 +91,9 @@ final class CompanionUITests: XCTestCase {
         #if compiler(<6.3)
         throw XCTSkip("Xcode 16/26 file-URL automation does not deliver documents. The Xcode 27 CI job runs this test; model import contracts run on both.")
         #else
+        // Three cold launches, including two document handoffs. Hosted launch
+        // setup alone can exceed 100 seconds; retain the builder's 300s ceiling.
+        executionTimeAllowance = 300
         let app = launchDemo()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -110,6 +113,7 @@ final class CompanionUITests: XCTestCase {
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10))
         app.alerts.buttons["OK"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertTrue(imported.waitForExistence(timeout: 10), "Invalid Open In must retain the imported song")
         XCTAssertEqual(try Data(contentsOf: file), invalid)
         #endif
     }

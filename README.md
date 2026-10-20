@@ -275,6 +275,7 @@ Folder export waits for Files' Open button to become actionable before submittin
 Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.
+The valid/invalid setlist Open In workflow allows up to five minutes for its three cold launches, while requiring rejection to retain the imported song and original file bytes.
 Export-folder provider errors use export-specific destination guidance and clear stale
 success messages while retaining edits and Undo history; cancellation stays quiet.
 
