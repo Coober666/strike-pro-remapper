@@ -1137,6 +1137,9 @@ Button. Xcode 27 can expose the close control only as a misleading Other proxy i
 the host while the service retains its correct Button/frame. If neither exposes
 the command, the older-runtime fallback returns to Recents and opens More. An Other element labelled Cancel can point at the More launcher and
 must not be treated as the cancellation command. Assert the editor is usable again.
+After cancellation, wait for the named dirty-replacement alert before tapping Discard,
+then require its dismissal before checking the new kit. Older SwiftUI can expose
+the action during presentation before its tap target has settled; never retry Discard.
 Keep personal signing/device metadata out of commits. Build/test installed iPhone
 and iPad simulators before physical-device setup; guide owner steps one at a time.
 

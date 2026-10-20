@@ -190,7 +190,13 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("71"))
         XCTAssertFalse(app.alerts.firstMatch.exists)
         menu("kit-reload-demo", app: app)
-        app.alerts.buttons["Discard edits and open kit"].tap()
+        let replacement = app.alerts["Replace the edited kit?"]
+        XCTAssertTrue(replacement.waitForExistence(timeout: 5), app.debugDescription)
+        replacement.buttons["Discard edits and open kit"].tap()
+        let replaced = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !replacement.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [replaced], timeout: 5), .completed, app.debugDescription)
         let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
         XCTAssertTrue(snare.waitForExistence(timeout: 5))
         snare.tap()
