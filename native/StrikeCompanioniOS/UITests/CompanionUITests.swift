@@ -196,7 +196,7 @@ final class CompanionUITests: XCTestCase {
 
 @MainActor
 extension XCUIApplication {
-    func cancelFilesPicker() {
+    func actionableFilesControl(_ query: (XCUIApplication) -> XCUIElement) -> XCUIElement? {
         let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
         // The host may expose misleading generic proxies for hosted Files controls.
         // Query real buttons and reject stale/offscreen/covered activation points.
@@ -207,19 +207,20 @@ extension XCUIApplication {
                   self.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
             return control.isHittable
         }
-        func nativeControl(_ query: (XCUIApplication) -> XCUIElement) -> XCUIElement? {
-            if files.state != .notRunning {
-                let control = query(files)
-                if actionable(control) { return control }
-            }
-            let control = query(self)
-            return actionable(control) ? control : nil
+        if files.state != .notRunning {
+            let control = query(files)
+            if actionable(control) { return control }
         }
+        let control = query(self)
+        return actionable(control) ? control : nil
+    }
+
+    func cancelFilesPicker() {
         func cancelControl() -> XCUIElement? {
-            nativeControl { $0.buttons["Cancel"].firstMatch }
+            actionableFilesControl { $0.buttons["Cancel"].firstMatch }
         }
         func recentsTab() -> XCUIElement? {
-            nativeControl { $0.tabBars.buttons["Recents"].firstMatch }
+            actionableFilesControl { $0.tabBars.buttons["Recents"].firstMatch }
         }
         let ready = NSPredicate { _, _ in cancelControl() != nil || recentsTab() != nil }
         let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)

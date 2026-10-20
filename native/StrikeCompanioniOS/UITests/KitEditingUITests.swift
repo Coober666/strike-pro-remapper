@@ -226,8 +226,18 @@ final class KitEditingUITests: XCTestCase {
             XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
             companion.tap()
         }
+        // Browse can expose the destination title before Open becomes enabled.
+        // Wait for the actual hosted button, then submit this export exactly once.
+        let canOpen = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            atDestination() && app.actionableFilesControl { $0.buttons["Open"].firstMatch } != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [canOpen], timeout: 90), .completed, app.debugDescription)
+        guard let open = app.actionableFilesControl({ $0.buttons["Open"].firstMatch }) else {
+            XCTFail("Files did not expose an actionable Open button. \(app.debugDescription)")
+            return
+        }
         screenshot("Export destination")
-        app.buttons["Open"].tap()
+        open.tap()
         XCTAssertTrue(app.staticTexts["kit-export-status"].waitForExistence(timeout: 10), app.debugDescription)
         let message = app.staticTexts["kit-export-status"].label
         XCTAssertTrue(message.contains("Created Kit-edit-"))
