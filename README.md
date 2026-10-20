@@ -239,6 +239,7 @@ folder, verifies its bytes and never replaces an existing file. Imported origina
 stay untouched. Kit edits remain in memory until export; export before closing the
 app. Sound availability is not checked; sound libraries, playback and deployment
 remain future work.
+Reopening the editor with an external kit still asks before discarding unsaved edits, even if that kit finishes loading before the editor appears.
 [Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
 confirmed demo song/reading-size restoration, synthetic kit inspection and external
 kit Open In/rejection retention. [Initial attended iPad checks](docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md)

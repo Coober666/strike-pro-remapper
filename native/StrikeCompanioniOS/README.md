@@ -72,7 +72,8 @@ module playback are not established by this local byte check.
 **Done** returns to the same setlist/song and retains kit edits while the app stays
 open. Replacing an edited kit requires **Discard edits and open kit** after the new
 file has validated. Keep editing, failed imports and cancelled pickers retain the
-current kit/history. Kit edits do **not** persist after process termination: export
+current kit/history. The confirmation also appears when an external kit finishes
+loading before the editor reopens. Kit edits do **not** persist after process termination: export
 before closing the app. A failed export keeps edits open and asks you to check the
 destination before retrying. Handled partial writes are removed when their identity
 still matches this attempt; process interruption can leave an incomplete copy.

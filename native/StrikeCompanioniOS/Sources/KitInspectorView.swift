@@ -72,7 +72,7 @@ struct KitInspectorView: View {
         }
         .onChange(of: path) { _, path in if let index = path.last { model.selected = index } }
         .onChange(of: model.documentID) { _, _ in path = []; editing = nil }
-        .onChange(of: model.pendingImport != nil) { _, pending in
+        .onChange(of: model.pendingImport != nil, initial: true) { _, pending in
             if pending && editing != nil { editing = nil }
             else { showReplacementConfirmation = pending }
         }

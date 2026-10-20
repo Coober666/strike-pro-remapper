@@ -1086,6 +1086,12 @@ memory-only kit session. Replacing a dirty kit requires explicit discard after t
 candidate has validated; cancellation and failed imports retain edits, selection and
 history. Kit edits are not restored after process termination; the UI says to export
 before closing the app. The setlist session store is unchanged.
+Evaluate pending replacement state on the editor's initial presentation as well as
+later changes: external Open In can validate a candidate before the full-screen
+cover mounts. The alert must remain reachable while pendingImport disables controls.
+A simulator-hosted SwiftUI view regression mounts that preexisting pending state,
+requires the actual replacement alert and verifies cancellation retains edits,
+selection, document identity, history and immutable source bytes.
 
 KitCopyExporter is the only native kit write path. The user selects a Files folder;
 coordinate security-scoped reads/writes off the main actor. Reads use withoutChanges;
