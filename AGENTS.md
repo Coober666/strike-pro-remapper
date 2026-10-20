@@ -1096,7 +1096,9 @@ sync, physical provider behavior and module playback are separate acceptance gat
 
 tools/test_kit_editing.py owns synthetic KitEditingCases.json; --write regenerates
 it, no-arg CI checks it against the Python editor's literal confirmed parameter map
-and formats.build_skt. Swift tests compare exact output bytes for every field,
+and formats.build_skt. Both native CI event path filters include strike_remap.py and
+strike_remapper/formats.py so changes to that oracle also run the parity checks.
+Swift tests compare exact output bytes for every field,
 signed bounds/assignments/rejections, history, unknown-byte preservation, export
 collisions/partial failures and reopen. XCUITests cover explicit editing, both layers,
 undo/redo, retained edits after Done, replacement confirmation, export cancellation and a Files export/reopen workflow.

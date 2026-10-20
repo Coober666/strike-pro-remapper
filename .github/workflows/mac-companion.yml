@@ -2,9 +2,9 @@ name: Native Strike companion
 
 on:
   push:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remap.py', 'strike_remapper/formats.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
   pull_request:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remap.py', 'strike_remapper/formats.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
 
 permissions:
   contents: read
