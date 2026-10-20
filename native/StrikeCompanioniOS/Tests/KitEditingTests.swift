@@ -238,7 +238,10 @@ final class KitEditingTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
-        let host = UIHostingController(rootView: KitInspectorView(model: model, close: {}))
+        let host = UIHostingController(rootView:
+            Color.clear.fullScreenCover(isPresented: .constant(true)) {
+                KitInspectorView(model: model, close: {})
+            })
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer {
