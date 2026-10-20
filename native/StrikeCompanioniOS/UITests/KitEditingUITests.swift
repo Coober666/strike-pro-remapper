@@ -104,7 +104,7 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(rim.waitForExistence(timeout: 5))
         rim.tap()
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
-        XCTAssertTrue(app.staticTexts["kit-edit-status"].label.contains("Original imported"))
+        XCTAssertTrue(app.staticTexts["kit-edit-status"].firstMatch.label.contains("Original imported"))
         screenshot("Native zone selection")
     }
 
@@ -278,6 +278,18 @@ final class KitEditingUITests: XCTestCase {
         screenshot("Exported copy verified")
         app.buttons["import-kit"].tap()
         let file = app.cells.containing(.staticText, identifier: name).firstMatch
+        let files = app.collectionViews["File View"].firstMatch
+        XCTAssertTrue(files.waitForExistence(timeout: 10), app.debugDescription)
+        // Files virtualizes the grid; retained synthetic exports can put this UUID offscreen.
+        // Reveal only the named copy in the selected folder. Never resubmit the export.
+        for upward in [false, true] {
+            for _ in 0..<12 {
+                if file.exists { break }
+                if upward { files.swipeUp() }
+                else { files.swipeDown() }
+            }
+            if file.exists { break }
+        }
         XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
         screenshot("Select exported copy")
         // Let XCTest reveal/activate the actual image in icon view; coordinate taps can miss

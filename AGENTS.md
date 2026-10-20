@@ -1166,7 +1166,11 @@ before the remote accessibility frame catches up. Done must leave Apply explicit
 Files may restore its last folder: UI tests recognize the app destination before
 navigating the sidebar. Reopen the exported file using its image element in icon
 view or the cell in list view, letting XCTest reveal it. Avoid normalized coordinate
-taps through the hosted Files service.
+taps through the hosted Files service. Repeated simulator runs retain their exported
+copies: scroll Files’ virtualized File View grid within a bounded loop to locate the
+exact newly exported filename; never repeat the write or delete earlier files.
+Older SwiftUI exposes list and detail status labels together; select an explicit
+match when asserting the shared model’s Original imported status.
 Use one fileImporter presenter for kit files and export folders; capture its purpose
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers

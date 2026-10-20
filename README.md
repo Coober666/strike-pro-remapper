@@ -271,6 +271,7 @@ that disappear during a snapshot are polled again within the bounded wait. A res
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
 resumed-editor assertions remain required.
 Folder export waits for Files' Open button to become actionable before submitting once.
+Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.
 Export-folder provider errors use export-specific destination guidance and clear stale
