@@ -1133,9 +1133,12 @@ or retry file mutations to accommodate a slow provider.
 For cancellation, prefer the real Cancel button in the running Files service's
 accessibility tree (com.apple.DocumentManagerUICore.Service), then the host's actual
 Button. Xcode 27 can expose the close control only as a misleading Other proxy in
-the host while the service retains its correct Button/frame. If neither exposes
-the command, the older-runtime fallback returns to Recents and opens More. An Other element labelled Cancel can point at the More launcher and
-must not be treated as the cancellation command. Assert the editor is usable again.
+the host while the service retains its correct Button/frame. Require a valid frame
+inside the screen and hittability before choosing a control. If Cancel is hidden,
+navigate only through the actual Recents TabBar button, then wait for actionable
+Cancel. Never use generic Recents/Cancel Other proxies or More as readiness evidence:
+More opens sorting options and can leave a covered Cancel with an invalid hit point.
+Assert the editor is usable again.
 After cancellation, wait for the named dirty-replacement alert before tapping Discard,
 then require its dismissal before checking the new kit. Older SwiftUI can expose
 the action during presentation before its tap target has settled; never retry Discard.
