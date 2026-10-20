@@ -24,7 +24,7 @@ The present milestone has real-kit import, confirmed per-pad settings, existing
 reference assignment, Undo/Redo and new-copy export. The optional drum map is
 simulator-tested. The physical NAS import/edit/export/reopen result is recorded in
 [the iPad follow-up](IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md).
-Native MIDI input is next; broader library/instrument/FX features follow the gates
+Native MIDI input now has a software implementation; broader library/instrument/FX features follow the gates
 below. MIDI output, audio routing and module storage each require their own evidence.
 
 ## Direct iPad-to-Strike connection comes first
@@ -52,6 +52,42 @@ single-cable kit deployment until this gate passes.
 Primary references: [Apple Core MIDI](https://developer.apple.com/documentation/coremidi),
 [Alesis Strike USB MIDI FAQ](https://support.alesis.com/support/solutions/articles/69000801282-alesis-strike-pro-kit-frequently-asked-questions),
 and the repository's [captured factory-card evidence](FACTORY_SD_ACTIVATION.md).
+
+## Native MIDI input milestone (0.7)
+
+The MIDI tools screen is independent of the open kit and setlist. Refresh enumerates
+input sources only; the user must select one and press Record. One Core MIDI 1.0
+input port receives complete channel messages from that source. No MIDI outputs,
+virtual endpoints, audio sessions or sending APIs are used. The UI shows per-channel
+note-hit counts/velocity ranges/means, CC4 values and the latest 12 messages. Note On
+velocity zero is Note Off. No manufacturer pad map or hi-hat direction is assumed.
+
+Takes are bounded to 50,000 events and 20 minutes. A 4,096-message mailbox bounds
+callback-to-UI handoff; overflow/unsupported channel data stops with a partial take.
+The port requests MIDI 1.0; nonzero UMP groups and unconverted MIDI 2 channel data
+cannot be represented in the version-1 export and cause partial-stop. SysEx/system
+messages are ignored. A fresh mailbox per recording rejects old callbacks. The
+receive code traverses original variable-length packet pointers, including packets
+larger than the SDK's fixed tuple declaration. Timing uses monotonic callback arrival,
+not calibrated physical strike timing. No pause/resume is part of this milestone.
+
+Stop drains retained input and closes the port. Background/inactive state and source
+removal stop with partial status; later notifications cannot downgrade a normally
+stopped take. No automatic reconnect or recording restart. A new recording needs
+explicit discard of any retained take; a failed open keeps it. Done retains the take
+in memory and stops input. Exports are bounded to 8 MiB and use version-1
+`drum-midi-session` JSON, validated by the existing web toolkit in
+`tools/test_native_midi_export.py`. The export dialog writes only the requested
+capture; it never changes the imported kit/setlist. There is no capture import or
+app-owned MIDI persistence yet. Export before terminating the app.
+
+Learn arms only during recording, excludes already queued hits, and freezes the
+first new positive Note On until Apply name or Cancel. Names attach to channel/note
+pairs within this take (128 pairs, 80 UTF-16 units per name) and export as a padMap.
+They never change stored kit MIDI settings. Learning is cancelled on Stop/disconnect.
+Synthetic driver tests and simulator UI workflows do not establish direct iPad USB,
+physical disconnect, audio coexistence or module-storage acceptance. Physical tests
+wait until the owner is home with an unlocked device and powered module.
 
 ## Music and monitoring audio
 
