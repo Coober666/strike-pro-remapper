@@ -52,16 +52,16 @@ jobs:
             device_index: 1
             runner: macos-15
             developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
-          - xcode: '27'
+          - xcode: '27.1'
             family: iPhone
             device_index: 0
             runner: xcode-27
-            developer_dir: /Applications/Xcode.app/Contents/Developer
-          - xcode: '27'
+            developer_dir: /Applications/Xcode_27.1.app/Contents/Developer
+          - xcode: '27.1'
             family: iPad
             device_index: 1
             runner: xcode-27
-            developer_dir: /Applications/Xcode.app/Contents/Developer
+            developer_dir: /Applications/Xcode_27.1.app/Contents/Developer
     env:
       DEVELOPER_DIR: ${{ matrix.developer_dir }}
       STRIKE_SIMULATOR_INDEX: ${{ matrix.device_index }}
