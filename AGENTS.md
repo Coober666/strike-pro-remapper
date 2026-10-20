@@ -1145,8 +1145,10 @@ inside the screen and hittability before choosing a control. If Cancel is hidden
 navigate only through the actual Recents TabBar button, then wait for actionable
 Cancel. Never use generic Recents/Cancel Other proxies or More as readiness evidence:
 More opens sorting options and can leave a covered Cancel with an invalid hit point.
-UI test relaunches first background a running app, require its background state,
-terminate it explicitly and require notRunning before launch or document handoff.
+UI test relaunches send Home to a foreground app, terminate it if still running,
+and require notRunning before launch or document handoff. Hosted Files can report
+stale foreground/background state while Home is visibly onscreen, so the required
+condition is the final stopped process, not an intermediate background flag.
 This keeps implicit foreground termination out of launch() after repeated hosted
 XCTest PID acknowledgement failures. Cold-launch restoration requires a stopped process before launch;
 its song/reading assertions and document source-byte checks remain unchanged.
