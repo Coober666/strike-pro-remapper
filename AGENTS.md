@@ -1002,6 +1002,11 @@ opening times out on Xcode 16/26. Only the two document-handoff UI tests explici
 older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
 The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
+Each Xcode version has separate iPhone and iPad CI jobs, selecting one member of
+the helper's compatible installed runtime pair with --device. Each retains the
+35-minute job limit and existing per-test limits, source hashes, lifecycle cleanup
+and uniquely named device artifacts. Cold preview-runtime startup plus both full
+suites can exceed a combined job budget even while every completed test passes.
 Default simulator selection uses the newest installed iPhone/iPad runtime pair
 supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
 Keep import/rejection and source-byte UI assertions, plus selected-song retention
