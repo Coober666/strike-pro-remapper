@@ -201,8 +201,11 @@ extension XCUIApplication {
         // The host may expose misleading generic proxies for hosted Files controls.
         // Query real buttons and reject stale/offscreen/covered activation points.
         func actionable(_ control: XCUIElement) -> Bool {
-            guard control.exists, control.isEnabled else { return false }
-            let frame = control.frame
+            // Files can replace its tab bar between AX queries while restoring a folder.
+            // Read frame/enabled together; a disappearing match throws from snapshot()
+            // and is retried by the bounded predicate instead of failing a frame getter.
+            guard control.exists, let snapshot = try? control.snapshot(), snapshot.isEnabled else { return false }
+            let frame = snapshot.frame
             guard !frame.isEmpty, !frame.isInfinite,
                   self.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
             return control.isHittable
