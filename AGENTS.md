@@ -1131,8 +1131,11 @@ points rather than returning false. Keep the final visibility assertion. The thr
 UI tests have a 300-second allowance for cold hosted providers; other tests default
 to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
 or retry file mutations to accommodate a slow provider.
-For cancellation, use the real Cancel button; if hidden, return to Recents and
-open More. An Other element labelled Cancel can point at the More launcher and
+For cancellation, prefer the real Cancel button in the running Files service's
+accessibility tree (com.apple.DocumentManagerUICore.Service), then the host's actual
+Button. Xcode 27 can expose the close control only as a misleading Other proxy in
+the host while the service retains its correct Button/frame. If neither exposes
+the command, the older-runtime fallback returns to Recents and opens More. An Other element labelled Cancel can point at the More launcher and
 must not be treated as the cancellation command. Assert the editor is usable again.
 Keep personal signing/device metadata out of commits. Build/test installed iPhone
 and iPad simulators before physical-device setup; guide owner steps one at a time.
