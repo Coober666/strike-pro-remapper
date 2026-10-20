@@ -15,9 +15,9 @@ workflows, sound search/assignment/preview, drum-map/setup controls, kit FX,
 setlists, MIDI tools and verified module delivery. Native implementation may adapt
 the layout to iPad and iPhone. Current builds do not have full feature parity.
 
-The Companion name describes the initial setlist milestone. Change visible native
-branding to Strike Remapper in a tested follow-up, preserving bundle identity,
-existing setlist data, document associations and the shared format contracts. Keep
+The Companion name describes the initial setlist milestone. Version 0.6 changes
+visible native branding to Strike Remapper, preserving bundle identity, existing
+setlist data, document associations and the shared format contracts. Keep
 the Mac read-only companion independent. Preserve the working web app throughout.
 
 The present milestone has real-kit import, confirmed per-pad settings, existing

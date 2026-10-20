@@ -1,21 +1,16 @@
 import SwiftUI
 import StrikeSetlists
 
-/// A standard arrangement of the zones actually present in the open kit.
-/// This view changes selection only; it never auditions or mutates kit bytes.
-struct KitDrumMap: View {
-    let kit: KitInspection
-    let selected: Int
-    let select: (Int) -> Void
-
-    private struct Position: Identifiable {
+/// Selection topology only. Unknown zones stay independent in the complete Zones list.
+enum KitMapLayout {
+    struct Position: Identifiable {
         let id: String
         let name: String
         let x: CGFloat
         let y: CGFloat
         let cymbal: Bool
     }
-    private static let positions: [Position] = [
+    static let positions: [Position] = [
         .init(id: "C1", name: "Crash 1", x: 0.14, y: 0.14, cymbal: true),
         .init(id: "C2", name: "Crash 2", x: 0.44, y: 0.10, cymbal: true),
         .init(id: "C3", name: "Crash 3", x: 0.70, y: 0.14, cymbal: true),
@@ -30,6 +25,30 @@ struct KitDrumMap: View {
         .init(id: "K2", name: "Kick 2", x: 0.28, y: 0.88, cymbal: false)
     ]
 
+    static func primaryIndex(in kit: KitInspection, group: String) -> Int? {
+        // Prefer head/bow regardless of chunk order; an isolated rim/edge/bell is still reachable.
+        let preferred = group + (["R1", "H1"].contains(group) || group.hasPrefix("C") ? "B" : "H")
+        return kit.pads.firstIndex { $0.id == preferred } ?? kit.pads.firstIndex {
+            $0.isKnownZone && String($0.id.prefix(2)) == group
+        }
+    }
+
+    static func zoneIndices(in kit: KitInspection, for index: Int) -> [Int] {
+        guard kit.pads.indices.contains(index) else { return [] }
+        guard kit.pads[index].isKnownZone else { return [index] }
+        return kit.pads.indices.filter {
+            kit.pads[$0].isKnownZone && kit.pads[$0].id.prefix(2) == kit.pads[index].id.prefix(2)
+        }
+    }
+}
+
+/// A standard arrangement of the zones actually present in the open kit.
+/// This view changes selection only; it never auditions or mutates kit bytes.
+struct KitDrumMap: View {
+    let kit: KitInspection
+    let selected: Int
+    let select: (Int) -> Void
+
     var body: some View {
         GeometryReader { geometry in
             let width = max(560, geometry.size.width)
@@ -37,8 +56,8 @@ struct KitDrumMap: View {
                 ZStack {
                     Ellipse().stroke(.white.opacity(0.05), lineWidth: 1)
                         .frame(width: width * 0.70, height: 330).position(x: width * 0.50, y: 235)
-                    ForEach(Self.positions) { position in
-                        if let index = primaryIndex(position.id) {
+                    ForEach(KitMapLayout.positions) { position in
+                        if let index = KitMapLayout.primaryIndex(in: kit, group: position.id) {
                             pad(position, index: index)
                                 .position(x: width * position.x, y: 430 * position.y)
                         }
@@ -48,14 +67,8 @@ struct KitDrumMap: View {
         }.frame(height: 446)
     }
 
-    private func primaryIndex(_ group: String) -> Int? {
-        // Prefer head/bow over the order stored in the file, then retain any surviving zone.
-        let preferred = group + (group == "R1" || group == "H1" || group.hasPrefix("C") ? "B" : "H")
-        return kit.pads.firstIndex { $0.id == preferred } ?? kit.pads.firstIndex { $0.isKnownZone && String($0.id.prefix(2)) == group }
-    }
-
-    private func pad(_ position: Position, index: Int) -> some View {
-        let active = kit.pads.indices.contains(selected) && kit.pads[selected].id.prefix(2) == position.id
+    private func pad(_ position: KitMapLayout.Position, index: Int) -> some View {
+        let active = KitMapLayout.zoneIndices(in: kit, for: index).contains(selected)
         let metal = Color(red: 0.57, green: 0.48, blue: 0.31)
         return Button { select(index) } label: {
             VStack(spacing: 6) {

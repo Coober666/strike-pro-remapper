@@ -1226,7 +1226,10 @@ never imply it describes the physical rack. Map/zone buttons select the existing
 model index, opening compact detail or updating the wide inspector. Detail buttons
 switch sibling zones; unknown identifiers remain reachable in Zones. Selection is
 read-only and must preserve kit bytes/history. Touch targets stay at least 44pt;
-use Zones when a larger text size makes the spatial view impractical.
+automatically use Zones at accessibility text sizes while retaining selection.
+Widening a compact window clears its navigation path so the side-by-side inspector
+can show the same selected zone. KitMapLayout groups only known zones; isolated
+rim/edge/bell/foot chunks remain selectable and unknown identifiers stay independent.
 
 The owner requested eventual standalone iPad + Strike operation. Prioritize an
 explicit native MIDI input proof before further broad editor work. Core MIDI
@@ -1246,6 +1249,8 @@ The owner chose one native Strike Remapper app with performance and editing view
 evolving the existing iPhone/iPad Companion. The full Strike Remapper web app is
 the feature target; current native builds are partial implementations, not feature
 parity. Do not start a separate full-editor iOS app. Keep the Mac setlist companion
-independent. Rename visible native branding in a verified follow-up while preserving
-bundle identity, document handling and saved app data. Native MIDI input is the next
+independent. The iPhone/iPad display and Files name is Strike Remapper. Preserve the existing
+net.cooberlab.strike-companion.ios bundle identifier, document types, internal
+Xcode product/scheme/module names, and StrikeCompanion/session-v1.json store path.
+The welcome screen offers Edit a kit alongside setlist import; both use the same app. Native MIDI input is the next
 development milestone; direct storage/deployment still requires separate evidence.

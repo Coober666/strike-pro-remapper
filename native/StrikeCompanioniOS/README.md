@@ -1,9 +1,9 @@
-# Strike Companion for iPhone and iPad
+# Strike Remapper for iPhone and iPad
 
-A native, offline setlist viewer and kit-copy editor. It reads the same version-1
+One native app for offline setlist performance and kit-copy editing, evolving from Strike Companion. It reads the same version-1
 JSON exported by Strike Remapper’s Setlist Builder. Requires iOS/iPadOS 17 or later.
 
-Import an export from **Files**, or use **Open in Strike Companion** from another
+Import an export from **Files**, or use **Open in Strike Remapper** from another
 app. The entire document is validated by the existing Foundation-only
 `StrikeSetlists` local Swift package. Files are bounded to 1 MiB and 128 songs;
 invalid imports keep the current setlist, selected song and search. The source
@@ -29,6 +29,12 @@ A corrupt or unsupported saved session opens the welcome screen with a warning.
 Kit references are displayed as text. A setlist does not include kits or sounds.
 The companion does not check kit availability, follow kit paths, access cards,
 connect to the editor, or send MIDI.
+
+The welcome screen offers **Edit a kit** and **Import setlist**. Existing Companion
+installs update in place: the bundle identifier, document types and private
+`StrikeCompanion/session-v1.json` snapshot location remain unchanged. Files displays
+the app’s shared Documents folder as **Strike Remapper**. Internal Xcode target,
+scheme and executable names remain unchanged for build compatibility.
 
 ## Kit-copy editor (0.5)
 
@@ -60,7 +66,7 @@ The **Edit actions (…)** menu offers **Undo**, **Redo** (20 actions) and
 **Export new copy…**. Export asks for a Files **folder**, then creates a unique
 `Kit-edit-xxxxxxxx.skt` file there. The 21-character ASCII name fits the documented
 module filename bound. Existing items are never replaced, including symbolic links.
-For a local destination, choose **Browse → On My iPhone/iPad → Strike Companion**
+For a local destination, choose **Browse → On My iPhone/iPad → Strike Remapper**
 in Files, then **Open**. A **Kit Copies** subfolder is also prepared for organization.
 The app exposes only its Documents folder;
 setlist snapshots stay in private Application Support.
@@ -101,7 +107,9 @@ only pads present in the open kit. Swipe across the map in narrow windows; wide
 iPads keep the selected pad’s inspector alongside it. On iPhone, selecting a pad
 opens its detail screen. Buttons above the layer controls switch between that
 pad’s head/rim or bow/edge/bell zones. The **Zones** list remains available for all
-zones, including unknown identifiers. The arrangement is a selection aid, not a
+zones, including unknown identifiers. At accessibility text sizes, the workspace uses the complete Zones list automatically;
+selection is retained. Widening an iPad window returns a compact detail screen to
+the side-by-side inspector. The arrangement is a selection aid, not a
 record of your physical rack, and selection never changes kit bytes or sends MIDI.
 
 The full native editor is being developed toward direct iPad-to-Strike operation.

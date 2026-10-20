@@ -5,6 +5,36 @@ import StrikeSetlists
 final class CompanionTests: XCTestCase {
     struct FormatCase: Decodable { let name: String; let json: String; let valid: Bool }
 
+    @MainActor
+    func testRemapperIdentityRetainsCompanionStorageAndDocumentAssociations() throws {
+        XCTAssertEqual(Bundle.main.bundleIdentifier, "net.cooberlab.strike-companion.ios")
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String, "Strike Remapper")
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String, "Strike Remapper")
+        XCTAssertEqual(CompanionSessionStore.live.url.lastPathComponent, "session-v1.json")
+        XCTAssertEqual(CompanionSessionStore.live.url.deletingLastPathComponent().lastPathComponent, "StrikeCompanion")
+        let types = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleDocumentTypes") as? [[String: Any]])
+        XCTAssertEqual(Set(types.flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }), ["public.json", "net.cooberlab.strike-kit"])
+        // Decode an existing Companion snapshot without requiring a schema/path migration.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CompanionSessionStore(url: directory.appendingPathComponent("session-v1.json"))
+        let demo = MobileCompanionModel(store: nil)
+        demo.showDemo()
+        let document = try CompanionSessionStore.documentData(XCTUnwrap(demo.session.document))
+        let snapshot: [String: Any] = ["version": 1, "document": document.base64EncodedString(),
+            "selected": 1, "sourceName": "Demo", "isDemo": true, "performanceMode": true, "noteScale": 1.6]
+        let original = try JSONSerialization.data(withJSONObject: snapshot)
+        try original.write(to: store.url)
+        let restored = MobileCompanionModel(store: store)
+        XCTAssertEqual(restored.session.selected, 1)
+        XCTAssertEqual(restored.session.document?.entries[1].song, "Paper Satellites")
+        XCTAssertTrue(restored.performanceMode)
+        XCTAssertEqual(restored.noteScale, 1.6)
+        XCTAssertNil(restored.persistenceWarning)
+        XCTAssertEqual(try Data(contentsOf: store.url), original)
+    }
+
     func testSharedPythonSwiftFormatCases() throws {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "Cases", withExtension: "json"))
         let cases = try JSONDecoder().decode([FormatCase].self, from: Data(contentsOf: url))

@@ -88,6 +88,14 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["kit-detail-zone-S1R"].tap()
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].isEnabled)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed)
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        screenshot("Native zone selection landscape")
+        XCUIDevice.shared.orientation = .portrait
         app.buttons["close-inspector"].tap()
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
         app.buttons["kit-inspector"].tap()
@@ -98,6 +106,29 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
         XCTAssertTrue(app.staticTexts["kit-edit-status"].label.contains("Original imported"))
         screenshot("Native zone selection")
+    }
+
+    func testAccessibilityTextUsesCompleteZonesList() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.stopForUITestRelaunch()
+        app.launch()
+        app.buttons["kit-inspector"].tap()
+        let demo = app.buttons["kit-demo"]
+        for _ in 0..<5 {
+            if demo.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        demo.tap()
+        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        XCTAssertTrue(snare.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Drum map"].exists)
+        snare.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
+        XCTAssertTrue(app.buttons["close-inspector"].isHittable)
+        screenshot("Accessible zone list and detail")
     }
 
     func testExplicitApplyCancelBoundsUndoRedoAndRetainedEditsAfterDone() {
@@ -215,8 +246,8 @@ final class KitEditingUITests: XCTestCase {
         let local = app.staticTexts[UIDevice.current.userInterfaceIdiom == .pad ? "On My iPad" : "On My iPhone"]
         // Files may restore our app folder directly or retain it behind the Browse tab.
         let atDestination = {
-            app.buttons["Strike Companion, Actions Menu"].exists ||
-                app.navigationBars.staticTexts["Strike Companion"].exists
+            app.buttons["Strike Remapper, Actions Menu"].exists ||
+                app.navigationBars.staticTexts["Strike Remapper"].exists
         }
         let pickerReady = NSPredicate { _, _ in atDestination() || local.exists || app.buttons["Browse"].exists }
         expectation(for: pickerReady, evaluatedWith: nil); waitForExpectations(timeout: 30)
@@ -224,7 +255,7 @@ final class KitEditingUITests: XCTestCase {
         if !atDestination() {
             XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
             local.tap()
-            let companion = app.staticTexts["Strike Companion"].firstMatch
+            let companion = app.staticTexts["Strike Remapper"].firstMatch
             XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
             companion.tap()
         }

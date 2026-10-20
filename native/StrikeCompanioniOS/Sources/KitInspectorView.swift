@@ -11,6 +11,8 @@ struct KitInspectorView: View {
     @State private var exportingFolder = false
     @State private var showDrumMap = false
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var usingDrumMap: Bool { showDrumMap && !typeSize.isAccessibilitySize }
 
     var body: some View {
         GeometryReader { geometry in
@@ -20,7 +22,7 @@ struct KitInspectorView: View {
                     if let kit = model.kit {
                         if wide {
                             HStack(spacing: 0) {
-                                zones(kit, wide: true).frame(width: showDrumMap ? min(560, geometry.size.width * 0.48) : min(310, geometry.size.width * 0.32))
+                                zones(kit, wide: true).frame(width: usingDrumMap ? min(560, geometry.size.width * 0.48) : min(310, geometry.size.width * 0.32))
                                 Divider()
                                 detail(kit, index: model.selected, wide: wide)
                             }
@@ -37,6 +39,10 @@ struct KitInspectorView: View {
                             .toolbar { controls }
                     }
                 }
+            }
+            .onChange(of: wide) { _, wide in
+                // A compact detail destination must not cover the new side-by-side workspace.
+                if wide { path = [] }
             }
         }
         .tint(Stage.brass).preferredColorScheme(.dark)
@@ -160,12 +166,14 @@ struct KitInspectorView: View {
                     Text("\(kit.unresolvedCount) assignments have unresolved string indices.").font(.footnote).foregroundStyle(Stage.brass)
                 }
             }.padding()
-            Picker("Kit view", selection: $showDrumMap) {
-                Text("Zones").tag(false)
-                Text("Drum map").tag(true)
-            }.pickerStyle(.segmented).padding(.horizontal).padding(.bottom, 12)
-                .accessibilityIdentifier("kit-workspace-view")
-            if showDrumMap {
+            if !typeSize.isAccessibilitySize {
+                Picker("Kit view", selection: $showDrumMap) {
+                    Text("Zones").tag(false)
+                    Text("Drum map").tag(true)
+                }.pickerStyle(.segmented).padding(.horizontal).padding(.bottom, 12)
+                    .accessibilityIdentifier("kit-workspace-view")
+            }
+            if usingDrumMap {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         KitDrumMap(kit: kit, selected: model.selected) { selectZone($0, wide: wide) }
@@ -196,7 +204,7 @@ struct KitInspectorView: View {
 
     @ViewBuilder
     private func zoneChoices(_ kit: KitInspection, index: Int, wide: Bool) -> some View {
-        let siblings = kit.pads.indices.filter { kit.pads[$0].id.prefix(2) == kit.pads[index].id.prefix(2) }
+        let siblings = KitMapLayout.zoneIndices(in: kit, for: index)
         if siblings.count > 1 {
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {

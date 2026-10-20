@@ -16,6 +16,21 @@ final class CompanionUITests: XCTestCase {
         return app
     }
 
+    func testRenamedWelcomeOffersKitEditorAndSetlistPerformance() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Strike Remapper"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["import"].exists)
+        app.buttons["welcome-kit"].tap()
+        XCTAssertTrue(app.buttons["kit-demo"].waitForExistence(timeout: 5))
+        app.buttons["close-inspector"].tap()
+        app.buttons["demo"].tap()
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
+    }
+
     func testRunningOrderSearchNavigationAndPerformanceView() {
         let app = launchDemo()
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")

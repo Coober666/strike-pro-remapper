@@ -18,6 +18,42 @@ final class KitEditingTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
         return url
     }
+    func testMapKeepsEveryKnownZoneReachableWithReorderedAndMissingPrimaryZones() throws {
+        let imported = try KitInspection.decode(oracle().source)
+        func subset(_ pads: [KitPad]) throws -> KitInspection {
+            let strings = imported.encoded().dropFirst(imported.header.count + imported.pads.reduce(0) { $0 + 8 + $1.payload.count })
+            let chunks = pads.reduce(into: Data()) { data, pad in
+                data.append(contentsOf: "inst".utf8)
+                data.append(contentsOf: (0..<4).map { UInt8((pad.payload.count >> ($0 * 8)) & 255) })
+                data.append(pad.payload)
+            }
+            return try KitInspection.decode(imported.header + chunks + strings)
+        }
+        let reversed = try subset(Array(imported.pads.reversed()))
+        let bytes = reversed.encoded()
+        var reachable = Set<Int>()
+        for position in KitMapLayout.positions {
+            let primary = try XCTUnwrap(KitMapLayout.primaryIndex(in: reversed, group: position.id))
+            let siblings = KitMapLayout.zoneIndices(in: reversed, for: primary)
+            reachable.formUnion(siblings)
+            let expectedSuffix = position.cymbal ? "B" : "H"
+            XCTAssertEqual(reversed.pads[primary].id, position.id + expectedSuffix)
+            // Each zone must remain reachable even when it is the group's sole surviving chunk.
+            for index in siblings {
+                let single = try subset([reversed.pads[index]])
+                XCTAssertEqual(KitMapLayout.primaryIndex(in: single, group: position.id), 0)
+            }
+        }
+        XCTAssertEqual(reachable, Set(reversed.pads.indices))
+        XCTAssertEqual(reversed.encoded(), bytes, "Map traversal must not change any bytes")
+        let empty = try subset([])
+        XCTAssertTrue(KitMapLayout.positions.allSatisfy { KitMapLayout.primaryIndex(in: empty, group: $0.id) == nil })
+        var unknownData = bytes
+        unknownData.replaceSubrange(reversed.header.count + 8..<reversed.header.count + 12, with: Data("R1X ".utf8))
+        let unknown = try KitInspection.decode(unknownData)
+        XCTAssertEqual(KitMapLayout.zoneIndices(in: unknown, for: 0), [0], "Do not group an unknown ID with known ride zones")
+        XCTAssertTrue(KitMapLayout.zoneIndices(in: unknown, for: -1).isEmpty)
+    }
     func testEveryConfirmedFieldMatchesPythonWriterAndRejectsInvalidWithoutMutation() throws {
         let oracle = try oracle()
         let imported = try KitInspection.decode(oracle.source)

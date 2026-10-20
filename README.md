@@ -231,7 +231,7 @@ double-click.
 
 ## Features
 
-**Setlist companion** — the [native iPhone/iPad app](native/StrikeCompanioniOS/README.md)
+**Native Strike Remapper** — the [iPhone/iPad app](native/StrikeCompanioniOS/README.md)
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
 Swift library and version-1 format. A local copy restores the setlist, selected song,
@@ -240,6 +240,9 @@ The native kit editor opens `.skt` files for confirmed pad settings and Layer A/
 assignments to references already in the kit, with undo/redo and side-by-side details
 on wide iPads. A **Drum map** view selects pads in a standard arrangement; zone
 buttons switch head/rim and cymbal zones, with the complete Zones list available.
+Accessibility text sizes use Zones automatically. The welcome screen offers kit
+editing and setlist import together under the Strike Remapper name. Existing
+Companion installs retain their bundle identity, document associations and saved setlist.
 Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
 it for replacement; Apply confirms the edit and Cancel discards it.
@@ -275,7 +278,7 @@ success messages while retaining edits and Undo history; cancellation stays quie
 
 The native iPhone/iPad product is evolving into **Strike Remapper**, one app with
 performance and editing views. The existing full web editor is the feature target;
-the current Companion-named build is an incremental native implementation and does
+the native build is an incremental implementation and does
 not yet have feature parity. The Mac setlist companion remains separate.
 
 The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)

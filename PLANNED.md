@@ -1,7 +1,7 @@
 # Release priorities
 
 Current direction: ship a dependable Strike editor, then add general drum-MIDI utilities.
-Native iPhone/iPad Companion now supports setlist viewing and local session restoration.
+Native iPhone/iPad Strike Remapper (formerly Companion) now supports setlist viewing and local session restoration.
 The first standalone editing milestone adds confirmed per-pad settings, existing-reference
 assignments, undo/redo and verified export to a new `.skt` copy. Imported originals
 stay untouched; edits are memory-only until export. The native workspace adds a
