@@ -172,7 +172,7 @@ final class CompanionUITests: XCTestCase {
         app.buttons["next"].tap()
         app.buttons["kit-inspector"].tap()
         app.buttons["kit-demo"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
@@ -209,7 +209,7 @@ final class CompanionUITests: XCTestCase {
         try bytes.write(to: source)
         app.stopForUITestRelaunch()
         app.open(source)
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
@@ -226,6 +226,13 @@ final class CompanionUITests: XCTestCase {
 
 @MainActor
 extension XCUIApplication {
+    func kitZone(_ zone: String) -> XCUIElement {
+        // matching(identifier:) also searches label/value via XCElementSnapshot.identifiers.
+        // Hosted Xcode 27 can stall fetching those values from the complete SwiftUI tree.
+        // Match only the explicit accessibilityIdentifier; retain Any for legacy/wide layouts.
+        descendants(matching: .any).matching(NSPredicate(format: "identifier == %@", "kit-zone-" + zone)).firstMatch
+    }
+
     func stopForUITestRelaunch() {
         guard state != .notRunning else { return }
         // Hosted XCTest has failed foreground termination with stale PID errors.

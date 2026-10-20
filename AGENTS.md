@@ -1287,3 +1287,11 @@ execute normally. The matcher has negative coverage for unrelated failures, wron
 apps, incomplete messages and PID-zero origins. Keep the expected SDK diagnostic
 visible in xcresult; do not retry termination, skip tests or weaken final process
 and restored-state checks. This is a test-harness workaround, not an app fix.
+
+Whole-tree zone UI lookups use app.kitZone(id), an Any-type query with the exact predicate
+identifier == <kit-zone-id>. Do not use matching(identifier:) for the whole tree:
+that expands XCElementSnapshot.identifiers through label/value and the hosted
+Xcode 27.1 iPad spindump showed the app main thread blocked in XCTest value-fetch
+logging to stderr. Retain Any for older SwiftUI's element-type differences, but
+query only the actual accessibilityIdentifier. Selection, layer/source-byte,
+value and return/dismissal assertions remain; no query-timeout suppression.

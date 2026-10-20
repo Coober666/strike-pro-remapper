@@ -13,7 +13,7 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["demo"].tap()
         app.buttons["kit-inspector"].tap()
         app.buttons["kit-demo"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].waitForExistence(timeout: 5))
@@ -100,7 +100,7 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
         app.buttons["kit-inspector"].tap()
         app.buttons["Zones"].tap()
-        let rim = app.descendants(matching: .any).matching(identifier: "kit-zone-S1R").firstMatch
+        let rim = app.kitZone("S1R")
         XCTAssertTrue(rim.waitForExistence(timeout: 5))
         rim.tap()
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
@@ -122,7 +122,7 @@ final class KitEditingUITests: XCTestCase {
             app.scrollViews.firstMatch.swipeUp()
         }
         demo.tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["Drum map"].exists)
         snare.tap()
@@ -172,7 +172,7 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
         app.buttons["kit-inspector"].tap()
-        app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch.tap()
+        app.kitZone("S1H").tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("73"))
         screenshot("Edited kit portrait")
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -247,7 +247,7 @@ final class KitEditingUITests: XCTestCase {
             !replacement.exists
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [replaced], timeout: 5), .completed, app.debugDescription)
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 5))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("100"))
@@ -316,7 +316,7 @@ final class KitEditingUITests: XCTestCase {
         else { file.tap() } // List view has one directly activatable row.
         XCTAssertTrue(app.alerts["Replace the edited kit?"].waitForExistence(timeout: 10))
         app.alerts.buttons["Discard edits and open kit"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 5))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("72"))
