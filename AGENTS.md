@@ -1000,7 +1000,12 @@ attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
 opening times out on Xcode 16/26. Only the two document-handoff UI tests explicitly skip on their
 older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
-The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
+The modern job uses GitHub's `xcode-27` preview image with an explicit
+/Applications/Xcode_27.1.app developer directory, matching local Xcode 27.1
+(27A9275) verification. The image's floating default selected 27.0 (27A266a)
+and produced repeated launch/Files accessibility failures despite a passing push run.
+Pinning aligns the environments; do not claim it fixes those failures until CI passes.
+The legacy job pins Xcode 16.4. Keep all tests, limits and failure evidence.
 Each Xcode version has separate iPhone and iPad CI jobs, selecting one member of
 the helper's compatible installed runtime pair with --device. Each retains the
 35-minute job limit and existing per-test limits, source hashes, lifecycle cleanup
