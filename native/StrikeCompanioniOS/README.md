@@ -129,6 +129,8 @@ allow five minutes for a cold provider. Every test is capped at five minutes so
 a stalled UI test fails before the overall CI job expires.
 Ordinary logs, screenshots and test results are retained; verbose OS sysdiagnose
 capture is disabled because it can exhaust the job after an automation timeout.
+Files readiness checks read enabled/frame attributes from one throwing snapshot;
+a control replaced during folder restoration remains subject to the bounded wait.
 The helper waits for each simulator to finish booting before testing. It shuts
 down simulators it needed to start between runs, including on failure, and
 preserves any simulator that was already booted when the helper started.
