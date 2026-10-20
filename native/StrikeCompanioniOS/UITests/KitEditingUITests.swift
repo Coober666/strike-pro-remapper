@@ -72,6 +72,7 @@ final class KitEditingUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
         app.launch()
         app.buttons["demo"].tap()
         app.buttons["kit-inspector"].tap()
