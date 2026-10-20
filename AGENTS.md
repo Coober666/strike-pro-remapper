@@ -1276,3 +1276,14 @@ onscreen snapshot and hittability. Guard existence before forced AX lookups: hos
 Files dismissal can briefly publish no toolbar, and forced finds consume the wait
 budget in internal retries. Keep edited-value retention and actual subsequent
 replacement/menu assertions. No file-write retry or weakened mutation check.
+
+The modern hosted SDK can still emit the exact "Failed to terminate <bundle>:<pid>:
+Failed to terminate <bundle>:0" acknowledgement error after the single terminate.
+Only on compiler >=6.3, scope a non-strict XCTExpectFailure to that ONE call and
+an anchored exact matcher for this app/positive old PID/PID zero. Never match other
+errors or any test assertion. The notRunning assertion is outside the scope and
+must pass before launch; cold-launch restoration and source-byte assertions still
+execute normally. The matcher has negative coverage for unrelated failures, wrong
+apps, incomplete messages and PID-zero origins. Keep the expected SDK diagnostic
+visible in xcresult; do not retry termination, skip tests or weaken final process
+and restored-state checks. This is a test-harness workaround, not an app fix.

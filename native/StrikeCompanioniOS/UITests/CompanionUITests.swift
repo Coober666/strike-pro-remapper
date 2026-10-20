@@ -16,6 +16,17 @@ final class CompanionUITests: XCTestCase {
         return app
     }
 
+    func testTerminationAcknowledgementMatcherRejectsUnrelatedFailures() {
+        let expected = "Failed to terminate net.cooberlab.strike-companion.ios:10129: Failed to terminate net.cooberlab.strike-companion.ios:0"
+        XCTAssertTrue(SimulatorTerminationAcknowledgement.matches(expected))
+        for other in ["App must be stopped before relaunch", "Failed to terminate net.cooberlab.strike-companion.ios:10129",
+                      expected + " (still running)", expected.replacingOccurrences(of: ":10129:", with: ":0:"),
+                      expected.replacingOccurrences(of: "strike-companion.ios", with: "another-app"),
+                      "Cold-launch song restoration failed", "Prefix " + expected] {
+            XCTAssertFalse(SimulatorTerminationAcknowledgement.matches(other), other)
+        }
+    }
+
     func testRenamedWelcomeOffersKitEditorAndSetlistPerformance() {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
@@ -226,7 +237,20 @@ extension XCUIApplication {
         let alreadyStopped = wait(for: .notRunning, timeout: 5)
         // Files can report stale foreground state even after Home is visible.
         // Require the final stopped state, not an intermediate background flag.
-        if !alreadyStopped && state != .notRunning { terminate() }
+        if !alreadyStopped && state != .notRunning {
+            #if compiler(>=6.3)
+            let options = XCTExpectedFailure.Options()
+            options.isStrict = false
+            options.issueMatcher = { SimulatorTerminationAcknowledgement.matches($0.compactDescription) }
+            // Match only the SDK's exact old-PID -> PID-zero acknowledgement error.
+            // The actual stopped-state assertion below is OUTSIDE this scope.
+            XCTExpectFailure("Xcode stale-PID termination acknowledgement; process exit is verified separately", options: options) {
+                terminate()
+            }
+            #else
+            terminate()
+            #endif
+        }
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             self.state == .notRunning
         }, object: nil)
@@ -286,5 +310,14 @@ extension XCUIApplication {
             return
         }
         control.tap()
+    }
+}
+
+
+/// Scope only the observed XCTest acknowledgement diagnostic, never an app assertion.
+enum SimulatorTerminationAcknowledgement {
+    static func matches(_ description: String) -> Bool {
+        let pattern = #"^Failed to terminate net\.cooberlab\.strike-companion\.ios:[1-9][0-9]*: Failed to terminate net\.cooberlab\.strike-companion\.ios:0$"#
+        return description.range(of: pattern, options: .regularExpression) == description.startIndex..<description.endIndex
     }
 }
