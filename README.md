@@ -226,12 +226,50 @@ double-click.
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
 Swift library and version-1 format. A local copy restores the setlist, selected song,
-reading size and performance view after relaunch. Read-only; kit availability is not checked. The new kit inspector opens `.skt` files
-for pad-zone, Layer A/B reference and stored-setting inspection, with side-by-side
-details on wide iPads. It does not edit, resolve sounds, play audio or deploy kits.
+reading size and performance view after relaunch. Setlists remain read-only.
+The native kit editor opens `.skt` files for confirmed pad settings and Layer A/B
+assignments to references already in the kit, with undo/redo and side-by-side details
+on wide iPads. Numeric settings offer a large text-entry field with Clear, a slider
+for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
+it for replacement; Apply confirms the edit and Cancel discards it.
+**Export new copy** creates a uniquely named kit in a chosen Files
+folder, verifies its bytes and never replaces an existing file. Imported originals
+stay untouched. Kit edits remain in memory until export; export before closing the
+app. Sound availability is not checked; sound libraries, playback and deployment
+remain future work.
+Reopening the editor with an external kit still asks before discarding unsaved edits, even if that kit finishes loading before the editor appears.
 [Attended iPhone checks](docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md)
 confirmed demo song/reading-size restoration, synthetic kit inspection and external
-kit Open In/rejection retention; Files-provider, iPad and accessibility scope remains separate.
+kit Open In/rejection retention. [Initial attended iPad checks](docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md)
+confirmed demo navigation, both layers, Level editing and Undo. A subsequent
+[physical iPad/NAS check](docs/IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md)
+verified direct numeric replacement, Undo/Redo and real-kit NAS export/reopen with
+an unchanged original and exactly one intended byte changed. Accessibility, MIDI
+and module playback remain separate checks.
+The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
+covers kit-copy editing, original-file preservation and local Files export/reopen.
+Native parity CI also runs when the Python editor or binary format implementation changes.
+iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
+Modern CI pins Xcode 27.1, matching local verification, instead of the runner's floating default; Xcode 16.4 remains the compatibility check.
+Files cancellation UI regressions query the running Files service's real Cancel
+button before the host fallback, requiring valid visible hit targets. Files controls
+that disappear during a snapshot are polled again within the bounded wait. A restored
+folder uses the real Recents tab rather than the sorting menu; retained-edit and
+resumed-editor assertions remain required.
+Folder export waits for Files' Open button to become actionable before submitting once.
+Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
+UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.
+Export-folder provider errors use export-specific destination guidance and clear stale
+success messages while retaining edits and Undo history; cancellation stays quiet.
+
+The native iPhone/iPad product is evolving into **Strike Remapper**, one app with
+performance and editing views. The existing full web editor is the feature target;
+the current Companion-named build is an incremental native implementation and does
+not yet have feature parity. The Mac setlist companion remains separate.
+
+The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)
+records passing editing/export checks on both sizes, the full iPhone result and
+the iPad search timeout with its focused follow-up.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome

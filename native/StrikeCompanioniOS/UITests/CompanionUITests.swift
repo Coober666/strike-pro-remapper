@@ -9,6 +9,7 @@ final class CompanionUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
         app.launch()
         app.buttons["demo"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
@@ -25,7 +26,9 @@ final class CompanionUITests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
-        search.typeText("guitar\n")
+        search.typeText("guitar")
+        // Keep text entry and explicit keyboard submission independently observable.
+        search.typeText("\n")
         XCTAssertTrue(app.buttons["song-2"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["song-0"].exists)
         app.buttons["song-2"].tap()
@@ -70,11 +73,13 @@ final class CompanionUITests: XCTestCase {
         // Target this viewer explicitly; default-app file dispatch can time out
         // in hosted simulators. open() is a launch operation, so active-session
         // retention is covered by the model tests and attended device checks.
+        app.stopForUITestRelaunch()
         app.open(file)
         let imported = app.staticTexts["Imported opener"]
         XCTAssertTrue(imported.waitForExistence(timeout: 10))
         let invalid = Data("not JSON".utf8)
         try invalid.write(to: file)
+        app.stopForUITestRelaunch()
         app.open(file)
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10))
         app.alerts.buttons["OK"].tap()
@@ -114,7 +119,7 @@ final class CompanionUITests: XCTestCase {
         app.buttons["performance"].tap()
         app.buttons["reading-options"].tap()
         app.buttons["Extra large"].tap()
-        app.terminate()
+        app.stopForUITestRelaunch()
         app.launch()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
@@ -123,19 +128,16 @@ final class CompanionUITests: XCTestCase {
     }
 
     func testFilePickerCancellationPreservesSong() {
+        executionTimeAllowance = 300 // Cold hosted Files accessibility can arrive after its window renders.
         let app = launchDemo()
         app.buttons["next"].tap()
         app.buttons["import"].tap()
-        let cancel = app.buttons["Cancel"]
-        // Files is a separate system service; first launch on a clean hosted
-        // simulator can leave its remote view blank for more than ten seconds.
-        XCTAssertTrue(cancel.waitForExistence(timeout: 30))
-        cancel.tap()
+        app.cancelFilesPicker()
         let dismissed = NSPredicate { _, _ in
-            !cancel.exists && app.buttons["import"].isEnabled
+            app.buttons["import"].isHittable && app.buttons["import"].isEnabled
         }
-        expectation(for: dismissed, evaluatedWith: nil)
-        waitForExpectations(timeout: 15)
+        let resumed = XCTNSPredicateExpectation(predicate: dismissed, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 15), .completed, app.debugDescription)
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
@@ -149,7 +151,12 @@ final class CompanionUITests: XCTestCase {
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["kit-layer-a"].label, "Synthetic/Snare.sin")
-        XCTAssertEqual(app.staticTexts["kit-layer-b"].label, "Synthetic/Brush Snare.sin")
+        let layerB = app.staticTexts["kit-layer-b"]
+        for _ in 0..<6 {
+            if layerB.isHittable { break }
+            app.scrollViews["kit-detail"].swipeUp()
+        }
+        XCTAssertEqual(layerB.label, "Synthetic/Brush Snare.sin")
         XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = "Kit inspector layers"
@@ -174,6 +181,7 @@ final class CompanionUITests: XCTestCase {
         pad[24] = 255; pad[25] = 255
         bytes += pad + Data("str ".utf8) + Data([9, 0, 0, 0]) + Data("Demo.sin\0".utf8)
         try bytes.write(to: source)
+        app.stopForUITestRelaunch()
         app.open(source)
         let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
@@ -188,4 +196,76 @@ final class CompanionUITests: XCTestCase {
         #endif
     }
 
+}
+
+@MainActor
+extension XCUIApplication {
+    func stopForUITestRelaunch() {
+        guard state != .notRunning else { return }
+        // Hosted XCTest has failed foreground termination with stale PID errors.
+        // Complete backgrounding and explicit termination before a new launch.
+        if state == .runningForeground { XCUIDevice.shared.press(.home) }
+        // A hosted Files session can report a stale foreground state even after
+        // Home is visible. Require the final stopped state, not a transient one.
+        if state != .notRunning { terminate() }
+        let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.state == .notRunning
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed,
+                       "App must be stopped before relaunch; state=\(state.rawValue)")
+    }
+
+    func actionableFilesControl(_ query: (XCUIApplication) -> XCUIElement) -> XCUIElement? {
+        let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
+        // The host may expose misleading generic proxies for hosted Files controls.
+        // Query real buttons and reject stale/offscreen/covered activation points.
+        func actionable(_ control: XCUIElement) -> Bool {
+            // Files can replace its tab bar between AX queries while restoring a folder.
+            // Read frame/enabled together; a disappearing match throws from snapshot()
+            // and is retried by the bounded predicate instead of failing a frame getter.
+            guard control.exists, let snapshot = try? control.snapshot(), snapshot.isEnabled else { return false }
+            let frame = snapshot.frame
+            guard !frame.isEmpty, !frame.isInfinite,
+                  self.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+            return control.isHittable
+        }
+        if files.state != .notRunning {
+            let control = query(files)
+            if actionable(control) { return control }
+        }
+        let control = query(self)
+        return actionable(control) ? control : nil
+    }
+
+    func cancelFilesPicker() {
+        func cancelControl() -> XCUIElement? {
+            actionableFilesControl { $0.buttons["Cancel"].firstMatch }
+        }
+        func recentsTab() -> XCUIElement? {
+            actionableFilesControl { $0.tabBars.buttons["Recents"].firstMatch }
+        }
+        let ready = NSPredicate { _, _ in cancelControl() != nil || recentsTab() != nil }
+        let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 90), .completed, debugDescription)
+        if let control = cancelControl() {
+            control.tap()
+            return
+        }
+        // A restored folder can hide Cancel. Use the actual bottom tab, not a
+        // generic Recents proxy or More, which opens sorting options on modern Files.
+        guard let recents = recentsTab() else {
+            XCTFail("No actionable Files Cancel button or Recents tab. \(debugDescription)")
+            return
+        }
+        recents.tap()
+        let command = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            cancelControl() != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [command], timeout: 90), .completed, debugDescription)
+        guard let control = cancelControl() else {
+            XCTFail("Files did not expose an actionable Cancel button. \(debugDescription)")
+            return
+        }
+        control.tap()
+    }
 }

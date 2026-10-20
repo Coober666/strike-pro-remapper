@@ -3,6 +3,8 @@ import json
 import io
 import unittest
 import subprocess
+from pathlib import Path
+import tempfile
 from unittest.mock import patch
 
 import build_ios_companion
@@ -55,6 +57,32 @@ class SimulatorLifecycleTests(unittest.TestCase):
                 with build_ios_companion.ready_simulator('test-device', io.StringIO(), False):
                     self.fail('Startup failure must prevent testing')
         self.assertEqual(run.call_args.args[0], ['xcrun', 'simctl', 'shutdown', 'test-device'])
+
+
+class SourceReceiptTests(unittest.TestCase):
+    def test_hashes_sources_in_build_parent_but_excludes_generated_children(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve() / '.build' / 'checkout'
+            source = root / 'native/StrikeCompanion/Sources/Setlist.swift'
+            source.parent.mkdir(parents=True)
+            source.write_text('shared source')
+            mobile = root / 'native/StrikeCompanioniOS/Sources/App.swift'
+            mobile.parent.mkdir(parents=True)
+            mobile.write_text('mobile source')
+            script = root / 'tools/build_ios_companion.py'
+            script.parent.mkdir(parents=True)
+            script.write_text('build helper')
+            for child in ('.build', '.swiftpm', 'xcuserdata'):
+                generated = root / 'native/StrikeCompanioniOS' / child / 'generated.swift'
+                generated.parent.mkdir(parents=True)
+                generated.write_text('generated')
+            with patch.object(build_ios_companion, '__file__', str(script)):
+                before = build_ios_companion.source_hashes(root)
+                self.assertEqual(set(before), {
+                    'native/StrikeCompanion/Sources/Setlist.swift',
+                    'native/StrikeCompanioniOS/Sources/App.swift', 'tools/build_ios_companion.py'})
+                source.write_text('changed source')
+                self.assertNotEqual(before, build_ios_companion.source_hashes(root))
 
 
 if __name__ == '__main__':

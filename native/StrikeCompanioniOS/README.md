@@ -1,7 +1,7 @@
 # Strike Companion for iPhone and iPad
 
-A native, offline, read-only performance sheet for the same version-1 JSON exported
-by Strike Remapper’s Setlist Builder. Requires iOS/iPadOS 17 or later.
+A native, offline setlist viewer and kit-copy editor. It reads the same version-1
+JSON exported by Strike Remapper’s Setlist Builder. Requires iOS/iPadOS 17 or later.
 
 Import an export from **Files**, or use **Open in Strike Companion** from another
 app. The entire document is validated by the existing Foundation-only
@@ -30,31 +30,69 @@ Kit references are displayed as text. A setlist does not include kits or sounds.
 The companion does not check kit availability, follow kit paths, access cards,
 connect to the editor, or send MIDI.
 
-## Read-only kit inspector (0.4)
+## Kit-copy editor (0.5)
 
-Choose **Kit inspector** in the toolbar, then **Open kit** to select a `.skt` from
-Files. Open In also recognizes `.skt` files. **Try synthetic kit** needs no personal
-files. Wide iPad windows show the pad-zone list beside its details; narrow windows
-and iPhone use a list and detail screen. Layer A/B references, level, signed pan,
-pitch/fine, decay, velocity range, filter/loop and selected zone/MIDI settings are
-read from known offsets. Unknown enum values remain labelled with their raw number.
-Unassigned and unresolved string indices are explicit. No instrument/sample path
-is followed, so a displayed reference does not prove that sound is available.
+Choose **Kit editor** in the toolbar, then **Open kit** to select a `.skt` from
+Files. Open In also recognizes `.skt`. **Try synthetic kit** needs no personal
+files. Wide iPad windows show the zone list beside its details; narrow windows and
+iPhone use a list and detail screen. Tap a setting, enter a value, and choose
+**Apply**. **Cancel** leaves the open copy unchanged. The original file is never
+written, and file coordination never asks another open app to save it. Unknown stored values remain explicit until you deliberately change them.
+Numeric settings show a large **Type a value** field: first focus selects its whole
+number so typing replaces it immediately. You can also use **Clear value** to
+replace it. **Quick adjustment** provides a whole-number
+slider; **Fine adjustment (±1)** keeps precise one-step buttons available. These
+controls change the pending value only; Apply is still required. Unsupported typed
+values stay visible with Apply disabled rather than silently changing to a limit.
 
-The Foundation-only parser lives beside the shared setlist core. It bounds input
-to 4 MiB, the KIT header to 44–4096 bytes, 128 pad zones of 62–4096 bytes, and 4096
-printable ASCII references of up to 240 bytes. Missing/truncated blocks and
-unterminated/unsupported strings are rejected before replacing the current kit.
-Unknown pad IDs and opaque trailing bytes are retained. All imported bytes are
-kept unchanged in memory. This is an inspector, with no writer/export/editing,
-playback, sound library, host connection or deployment. No kit is saved across
-launches. Closing the inspector returns to the same setlist and selected song.
+Both layers offer level, signed pan, decay, pitch/fine, filter cutoff/enable and
+loop. Expand **Velocity response** for the four velocity modulation settings and
+velocity bounds; Layer B maximum is displayed without editing. Zone settings offer
+MIDI channel/note, Reverb/FX1/FX2 sends, EQ/compressor enable, priority, mute group,
+Note Off, gate time and Mono/Poly playback. MIDI settings only change stored bytes;
+no MIDI messages are sent. Kit-level FX and reserved offsets remain untouched.
 
-`tools/test_kit_inspector_format.py` checks committed synthetic demo/parity cases
-against Python; use `--write` only when intentionally regenerating them. Swift
-contracts check the same cases, all truncation boundaries, bounds, signed values,
-unknown zones, unresolved references and unchanged source bytes. These are format
-and simulator checks, not physical file-provider or module acceptance.
+**Change assignment** chooses a reference already in this kit, or Unassigned.
+References never open instruments/samples or scan cards. A displayed reference
+does not prove that sound exists. There is no sound library or audio playback.
+
+The **Edit actions (…)** menu offers **Undo**, **Redo** (20 actions) and
+**Export new copy…**. Export asks for a Files **folder**, then creates a unique
+`Kit-edit-xxxxxxxx.skt` file there. The 21-character ASCII name fits the documented
+module filename bound. Existing items are never replaced, including symbolic links.
+For a local destination, choose **Browse → On My iPhone/iPad → Strike Companion**
+in Files, then **Open**. A **Kit Copies** subfolder is also prepared for organization.
+The app exposes only its Documents folder;
+setlist snapshots stay in private Application Support.
+The app flushes and reads back the copy, validates its format and compares its bytes
+before reporting success. Open that exported file again to inspect or continue editing
+it. Export keeps your current edits and undo history. Cloud synchronization and
+module playback are not established by this local byte check.
+
+**Done** returns to the same setlist/song and retains kit edits while the app stays
+open. Replacing an edited kit requires **Discard edits and open kit** after the new
+file has validated. Keep editing, failed imports and cancelled pickers retain the
+current kit/history. The confirmation also appears when an external kit finishes
+loading before the editor reopens. Kit edits do **not** persist after process termination: export
+before closing the app. A failed export keeps edits open and asks you to check the
+destination before retrying. Handled partial writes are removed when their identity
+still matches this attempt; process interruption can leave an incomplete copy.
+
+The Foundation-only shared parser/writer bounds files to 4 MiB, KIT headers to
+44–4096 bytes, 128 pad zones of 62–4096 bytes, and 4096 printable ASCII references
+of up to 240 bytes. Chunk lengths, exact string bytes, header, reserved bytes and
+opaque tail survive no-op round trips and edits. Unknown zones, duplicate identifiers
+and ambiguous empty string-table slots can be inspected/copied, with editing disabled.
+No source URL or bookmark is retained for saving. Setlist persistence is independent.
+
+`tools/test_kit_inspector_format.py` and `tools/test_kit_editing.py` own committed
+synthetic fixtures; `--write` intentionally regenerates them. The editing oracle
+uses the Python editor's confirmed parameter map and binary writer. Swift tests
+compare exact bytes for every supported field, bounds, assignments, undo/redo,
+unknown data, rejected edits, collisions/partial failures and exported-copy reopen.
+UI tests cover explicit edits, both layers, signed pan, undo/redo, retention after
+Done, replacement protection, export-folder cancellation and a complete Files export/reopen. Simulator evidence
+is separate from physical Files-provider, iPad, accessibility and module acceptance.
 
 ## Simulator build and tests
 
@@ -73,15 +111,20 @@ The output directory must be new. This selects one installed iPhone and iPad fro
 the newest complete runtime pair supported by the selected Xcode simulator SDK,
 builds and runs XCTest/XCUITest sequentially, and retains logs, `.xcresult` bundles
 with screenshot attachments, and a receipt containing input SHA-256 hashes.
-Each test has a three-minute execution allowance so a stalled UI test fails with
-diagnostics before the overall CI job expires.
+Tests default to a three-minute execution allowance; the three Files-provider tests
+allow five minutes for a cold provider. Every test is capped at five minutes so
+a stalled UI test fails before the overall CI job expires.
 Ordinary logs, screenshots and test results are retained; verbose OS sysdiagnose
 capture is disabled because it can exhaust the job after an automation timeout.
+Files readiness checks read enabled/frame attributes from one throwing snapshot;
+a control replaced during folder restoration remains subject to the bounded wait.
 The helper waits for each simulator to finish booting before testing. It shuts
 down simulators it needed to start between runs, including on failure, and
 preserves any simulator that was already booted when the helper started.
 Use `--device <simulator-UUID>` (repeatable) to select specific installed devices.
-The helper rejects input changes during a run and never downloads runtimes or configures signing. To list devices:
+The helper rejects input changes during a run and never downloads runtimes or configures signing.
+Generated-directory exclusions apply inside the native input folders; worktrees under
+a parent `.build` directory still receive complete source hashes. To list devices:
 
 ```sh
 xcrun simctl list devices available
@@ -94,11 +137,18 @@ rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open
 UI tests explicitly target Strike Companion using Xcode 27's app-launch API;
 default-app file dispatch can time out on hosted simulators. Because the API
 relaunches the app, active-session import retention is covered by model tests and
-the attended iPhone check. CI runs Xcode 16.4 and 27 separately. The job allows 35 minutes for both devices,
-including cold boots and the expanded UI suite. Xcode 16/26's
+the attended iPhone check. CI runs each Xcode 16.4/27.1 and iPhone/iPad combination
+as a separate job, with a 35-minute budget per device including cold startup.
+Every job selects its device from the helper's compatible installed runtime pair;
+per-test limits, full model/UI coverage and artifact receipts remain unchanged. Xcode 16/26's
 file-URL automation drops the document or times out, so only the two document-handoff UI tests
 explicitly skip on their older compilers; Xcode 27 must execute it. The modern
-job uses GitHub's `xcode-27` preview runner and its bundled toolchain/runtime.
+job uses GitHub's `xcode-27` preview runner with the installed Xcode 27.1
+selected explicitly, matching local verification instead of the floating default.
+GitHub's [installed software inventory](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+lists this toolchain. Existing test limits, assertions and failure artifacts remain;
+the pin aligns environments and does not itself establish a fix for the observed
+Xcode 27.0 launch/Files accessibility failures.
 All model import
 contracts and other UI tests run on both. Simulator evidence does not establish physical
 Files/iCloud/AirDrop, signing, VoiceOver, or distance-reading acceptance.

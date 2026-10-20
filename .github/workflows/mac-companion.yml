@@ -2,9 +2,9 @@ name: Native Strike companion
 
 on:
   push:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remap.py', 'strike_remapper/formats.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
   pull_request:
-    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
+    paths: ['native/StrikeCompanion/**', 'native/StrikeCompanioniOS/**', 'tools/build_ios_companion.py', 'tools/build_macos_companion.py', 'tools/test_companion_format.py', 'tools/test_kit_inspector_format.py', 'tools/test_kit_editing.py', 'strike_remap.py', 'strike_remapper/formats.py', 'strike_remapper/setlists.py', '.github/workflows/mac-companion.yml']
 
 permissions:
   contents: read
@@ -43,13 +43,28 @@ jobs:
       matrix:
         include:
           - xcode: '16.4'
+            family: iPhone
+            device_index: 0
             runner: macos-15
             developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
-          - xcode: '27'
+          - xcode: '16.4'
+            family: iPad
+            device_index: 1
+            runner: macos-15
+            developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
+          - xcode: '27.1'
+            family: iPhone
+            device_index: 0
             runner: xcode-27
-            developer_dir: /Applications/Xcode.app/Contents/Developer
+            developer_dir: /Applications/Xcode_27.1.app/Contents/Developer
+          - xcode: '27.1'
+            family: iPad
+            device_index: 1
+            runner: xcode-27
+            developer_dir: /Applications/Xcode_27.1.app/Contents/Developer
     env:
       DEVELOPER_DIR: ${{ matrix.developer_dir }}
+      STRIKE_SIMULATOR_INDEX: ${{ matrix.device_index }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,12 +72,27 @@ jobs:
           python-version: '3.12'
       - name: Simulator selection contracts
         run: python tools/test_ios_build.py
-      - name: iPhone and iPad simulator contracts and UI
-        run: python tools/build_ios_companion.py --output "$RUNNER_TEMP/ios-companion"
+      - name: Kit inspection and editing parity
+        run: |
+          python tools/test_kit_inspector_format.py
+          python tools/test_kit_editing.py
+      - name: ${{ matrix.family }} simulator contracts and UI
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from tools.build_ios_companion import simulator_ids
+
+          device = simulator_ids()[int(os.environ['STRIKE_SIMULATOR_INDEX'])]
+          subprocess.run([sys.executable, 'tools/build_ios_companion.py',
+                          '--output', os.path.join(os.environ['RUNNER_TEMP'], 'ios-companion'),
+                          '--device', device], check=True)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ios-strike-companion-tests-xcode-${{ matrix.xcode }}
+          name: ios-strike-companion-tests-xcode-${{ matrix.xcode }}-${{ matrix.family }}
           path: |
             ${{ runner.temp }}/ios-companion/*.log
             ${{ runner.temp }}/ios-companion/*.xcresult

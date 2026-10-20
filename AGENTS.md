@@ -980,7 +980,7 @@ separate checks; a macOS package build does not establish those results.
 SwiftUI app. Its local package reference reuses `StrikeSetlists` from the Mac
 companion; never duplicate or loosen the version-1 validator. Imports use the
 shared bounded, security-scoped reader off the main actor and replace state only
-after validation. Files and Open In are read-only; no kit path resolution, MIDI,
+after validation. Setlist Files/Open In imports are read-only; no kit path resolution, MIDI,
 card or network access. The iOS app atomically persists one bounded app-owned session snapshot in Application
 Support, with no source URLs/bookmarks. Revalidate using Setlist.decode before restore.
 Preserve failed imports and report disk failures without discarding current work.
@@ -1000,22 +1000,35 @@ attended iPhone check. Xcode 16's app URL launch drops the file URL; system URL
 opening times out on Xcode 16/26. Only the two document-handoff UI tests explicitly skip on their
 older compilers. The Xcode 27 CI matrix
 job must execute it; model import contracts and other UI tests run on both.
-The modern job uses GitHub's `xcode-27` preview image; the legacy job pins Xcode 16.4.
+The modern job uses GitHub's `xcode-27` preview image with an explicit
+/Applications/Xcode_27.1.app developer directory, matching local Xcode 27.1
+(27A9275) verification. The image's floating default selected 27.0 (27A266a)
+and produced repeated launch/Files accessibility failures despite a passing push run.
+Pinning aligns the environments; do not claim it fixes those failures until CI passes.
+The legacy job pins Xcode 16.4. Keep all tests, limits and failure evidence.
+Each Xcode version has separate iPhone and iPad CI jobs, selecting one member of
+the helper's compatible installed runtime pair with --device. Each retains the
+35-minute job limit and existing per-test limits, source hashes, lifecycle cleanup
+and uniquely named device artifacts. Cold preview-runtime startup plus both full
+suites can exceed a combined job budget even while every completed test passes.
 Default simulator selection uses the newest installed iPhone/iPad runtime pair
 supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
 Keep import/rejection and source-byte UI assertions, plus selected-song retention
 model assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
 the nested accessibility buttons produced by a framed image label on iOS 18.
-The search UI workflow submits its query before selection so a wide-iPad keyboard
-does not retain animation-idle waits during later toolbar actions. Each test has
+The search UI workflow enters its query and submits Return as separate keyboard
+events before selection, so a wide-iPad keyboard does not retain animation-idle
+waits during later toolbar actions. Each test has
 a 180-second execution allowance, keeping stalled UI diagnostics within the CI job.
 Before each device run, wait for `simctl bootstatus -b`. Shut down only devices
 that were not already booted when the helper started, including after failure;
 never shut down a preexisting user simulator. Lifecycle tests mock device access.
+Receipt exclusions for .build/.swiftpm/xcuserdata apply only below each native input
+folder, so a worktree inside a parent .build still hashes all source files.
 Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
 OS sysdiagnose capture, which can outlast the CI job after an automation failure.
-Files-picker UI checks allow 30 seconds for the OS service's first launch, then
+Files-picker UI checks allow 90 seconds for the OS service's first accessibility tree, then
 require dismissal, Import re-enablement and selected-song retention after Cancel.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
@@ -1028,9 +1041,9 @@ physical iPad and accessibility acceptance remain separate; see
 metadata and owner-selected Xcode settings out of documentation commits.
 
 
-## Native kit inspector 0.4
+## Native kit inspector 0.4 (historical baseline)
 
-The iOS app has a separate read-only Kit inspector. Foundation-only KitInspection.swift
+The 0.4 iOS app introduced a separate read-only Kit inspector. Foundation-only KitInspection.swift
 joins the StrikeSetlists package without changing the setlist validator or Mac app.
 Require bounded KIT/inst/str chunks before replacing state; limit files to 4 MiB,
 128 pads, 4096 references of 240 ASCII bytes. Keep original/header/payload/tail bytes.
@@ -1051,3 +1064,138 @@ See docs/IOS_COMPANION_04_IPHONE_ACCEPTANCE_2026-10-18.md. Do not generalize thi
 to imported-setlist persistence, physical Files providers/iPad, VoiceOver or module
 behavior. Keep signing/device receipts private; acceptance is owner-reported UI
 paired with programmatic build/install/launch evidence.
+
+
+## Native kit editing 0.5
+
+The iPhone/iPad kit editor reuses KitInspection plus Foundation-only KitEditing.swift
+in StrikeSetlists. encoded() rebuilds chunks losslessly, retaining exact KIT/str blocks,
+pad payload lengths, all reserved bytes and the opaque tail. Only the 38 confirmed
+writable per-pad parameters and A/B indices may change. Layer B maximum velocity,
+kit-header FX and unknown offsets stay untouched. Assign only a current string-table
+index or 65535; never add/resolve references or open sounds/cards. Unknown zones,
+duplicate identifiers and noncanonical empty string slots remain inspectable/copyable
+but cannot be edited. Invalid existing values remain raw until explicitly edited.
+Validate value/range/velocity consistency before changing state or history. Undo/redo
+stores at most 20 small byte patches; new edits clear redo, invalid/no-op edits do not.
+
+Imported kit bytes are immutable in KitEditingSession. App edits require explicit
+Apply; Cancel leaves state unchanged. Done and external setlist routing retain the
+memory-only kit session. Replacing a dirty kit requires explicit discard after the
+candidate has validated; cancellation and failed imports retain edits, selection and
+history. Kit edits are not restored after process termination; the UI says to export
+before closing the app. The setlist session store is unchanged.
+Evaluate pending replacement state on the editor's initial presentation as well as
+later changes: external Open In can validate a candidate before the full-screen
+cover mounts. The alert must remain reachable while pendingImport disables controls.
+A simulator-hosted SwiftUI view regression mounts that preexisting pending state,
+requires the actual replacement alert and verifies cancellation retains edits,
+selection, document identity, history and immutable source bytes.
+
+KitCopyExporter is the only native kit write path. The user selects a Files folder;
+coordinate security-scoped reads/writes off the main actor. Reads use withoutChanges;
+new-file directory writes use ordinary coordination, never forMerging. Neither
+operation may ask other file presenters to save imported originals. Prepare Documents/Kit Copies
+as a local Files destination (UIFileSharingEnabled); session snapshots stay private in
+Application Support. Generate an ASCII
+Kit-edit-<8 lowercase hex>.skt name (21 characters). Use directory-relative exclusive
+creation with O_EXCL/O_NOFOLLOW, never replacement or an imported source URL. Flush,
+read back and parse the same descriptor before reporting success. Reject existing
+files/links; clean up only this attempt's matching file identity on handled failure.
+The shared Files presenter routes export-folder provider failures through the same
+export reporter as write failures, clearing stale success while retaining edits/history.
+Cancellation remains quiet; import failures retain their separate message.
+No automatic retries. An interrupted process can leave an incomplete copy; errors
+ask users to check the destination. Export retains edits and undo history. Cloud
+sync, physical provider behavior and module playback are separate acceptance gates.
+
+tools/test_kit_editing.py owns synthetic KitEditingCases.json; --write regenerates
+it, no-arg CI checks it against the Python editor's literal confirmed parameter map
+and formats.build_skt. Both native CI event path filters include strike_remap.py and
+strike_remapper/formats.py so changes to that oracle also run the parity checks.
+Swift tests compare exact output bytes for every field,
+signed bounds/assignments/rejections, history, unknown-byte preservation, export
+collisions/partial failures and reopen. XCUITests cover explicit editing, both layers,
+undo/redo, retained edits after Done, replacement confirmation, export cancellation and a Files export/reopen workflow.
+Value-edit sheets clear keyboard focus on Apply/Cancel.
+Numeric editors expose a large rounded text field, explicit Clear, whole-number
+slider and ±1 stepper. All controls edit pending text only; Apply/Cancel and model
+validation remain the mutation boundary.
+First focus selects the whole numeric value after the initiating tap completes,
+so direct typing replaces it instead of prepending to right-aligned digits. A private
+UIViewRepresentable owns its UITextField delegate, focus and selection; never observe
+global text-field notifications to manage this field.
+Clamp only the slider thumb's display
+when text is unsupported; never silently clamp or replace the typed input. Dragging
+the slider dismisses keyboard focus. UI coverage includes coarse changes, Clear,
+direct typing, invalid-value retention and Cancel leaving the kit untouched.
+Replacement helpers use the visible Clear action and assert the resulting text;
+they must not assume where a tap places the caret. A separate check verifies that
+first-focus typing replaces the selected number without Clear. Replacement helpers
+submit keyboard Done before toolbar actions: the iPad keyboard repositions the sheet
+before the remote accessibility frame catches up. Done must leave Apply explicit.
+Files may restore its last folder: UI tests recognize the app destination before
+navigating the sidebar. Reopen the exported file using its image element in icon
+view or the cell in list view, letting XCTest reveal it. Avoid normalized coordinate
+taps through the hosted Files service.
+Use one fileImporter presenter for kit files and export folders; capture its purpose
+before starting asynchronous work. Stacking two presenters can leave older SwiftUI
+with an active import binding and no visible picker after export. Scroll test helpers
+wait for the edit sheet to disappear and reverse direction when the target is above
+the viewport. Check an element's frame is inside the unobscured scroll viewport before
+asking isHittable: hosted accessibility can fail the test for offscreen activation
+points rather than returning false. Keep the final visibility assertion. The three Files-provider
+UI tests have a 300-second allowance for cold hosted providers; other tests default
+to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
+or retry file mutations to accommodate a slow provider.
+For cancellation, prefer the real Cancel button in the running Files service's
+accessibility tree (com.apple.DocumentManagerUICore.Service), then the host's actual
+Button. Xcode 27 can expose the close control only as a misleading Other proxy in
+the host while the service retains its correct Button/frame. Require a valid frame
+inside the screen and hittability before choosing a control. If Cancel is hidden,
+navigate only through the actual Recents TabBar button, then wait for actionable
+Cancel. Never use generic Recents/Cancel Other proxies or More as readiness evidence:
+More opens sorting options and can leave a covered Cancel with an invalid hit point.
+UI test relaunches send Home to a foreground app, terminate it if still running,
+and require notRunning before launch or document handoff. Hosted Files can report
+stale foreground/background state while Home is visibly onscreen, so the required
+condition is the final stopped process, not an intermediate background flag.
+This keeps implicit foreground termination out of launch() after repeated hosted
+XCTest PID acknowledgement failures. Cold-launch restoration requires a stopped process before launch;
+its song/reading assertions and document source-byte checks remain unchanged.
+Read enabled/frame attributes from one throwing snapshot, treating a disappearing
+Files match as not ready. Separate exists/isEnabled/frame queries can hard-fail if
+the restored folder replaces its tab bar between them. Keep the hittability check.
+Folder export also waits for an enabled, hittable native Open button after the
+destination title appears: Browse can publish the title while Open is still disabled.
+Submit Open once, retaining the export-status and exact reopened-value assertions.
+Assert the editor is usable again.
+After cancellation, wait for the named dirty-replacement alert before tapping Discard,
+then require its dismissal before checking the new kit. Older SwiftUI can expose
+the action during presentation before its tap target has settled; never retry Discard.
+Keep personal signing/device metadata out of commits. Build/test installed iPhone
+and iPad simulators before physical-device setup; guide owner steps one at a time.
+
+Initial attended 0.5 iPad Pro 12.9-inch (6th generation) / iPadOS 26.6 checks
+confirmed demo navigation, the wide zone/detail layout, Snare Head's A/B references,
+Level 100→73 Apply and Undo to 100. See
+docs/IOS_COMPANION_05_IPAD_ACCEPTANCE_2026-10-18.md. The owner's numeric-input
+feedback prompted 0.5.1. The subsequent agent-operated physical iPadOS 27.0.1 /
+NAS Files pass verified first-focus Level replacement 99→73, Apply, Undo/Redo and
+export/reopen of a real owner-provided kit. Independent readback found exactly the
+intended byte change and an unchanged original SHA-256. See
+docs/IOS_COMPANION_051_IPAD_NAS_ACCEPTANCE_2026-10-18.md. This is one-provider
+file-workflow evidence, not audio, MIDI, module or accessibility acceptance.
+Do not access the physical iPad during its OS update. Wait for explicit completion
+and unlock confirmation before the next installation/launch.
+
+
+## Native product identity
+
+The owner chose one native Strike Remapper app with performance and editing views,
+evolving the existing iPhone/iPad Companion. The full Strike Remapper web app is
+the feature target; current native builds are partial implementations, not feature
+parity. Do not start a separate full-editor iOS app. Keep the Mac setlist companion
+independent. Rename visible native branding in a verified follow-up while preserving
+bundle identity, document handling and saved app data. Native MIDI input is the next
+development milestone; direct storage/deployment still requires separate evidence.

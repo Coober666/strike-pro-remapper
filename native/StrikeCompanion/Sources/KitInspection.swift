@@ -1,6 +1,6 @@
 import Foundation
 
-/// Read-only interpretation of the known KIT / inst / str layout. No path resolution or writer.
+/// Bounded interpretation of KIT / inst / str. References are text, never file paths to follow.
 public struct KitInspection: Sendable {
     public static let maximumBytes = 4 * 1_048_576
     public let originalData: Data
@@ -8,6 +8,42 @@ public struct KitInspection: Sendable {
     public let pads: [KitPad]
     public let instruments: [String]
     public let tail: Data
+    let stringBlock: Data
+
+    public var editingIssue: String? {
+        let canonical = instruments.reduce(into: Data()) { $0.append(contentsOf: $1.utf8); $0.append(0) }
+        if stringBlock.dropFirst(8) != canonical {
+            return "This string table has empty slots. Inspection and copying are available; editing is disabled."
+        }
+        if Set(pads.map(\.id)).count != pads.count {
+            return "This kit has duplicate zone identifiers. Inspection and copying are available; editing is disabled."
+        }
+        return nil
+    }
+
+    /// Rebuild every chunk, retaining the original string block, header, padding and opaque tail.
+    public func encoded() -> Data {
+        var data = header
+        for pad in pads {
+            data.append(contentsOf: "inst".utf8)
+            let count = pad.payload.count
+            data.append(contentsOf: (0..<4).map { UInt8((count >> ($0 * 8)) & 255) })
+            data.append(pad.payload)
+        }
+        data.append(stringBlock)
+        data.append(tail)
+        return data
+    }
+
+    func replacing(pad index: Int, offset: Int, bytes: Data) throws -> Self {
+        var updated = pads
+        var payload = updated[index].payload
+        payload.replaceSubrange(offset..<offset + bytes.count, with: bytes)
+        updated[index] = KitPad(id: updated[index].id, payload: payload)
+        let candidate = Self(originalData: originalData, header: header, pads: updated,
+                             instruments: instruments, tail: tail, stringBlock: stringBlock)
+        return try Self.decode(candidate.encoded())
+    }
 
     public func reference(_ index: Int) -> String {
         if index == 0xffff { return "Unassigned" }
@@ -25,12 +61,21 @@ public struct KitInspection: Sendable {
         guard url.isFileURL else { throw SetlistError.invalid("Choose a kit file from Files.") }
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
-        guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
-            throw SetlistError.invalid("Choose a regular .skt file.")
+        var coordinationError: NSError?
+        var outcome: Result<Self, Error>?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { coordinatedURL in
+            outcome = Result {
+                guard try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+                    throw SetlistError.invalid("Choose a regular .skt file.")
+                }
+                let file = try FileHandle(forReadingFrom: coordinatedURL)
+                defer { try? file.close() }
+                return try decode(file.read(upToCount: maximumBytes + 1) ?? Data())
+            }
         }
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
-        return try decode(file.read(upToCount: maximumBytes + 1) ?? Data())
+        if let coordinationError { throw coordinationError }
+        guard let outcome else { throw SetlistError.invalid("Files did not provide this kit.") }
+        return try outcome.get()
     }
 
     public static func decode(_ data: Data) throws -> Self {
@@ -64,7 +109,9 @@ public struct KitInspection: Sendable {
             guard !id.isEmpty else { throw SetlistError.invalid("A pad zone has no identifier.") }
             pads.append(KitPad(id: id, payload: payload))
         }
+        let stringStart = position
         let strings = try block("str ")
+        let stringBlock = Data(bytes[stringStart..<position])
         guard strings.isEmpty || strings.last == 0 else { throw SetlistError.invalid("The kit string table is not terminated.") }
         var instruments: [String] = []
         for raw in strings.split(separator: 0, omittingEmptySubsequences: true) {
@@ -75,7 +122,7 @@ public struct KitInspection: Sendable {
             instruments.append(String(decoding: raw, as: UTF8.self))
         }
         return Self(originalData: data, header: Data(header), pads: pads, instruments: instruments,
-                    tail: Data(bytes[position...]))
+                    tail: Data(bytes[position...]), stringBlock: stringBlock)
     }
 }
 
@@ -85,6 +132,7 @@ public struct KitPad: Sendable {
     public var layerA: Int { word(4) }
     public var layerB: Int { word(24) }
     public var label: String { Self.labels[id] ?? id }
+    public var isKnownZone: Bool { Self.labels[id] != nil }
     public func byte(_ offset: Int) -> Int { Int(payload[offset]) }
     public func signed(_ offset: Int) -> Int { Int(Int8(bitPattern: payload[offset])) }
     private func word(_ offset: Int) -> Int { byte(offset) | byte(offset + 1) << 8 }
