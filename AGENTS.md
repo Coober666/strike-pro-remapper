@@ -1146,6 +1146,9 @@ inside the screen and hittability before choosing a control. If Cancel is hidden
 navigate only through the actual Recents TabBar button, then wait for actionable
 Cancel. Never use generic Recents/Cancel Other proxies or More as readiness evidence:
 More opens sorting options and can leave a covered Cancel with an invalid hit point.
+Read enabled/frame attributes from one throwing snapshot, treating a disappearing
+Files match as not ready. Separate exists/isEnabled/frame queries can hard-fail if
+the restored folder replaces its tab bar between them. Keep the hittability check.
 Folder export also waits for an enabled, hittable native Open button after the
 destination title appears: Browse can publish the title while Open is still disabled.
 Submit Open once, retaining the export-status and exact reopened-value assertions.

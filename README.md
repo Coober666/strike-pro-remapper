@@ -253,6 +253,7 @@ Native parity CI also runs when the Python editor or binary format implementatio
 iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
 Files cancellation UI regressions query the running Files service's real Cancel
 button before the host fallback, requiring valid visible hit targets. A restored
+Files control that disappears during its snapshot is polled again within the bounded wait.
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
 resumed-editor assertions remain required.
 Folder export waits for Files' Open button to become actionable before submitting once.
