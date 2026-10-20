@@ -250,7 +250,9 @@ and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
 Files cancellation UI regressions query the running Files service's real Cancel
-button before the host fallback, retaining edit/history and resumed-editor assertions.
+button before the host fallback, requiring valid visible hit targets. A restored
+folder uses the real Recents tab rather than the sorting menu; retained-edit and
+resumed-editor assertions remain required.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 Export-folder provider errors use export-specific destination guidance and clear stale
 success messages while retaining edits and Undo history; cancellation stays quiet.

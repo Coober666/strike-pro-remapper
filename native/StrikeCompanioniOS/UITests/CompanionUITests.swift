@@ -197,36 +197,52 @@ final class CompanionUITests: XCTestCase {
 @MainActor
 extension XCUIApplication {
     func cancelFilesPicker() {
-        let cancel = buttons["Cancel"]
         let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
-        // Hosted Files can expose its close control only as an Other in our tree,
-        // while its own process exposes the real Cancel button and correct frame.
-        func cancelControl() -> XCUIElement? {
-            if files.state != .notRunning {
-                let nativeCancel = files.buttons["Cancel"].firstMatch
-                if nativeCancel.exists { return nativeCancel }
-            }
-            return cancel.exists ? cancel : nil
+        // The host may expose misleading generic proxies for hosted Files controls.
+        // Query real buttons and reject stale/offscreen/covered activation points.
+        func actionable(_ control: XCUIElement) -> Bool {
+            guard control.exists, control.isEnabled else { return false }
+            let frame = control.frame
+            guard !frame.isEmpty, !frame.isInfinite,
+                  self.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+            return control.isHittable
         }
-        let more = buttons["More"].firstMatch
-        let ready = NSPredicate { _, _ in cancelControl() != nil || more.exists }
+        func nativeControl(_ query: (XCUIApplication) -> XCUIElement) -> XCUIElement? {
+            if files.state != .notRunning {
+                let control = query(files)
+                if actionable(control) { return control }
+            }
+            let control = query(self)
+            return actionable(control) ? control : nil
+        }
+        func cancelControl() -> XCUIElement? {
+            nativeControl { $0.buttons["Cancel"].firstMatch }
+        }
+        func recentsTab() -> XCUIElement? {
+            nativeControl { $0.tabBars.buttons["Recents"].firstMatch }
+        }
+        let ready = NSPredicate { _, _ in cancelControl() != nil || recentsTab() != nil }
         let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 90), .completed, debugDescription)
         if let control = cancelControl() {
             control.tap()
             return
         }
-        // Compact restored folders may need Recents or More → Cancel.
-        // The host's generic AX Cancel proxy can point at More, not the actual command.
-        if !cancel.exists, buttons["Recents"].exists {
-            buttons["Recents"].tap()
+        // A restored folder can hide Cancel. Use the actual bottom tab, not a
+        // generic Recents proxy or More, which opens sorting options on modern Files.
+        guard let recents = recentsTab() else {
+            XCTFail("No actionable Files Cancel button or Recents tab. \(debugDescription)")
+            return
         }
-        let visibleCancel = NSPredicate { _, _ in cancelControl() != nil }
-        let restored = XCTNSPredicateExpectation(predicate: visibleCancel, object: nil)
-        if XCTWaiter.wait(for: [restored], timeout: 2) != .completed { more.tap() }
-        let command = XCTNSPredicateExpectation(predicate: visibleCancel, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [command], timeout: 5), .completed, debugDescription)
-        guard let control = cancelControl() else { return }
+        recents.tap()
+        let command = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            cancelControl() != nil
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [command], timeout: 90), .completed, debugDescription)
+        guard let control = cancelControl() else {
+            XCTFail("Files did not expose an actionable Cancel button. \(debugDescription)")
+            return
+        }
         control.tap()
     }
 }
