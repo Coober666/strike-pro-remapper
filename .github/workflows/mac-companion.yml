@@ -43,13 +43,28 @@ jobs:
       matrix:
         include:
           - xcode: '16.4'
+            family: iPhone
+            device_index: 0
+            runner: macos-15
+            developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
+          - xcode: '16.4'
+            family: iPad
+            device_index: 1
             runner: macos-15
             developer_dir: /Applications/Xcode_16.4.app/Contents/Developer
           - xcode: '27'
+            family: iPhone
+            device_index: 0
+            runner: xcode-27
+            developer_dir: /Applications/Xcode.app/Contents/Developer
+          - xcode: '27'
+            family: iPad
+            device_index: 1
             runner: xcode-27
             developer_dir: /Applications/Xcode.app/Contents/Developer
     env:
       DEVELOPER_DIR: ${{ matrix.developer_dir }}
+      STRIKE_SIMULATOR_INDEX: ${{ matrix.device_index }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,12 +76,23 @@ jobs:
         run: |
           python tools/test_kit_inspector_format.py
           python tools/test_kit_editing.py
-      - name: iPhone and iPad simulator contracts and UI
-        run: python tools/build_ios_companion.py --output "$RUNNER_TEMP/ios-companion"
+      - name: ${{ matrix.family }} simulator contracts and UI
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from tools.build_ios_companion import simulator_ids
+
+          device = simulator_ids()[int(os.environ['STRIKE_SIMULATOR_INDEX'])]
+          subprocess.run([sys.executable, 'tools/build_ios_companion.py',
+                          '--output', os.path.join(os.environ['RUNNER_TEMP'], 'ios-companion'),
+                          '--device', device], check=True)
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ios-strike-companion-tests-xcode-${{ matrix.xcode }}
+          name: ios-strike-companion-tests-xcode-${{ matrix.xcode }}-${{ matrix.family }}
           path: |
             ${{ runner.temp }}/ios-companion/*.log
             ${{ runner.temp }}/ios-companion/*.xcresult

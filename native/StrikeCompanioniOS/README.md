@@ -134,8 +134,10 @@ rotation, scroll reset, Open In imports/rejections, and Files cancellation. Open
 UI tests explicitly target Strike Companion using Xcode 27's app-launch API;
 default-app file dispatch can time out on hosted simulators. Because the API
 relaunches the app, active-session import retention is covered by model tests and
-the attended iPhone check. CI runs Xcode 16.4 and 27 separately. The job allows 35 minutes for both devices,
-including cold boots and the expanded UI suite. Xcode 16/26's
+the attended iPhone check. CI runs each Xcode 16.4/27 and iPhone/iPad combination
+as a separate job, with a 35-minute budget per device including cold startup.
+Every job selects its device from the helper's compatible installed runtime pair;
+per-test limits, full model/UI coverage and artifact receipts remain unchanged. Xcode 16/26's
 file-URL automation drops the document or times out, so only the two document-handoff UI tests
 explicitly skip on their older compilers; Xcode 27 must execute it. The modern
 job uses GitHub's `xcode-27` preview runner and its bundled toolchain/runtime.

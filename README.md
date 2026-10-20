@@ -248,6 +248,7 @@ and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
 Native parity CI also runs when the Python editor or binary format implementation changes.
+iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
 Files cancellation UI regressions query the running Files service's real Cancel
 button before the host fallback, requiring valid visible hit targets. A restored
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
