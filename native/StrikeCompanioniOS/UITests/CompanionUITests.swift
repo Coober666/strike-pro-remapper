@@ -9,6 +9,7 @@ final class CompanionUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
         app.launch()
         app.buttons["demo"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
@@ -72,11 +73,13 @@ final class CompanionUITests: XCTestCase {
         // Target this viewer explicitly; default-app file dispatch can time out
         // in hosted simulators. open() is a launch operation, so active-session
         // retention is covered by the model tests and attended device checks.
+        app.stopForUITestRelaunch()
         app.open(file)
         let imported = app.staticTexts["Imported opener"]
         XCTAssertTrue(imported.waitForExistence(timeout: 10))
         let invalid = Data("not JSON".utf8)
         try invalid.write(to: file)
+        app.stopForUITestRelaunch()
         app.open(file)
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10))
         app.alerts.buttons["OK"].tap()
@@ -116,7 +119,7 @@ final class CompanionUITests: XCTestCase {
         app.buttons["performance"].tap()
         app.buttons["reading-options"].tap()
         app.buttons["Extra large"].tap()
-        app.terminate()
+        app.stopForUITestRelaunch()
         app.launch()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["song-title"].label, "Paper Satellites")
@@ -178,6 +181,7 @@ final class CompanionUITests: XCTestCase {
         pad[24] = 255; pad[25] = 255
         bytes += pad + Data("str ".utf8) + Data([9, 0, 0, 0]) + Data("Demo.sin\0".utf8)
         try bytes.write(to: source)
+        app.stopForUITestRelaunch()
         app.open(source)
         let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
@@ -196,6 +200,22 @@ final class CompanionUITests: XCTestCase {
 
 @MainActor
 extension XCUIApplication {
+    func stopForUITestRelaunch() {
+        guard state != .notRunning else { return }
+        // Hosted XCTest has failed foreground termination with stale PID errors.
+        // Complete backgrounding and explicit termination before a new launch.
+        if state == .runningForeground { XCUIDevice.shared.press(.home) }
+        let backgrounded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.state == .runningBackground || self.state == .runningBackgroundSuspended
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [backgrounded], timeout: 10), .completed)
+        terminate()
+        let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            self.state == .notRunning
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [stopped], timeout: 10), .completed)
+    }
+
     func actionableFilesControl(_ query: (XCUIApplication) -> XCUIElement) -> XCUIElement? {
         let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
         // The host may expose misleading generic proxies for hosted Files controls.
