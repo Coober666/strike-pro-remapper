@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import UIKit
 import StrikeSetlists
 @testable import StrikeCompanionMobile
 
@@ -214,6 +216,64 @@ final class KitEditingTests: XCTestCase {
         XCTAssertThrowsError(try KitCopyExporter.create(edited, in: directoryLink))
         XCTAssertEqual(try Data(contentsOf: source), data)
     }
+    @MainActor
+    func testPendingReplacementPresentsOnEditorMountAndRetainsEditsUntilDecision() async throws {
+        let model = KitInspectorModel()
+        let directory = try folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("original.skt")
+        let original = try oracle().source
+        try original.write(to: source)
+        await model.open(source)
+        model.selected = 2
+        XCTAssertTrue(model.edit(.aLevel, value: 74, pad: 2))
+        let edited = try XCTUnwrap(model.kit?.encoded())
+        let id = model.documentID
+        let undo = model.session?.undoLabel
+        // External Open In can finish before the full-screen editor is mounted.
+        await model.open(source)
+        XCTAssertNotNil(model.pendingImport)
+        XCTAssertTrue(model.busy)
+
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        let host = UIHostingController(rootView: KitInspectorView(model: model, close: {}))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            host.dismiss(animated: false)
+            window.isHidden = true
+            window.rootViewController = nil
+            previousKeyWindow?.makeKey()
+        }
+        func replacementAlert(_ controller: UIViewController) -> UIAlertController? {
+            if let alert = controller as? UIAlertController, alert.title == "Replace the edited kit?" { return alert }
+            if let presented = controller.presentedViewController, let alert = replacementAlert(presented) { return alert }
+            return controller.children.lazy.compactMap { replacementAlert($0) }.first
+        }
+        let presented = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            replacementAlert(host) != nil
+        }, object: nil)
+        await fulfillment(of: [presented], timeout: 5)
+        let alert = try XCTUnwrap(replacementAlert(host))
+        XCTAssertEqual(Set(alert.actions.compactMap(\.title)), ["Discard edits and open kit", "Keep editing"])
+        XCTAssertEqual(model.kit?.encoded(), edited)
+        XCTAssertEqual(model.documentID, id)
+        XCTAssertEqual(model.selected, 2)
+        XCTAssertEqual(model.session?.undoLabel, undo)
+        model.cancelReplacement()
+        let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            replacementAlert(host) == nil
+        }, object: nil)
+        await fulfillment(of: [dismissed], timeout: 5)
+        XCTAssertFalse(model.busy)
+        XCTAssertEqual(model.kit?.encoded(), edited)
+        XCTAssertTrue(model.isDirty)
+        XCTAssertEqual(model.session?.undoLabel, undo)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+    }
+
     @MainActor
     func testModelProtectsDirtyImportFailureCancelReplacementAndExportFailure() async throws {
         let model = KitInspectorModel()
