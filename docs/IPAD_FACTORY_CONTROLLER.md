@@ -7,7 +7,9 @@ on the iPad, and no browser needs to remain open on the USB host.
 
 This service is an **activation companion**. For kit editing and deployment from an
 iPad, use the separate [paired full Wi-Fi editor](WIFI_EDITOR.md). Normal editor startup
-still binds to localhost. Direct USB from an iPad needs a native app; that work is paused.
+still binds to localhost. Direct USB from an iPad needs a native app and is unverified. The active
+[native editor plan](NATIVE_STRIKE_EDITOR_PLAN.md) separates MIDI and storage tests;
+this Wi-Fi controller still requires its USB-connected host.
 
 ## Start and pair
 

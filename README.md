@@ -231,14 +231,20 @@ double-click.
 
 ## Features
 
-**Setlist companion** — the [native iPhone/iPad app](native/StrikeCompanioniOS/README.md)
+**Native Strike Remapper** — the [iPhone/iPad app](native/StrikeCompanioniOS/README.md)
 imports Setlist Builder JSON for song navigation, performance/show notes, search,
 adjustable reading sizes, and phone/tablet layouts. It shares the Mac companion’s
 Swift library and version-1 format. A local copy restores the setlist, selected song,
 reading size and performance view after relaunch. Setlists remain read-only.
 The native kit editor opens `.skt` files for confirmed pad settings and Layer A/B
 assignments to references already in the kit, with undo/redo and side-by-side details
-on wide iPads. Numeric settings offer a large text-entry field with Clear, a slider
+on wide iPads. A **Drum map** view selects pads in a standard arrangement; zone
+buttons switch head/rim and cymbal zones, with the complete Zones list available.
+Accessibility text sizes use Zones automatically. The large-text UI check also verifies
+that Done dismisses the editor after zone navigation. The welcome screen offers kit
+editing and setlist import together under the Strike Remapper name. Existing
+Companion installs retain their bundle identity, document associations and saved setlist.
+Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
 it for replacement; Apply confirms the edit and Cancel discards it.
 **Export new copy** creates a uniquely named kit in a chosen Files
@@ -266,19 +272,23 @@ that disappear during a snapshot are polled again within the bounded wait. A res
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
 resumed-editor assertions remain required.
 Folder export waits for Files' Open button to become actionable before submitting once.
+Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.
+The valid/invalid setlist Open In workflow allows up to five minutes for its three cold launches, while requiring rejection to retain the imported song and original file bytes.
 Export-folder provider errors use export-specific destination guidance and clear stale
 success messages while retaining edits and Undo history; cancellation stays quiet.
 
 The native iPhone/iPad product is evolving into **Strike Remapper**, one app with
 performance and editing views. The existing full web editor is the feature target;
-the current Companion-named build is an incremental native implementation and does
+the native build is an incremental implementation and does
 not yet have feature parity. The Mac setlist companion remains separate.
 
 The [0.5.1 numeric-input follow-up](docs/IOS_COMPANION_051_SIMULATOR_FOLLOWUP_2026-10-18.md)
 records passing editing/export checks on both sizes, the full iPhone result and
 the iPad search timeout with its focused follow-up.
+The [drum-map prototype check](docs/NATIVE_EDITOR_MAP_SIMULATOR_FOLLOWUP_2026-10-18.md)
+records focused selection and zone-switching passes on both simulator sizes.
 
 **Kit editing**
 - Visual drum map — realistic top-down kit (red-sparkle shells, mesh heads, chrome

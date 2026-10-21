@@ -627,7 +627,8 @@ UI: ✂ split / +RR / ✕ buttons per mapping row (sends pending param edits in 
   probes**, and does not prove USB identity. Never claim Windows/Linux/iPad hardware
   validation from simulated tests. See `docs/IPAD_FACTORY_CONTROLLER.md` and
   `tools/test_factory_bridge.py`; `tests/browser/factory-controller.spec.js` runs in
-  Chromium and iPad WebKit. Direct-USB native iPad app work is paused and not included.
+  Chromium and iPad WebKit. Direct USB is outside this bridge. Native iPad work has resumed in
+  docs/NATIVE_STRIKE_EDITOR_PLAN.md; direct MIDI/storage remain unverified.
 - **Full Wi-Fi editor** is a separate opt-in `strike_remapper.wifi_editor` entry point.
   It subclasses `Handler` with pairing/session and exact Host/Origin guards; normal
   `strike_remap.py` remains localhost-only. Every editor API and stream requires a valid
@@ -1165,7 +1166,11 @@ before the remote accessibility frame catches up. Done must leave Apply explicit
 Files may restore its last folder: UI tests recognize the app destination before
 navigating the sidebar. Reopen the exported file using its image element in icon
 view or the cell in list view, letting XCTest reveal it. Avoid normalized coordinate
-taps through the hosted Files service.
+taps through the hosted Files service. Repeated simulator runs retain their exported
+copies: scroll Files’ virtualized File View grid within a bounded loop to locate the
+exact newly exported filename; never repeat the write or delete earlier files.
+Older SwiftUI exposes list and detail status labels together; select an explicit
+match when asserting the shared model’s Original imported status.
 Use one fileImporter presenter for kit files and export folders; capture its purpose
 before starting asynchronous work. Stacking two presenters can leave older SwiftUI
 with an active import binding and no visible picker after export. Scroll test helpers
@@ -1217,6 +1222,30 @@ file-workflow evidence, not audio, MIDI, module or accessibility acceptance.
 Do not access the physical iPad during its OS update. Wait for explicit completion
 and unlock confirmation before the next installation/launch.
 
+## Native editor workspace and direct-USB direction
+
+The 0.6 workspace adds optional Drum map beside the complete Zones list.
+KitDrumMap renders only known pad groups present in the open kit, in standard positions;
+never imply it describes the physical rack. Map/zone buttons select the existing
+model index, opening compact detail or updating the wide inspector. Detail buttons
+switch sibling zones; unknown identifiers remain reachable in Zones. Selection is
+read-only and must preserve kit bytes/history. Touch targets stay at least 44pt;
+automatically use Zones at accessibility text sizes while retaining selection.
+Widening a compact window clears its navigation path so the side-by-side inspector
+can show the same selected zone. KitMapLayout groups only known zones; isolated
+rim/edge/bell/foot chunks remain selectable and unknown identifiers stay independent.
+
+The owner requested eventual standalone iPad + Strike operation. Prioritize an
+explicit native MIDI input proof before further broad editor work. Core MIDI
+capability and desktop class-compliant MIDI are not physical direct-iPad acceptance.
+Do not invent live-edit commands from binary offsets or treat MIDI success as
+storage access. Direct user/factory storage, known activation on iPad and verified
+new-copy deployment each need separate attended evidence. No device work while the
+owner updates the iPad OS; wait for explicit completion/unlock confirmation.
+See docs/NATIVE_STRIKE_EDITOR_PLAN.md for the current staged scope.
+The focused map/zone UI check passed on both installed simulator sizes at a81b3d2;
+see docs/NATIVE_EDITOR_MAP_SIMULATOR_FOLLOWUP_2026-10-18.md. This is not full-suite,
+physical-device, MIDI or module acceptance.
 
 ## Native product identity
 
@@ -1224,6 +1253,51 @@ The owner chose one native Strike Remapper app with performance and editing view
 evolving the existing iPhone/iPad Companion. The full Strike Remapper web app is
 the feature target; current native builds are partial implementations, not feature
 parity. Do not start a separate full-editor iOS app. Keep the Mac setlist companion
-independent. Rename visible native branding in a verified follow-up while preserving
-bundle identity, document handling and saved app data. Native MIDI input is the next
+independent. The iPhone/iPad display and Files name is Strike Remapper. Preserve the existing
+net.cooberlab.strike-companion.ios bundle identifier, document types, internal
+Xcode product/scheme/module names, and StrikeCompanion/session-v1.json store path.
+The welcome screen offers Edit a kit alongside setlist import; both use the same app. Native MIDI input is the next
 development milestone; direct storage/deployment still requires separate evidence.
+
+
+The largest accessibility-text UI check waits up to 10 seconds for Done to become
+enabled/hittable after compact zone navigation, then taps once and verifies the
+editor dismisses back to the welcome screen. The detail title appears before the
+navigation toolbar finishes transitioning on hosted Xcode 27.1 iPhones; checking
+isHittable immediately can fail while Done remains visible in the test video.
+Retain the final action and dismissal assertions; do not retry the tap.
+
+Hosted Xcode 27.1 can report an old app PID while the previous test's process is
+already exiting. After Home, wait up to five seconds for notRunning before deciding
+to terminate once; retain the final stopped-state assertion and never retry a failed
+termination or launch over a running process. After export-folder cancellation,
+wait up to 60 seconds for the actual kit-actions button to exist with an enabled,
+onscreen snapshot and hittability. Guard existence before forced AX lookups: hosted
+Files dismissal can briefly publish no toolbar, and forced finds consume the wait
+budget in internal retries. Keep edited-value retention and actual subsequent
+replacement/menu assertions. No file-write retry or weakened mutation check.
+
+The modern hosted SDK can still emit the exact "Failed to terminate <bundle>:<pid>:
+Failed to terminate <bundle>:0" acknowledgement error after the single terminate.
+Only on compiler >=6.3, scope a non-strict XCTExpectFailure to that ONE call and
+an anchored exact matcher for this app/positive old PID/PID zero. Never match other
+errors or any test assertion. The notRunning assertion is outside the scope and
+must pass before launch; cold-launch restoration and source-byte assertions still
+execute normally. The matcher has negative coverage for unrelated failures, wrong
+apps, incomplete messages and PID-zero origins. Keep the expected SDK diagnostic
+visible in xcresult; do not retry termination, skip tests or weaken final process
+and restored-state checks. This is a test-harness workaround, not an app fix.
+
+Whole-tree zone UI lookups use app.kitZone(id), an Any-type query with the exact predicate
+identifier == <kit-zone-id>. Do not use matching(identifier:) for the whole tree:
+that expands XCElementSnapshot.identifiers through label/value and the hosted
+Xcode 27.1 iPad spindump showed the app main thread blocked in XCTest value-fetch
+logging to stderr. Retain Any for older SwiftUI's element-type differences, but
+query only the actual accessibilityIdentifier. Selection, layer/source-byte,
+value and return/dismissal assertions remain; no query-timeout suppression.
+
+The valid/invalid setlist Open In UI workflow uses the existing 300-second ceiling:
+it performs three cold launches and hosted Xcode 27.1 spent over 100 seconds setting
+up the final document launch before successfully presenting its rejection alert.
+Keep the alert dismissal, restored imported-song and unchanged-source assertions.
+Other non-provider tests retain their 180-second default; do not retry handoffs.

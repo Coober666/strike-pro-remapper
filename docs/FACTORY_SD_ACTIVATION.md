@@ -73,7 +73,7 @@ Sending MIDI and accessing the resulting mass-storage volume are separate concer
 | macOS | Native CoreMIDI; supported browsers can also offer Web MIDI with SysEx permission | Native CoreMIDI confirmed on the tested Intel Mac |
 | Windows | Native MIDI SysEx output or a supported Web MIDI browser | Expected; not tested |
 | Linux / Raspberry Pi | ALSA MIDI, including a headless sender | Expected; not tested; disk mounting depends on the host setup |
-| iPad | Browser UI controlling a USB-connected Mac backend | Physical iPad → Mac activation and full edit/save/deploy verified October 12; direct iPad USB remains unverified and native app work is paused |
+| iPad | Browser UI controlling a USB-connected Mac backend | Physical iPad → Mac activation and full edit/save/deploy verified October 12; direct iPad USB remains unverified; see the [native editor plan](NATIVE_STRIKE_EDITOR_PLAN.md) |
 
 A browser's Web MIDI endpoints belong to the **browser's machine**. If the Strike is
 plugged into a Pi but the browser runs on an iPad, MIDI activation must happen on the

@@ -9,7 +9,10 @@ struct KitInspectorView: View {
     @State private var editing: KitEditRequest?
     @State private var showReplacementConfirmation = false
     @State private var exportingFolder = false
+    @State private var showDrumMap = false
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var usingDrumMap: Bool { showDrumMap && !typeSize.isAccessibilitySize }
 
     var body: some View {
         GeometryReader { geometry in
@@ -19,7 +22,7 @@ struct KitInspectorView: View {
                     if let kit = model.kit {
                         if wide {
                             HStack(spacing: 0) {
-                                zones(kit, wide: true).frame(width: min(310, geometry.size.width * 0.32))
+                                zones(kit, wide: true).frame(width: usingDrumMap ? min(560, geometry.size.width * 0.48) : min(310, geometry.size.width * 0.32))
                                 Divider()
                                 detail(kit, index: model.selected, wide: wide)
                             }
@@ -36,6 +39,10 @@ struct KitInspectorView: View {
                             .toolbar { controls }
                     }
                 }
+            }
+            .onChange(of: wide) { _, wide in
+                // A compact detail destination must not cover the new side-by-side workspace.
+                if wide { path = [] }
             }
         }
         .tint(Stage.brass).preferredColorScheme(.dark)
@@ -69,6 +76,7 @@ struct KitInspectorView: View {
                 }
             }
         }
+        .onChange(of: path) { _, path in if let index = path.last { model.selected = index } }
         .onChange(of: model.documentID) { _, _ in path = []; editing = nil }
         .onChange(of: model.pendingImport != nil, initial: true) { _, pending in
             if pending && editing != nil { editing = nil }
@@ -158,17 +166,56 @@ struct KitInspectorView: View {
                     Text("\(kit.unresolvedCount) assignments have unresolved string indices.").font(.footnote).foregroundStyle(Stage.brass)
                 }
             }.padding()
-            List(kit.pads.indices, id: \.self) { index in
-                let pad = kit.pads[index]
-                Group {
-                    if wide {
-                        Button { model.selected = index } label: { zoneLabel(pad) }
-                            .accessibilityAddTraits(model.selected == index ? [.isSelected] : [])
-                    } else { NavigationLink(value: index) { zoneLabel(pad) } }
-                }.accessibilityIdentifier("kit-zone-\(pad.id)")
-                    .listRowBackground(wide && model.selected == index ? Stage.brass.opacity(0.14) : Stage.background)
-            }.listStyle(.plain).scrollContentBackground(.hidden)
+            if !typeSize.isAccessibilitySize {
+                Picker("Kit view", selection: $showDrumMap) {
+                    Text("Zones").tag(false)
+                    Text("Drum map").tag(true)
+                }.pickerStyle(.segmented).padding(.horizontal).padding(.bottom, 12)
+                    .accessibilityIdentifier("kit-workspace-view")
+            }
+            if usingDrumMap {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        KitDrumMap(kit: kit, selected: model.selected) { selectZone($0, wide: wide) }
+                        Text("Standard layout. Swipe across to see the whole kit. All zones remain available in Zones.")
+                            .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+                    }.padding(.bottom)
+                }
+            } else {
+                List(kit.pads.indices, id: \.self) { index in
+                    let pad = kit.pads[index]
+                    Group {
+                        if wide {
+                            Button { model.selected = index } label: { zoneLabel(pad) }
+                                .accessibilityAddTraits(model.selected == index ? [.isSelected] : [])
+                        } else { NavigationLink(value: index) { zoneLabel(pad) } }
+                    }.accessibilityIdentifier("kit-zone-\(pad.id)")
+                        .listRowBackground(wide && model.selected == index ? Stage.brass.opacity(0.14) : Stage.background)
+                }.listStyle(.plain).scrollContentBackground(.hidden)
+            }
             if kit.pads.isEmpty { Text("This kit has no pad zones.").padding() }
+        }
+    }
+
+    private func selectZone(_ index: Int, wide: Bool) {
+        model.selected = index
+        if !wide { path = [index] }
+    }
+
+    @ViewBuilder
+    private func zoneChoices(_ kit: KitInspection, index: Int, wide: Bool) -> some View {
+        let siblings = KitMapLayout.zoneIndices(in: kit, for: index)
+        if siblings.count > 1 {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(siblings, id: \.self) { sibling in
+                        Button(kit.pads[sibling].label) { selectZone(sibling, wide: wide) }
+                            .buttonStyle(.bordered).tint(sibling == index ? Stage.brass : .secondary)
+                            .frame(minHeight: 44).accessibilityAddTraits(sibling == index ? [.isSelected] : [])
+                            .accessibilityIdentifier("kit-detail-zone-\(kit.pads[sibling].id)")
+                    }
+                }
+            }
         }
     }
 
@@ -187,6 +234,7 @@ struct KitInspectorView: View {
                     Text(pad.label).font(.largeTitle.weight(.semibold)).accessibilityIdentifier("kit-pad-title")
                     Text("\(pad.id) · Edit a copy").font(.subheadline).foregroundStyle(.secondary)
                     if !wide { status }
+                    zoneChoices(kit, index: index, wide: wide)
                     if let issue = kit.editingIssue { Text(issue).font(.footnote).foregroundStyle(Stage.brass) }
                     if !pad.isKnownZone { Text("This unknown zone can be inspected but not edited.").foregroundStyle(Stage.brass) }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 32, alignment: .topLeading)], alignment: .leading, spacing: 24) {

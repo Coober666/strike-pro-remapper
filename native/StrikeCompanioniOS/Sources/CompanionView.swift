@@ -44,7 +44,7 @@ struct MobileCompanionView: View {
                     }
                 }
                 .background(Stage.background)
-                .navigationTitle(model.session.document?.name ?? "Strike Companion")
+                .navigationTitle(model.session.document?.name ?? "Strike Remapper")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if model.session.document != nil && (!wide || model.performanceMode) {
@@ -111,14 +111,18 @@ struct MobileCompanionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Image(systemName: "music.note.list").font(.system(size: 52)).foregroundStyle(Stage.brass)
-                Text("Your set,\nsong by song.").font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                Text("Your kits.\nYour set.").font(.system(.largeTitle, design: .rounded).weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
-                Text("Keep your running order, kit references and performance notes close at hand.")
+                Text("Edit your drum kit, or keep your running order and performance notes close at hand.")
                     .font(.title3).foregroundStyle(.secondary)
-                Text("In Strike Remapper, open Setlist Builder and choose Export JSON. Save the file to Files, then import it here.")
+                Button { showingInspector = true } label: {
+                    Label("Edit a kit", systemImage: "circle.grid.3x3").frame(maxWidth: .infinity, minHeight: 44)
+                }.buttonStyle(.borderedProminent).tint(Stage.brass).foregroundStyle(.black)
+                    .accessibilityIdentifier("welcome-kit")
+                Text("For a setlist, choose Export JSON in the web app’s Setlist Builder, then import it here.")
                 Button { model.choosingFile = true } label: {
                     Label("Import setlist", systemImage: "folder").frame(maxWidth: .infinity, minHeight: 44)
-                }.buttonStyle(.borderedProminent).tint(Stage.brass).foregroundStyle(.black)
+                }.buttonStyle(.bordered).tint(Stage.brass)
                     .disabled(model.isLoading || model.choosingFile)
                 Button("Try demo", action: model.showDemo).frame(minHeight: 44)
                     .accessibilityIdentifier("demo").disabled(model.isLoading || model.choosingFile)

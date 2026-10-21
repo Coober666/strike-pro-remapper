@@ -13,7 +13,7 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["demo"].tap()
         app.buttons["kit-inspector"].tap()
         app.buttons["kit-demo"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].waitForExistence(timeout: 5))
@@ -68,6 +68,77 @@ final class KitEditingUITests: XCTestCase {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
+    func testDrumMapSelectionZoneSwitchAndZonesFallback() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
+        app.launch()
+        app.buttons["demo"].tap()
+        app.buttons["kit-inspector"].tap()
+        app.buttons["kit-demo"].tap()
+        let map = app.buttons["Drum map"]
+        XCTAssertTrue(map.waitForExistence(timeout: 10))
+        map.tap()
+        let snare = app.buttons["kit-zone-S1H"]
+        XCTAssertTrue(snare.waitForExistence(timeout: 5))
+        screenshot("Native drum map")
+        snare.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
+        app.buttons["kit-detail-zone-S1R"].tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        XCTAssertTrue(app.buttons["kit-edit-aLevel"].isEnabled)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let rotated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.frame.width > app.frame.height
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [rotated], timeout: 10), .completed)
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        screenshot("Native zone selection landscape")
+        XCUIDevice.shared.orientation = .portrait
+        app.buttons["close-inspector"].tap()
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
+        app.buttons["kit-inspector"].tap()
+        app.buttons["Zones"].tap()
+        let rim = app.kitZone("S1R")
+        XCTAssertTrue(rim.waitForExistence(timeout: 5))
+        rim.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Rim")
+        XCTAssertTrue(app.staticTexts["kit-edit-status"].firstMatch.label.contains("Original imported"))
+        screenshot("Native zone selection")
+    }
+
+    func testAccessibilityTextUsesCompleteZonesList() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.stopForUITestRelaunch()
+        app.launch()
+        app.buttons["kit-inspector"].tap()
+        let demo = app.buttons["kit-demo"]
+        for _ in 0..<5 {
+            if demo.isHittable { break }
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        demo.tap()
+        let snare = app.kitZone("S1H")
+        XCTAssertTrue(snare.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Drum map"].exists)
+        snare.tap()
+        XCTAssertEqual(app.staticTexts["kit-pad-title"].label, "Snare Head")
+        let done = app.buttons["close-inspector"]
+        // The detail title can appear before the navigation toolbar finishes transitioning.
+        let actionable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            done.exists && done.isEnabled && done.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [actionable], timeout: 10), .completed)
+        screenshot("Accessible zone list and detail")
+        done.tap()
+        XCTAssertTrue(app.buttons["welcome-kit"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["close-inspector"].exists, "Done must actually dismiss the editor")
+    }
+
     func testExplicitApplyCancelBoundsUndoRedoAndRetainedEditsAfterDone() {
         let app = launchKit()
         app.buttons["kit-edit-aLevel"].tap()
@@ -101,7 +172,7 @@ final class KitEditingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
         app.buttons["kit-inspector"].tap()
-        app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch.tap()
+        app.kitZone("S1H").tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("73"))
         screenshot("Edited kit portrait")
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -154,9 +225,18 @@ final class KitEditingUITests: XCTestCase {
         menu("kit-export", app: app)
         screenshot("Choose export folder")
         app.cancelFilesPicker()
-        let dismissed = NSPredicate { _, _ in app.buttons["kit-actions"].isHittable && app.buttons["kit-actions"].isEnabled }
+        let actions = app.buttons["kit-actions"]
+        let dismissed = NSPredicate { _, _ in
+            // A hosted Files dismissal can leave AX briefly publishing no toolbar.
+            // Avoid forced lookups/retries until the editor's real control returns.
+            guard actions.exists, let snapshot = try? actions.snapshot(), snapshot.isEnabled else { return false }
+            let frame = snapshot.frame
+            guard !frame.isEmpty, !frame.isInfinite,
+                  app.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { return false }
+            return actions.isHittable
+        }
         let resumed = XCTNSPredicateExpectation(predicate: dismissed, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 15), .completed, app.debugDescription)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 60), .completed, app.debugDescription)
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("71"))
         XCTAssertFalse(app.alerts.firstMatch.exists)
         menu("kit-reload-demo", app: app)
@@ -167,7 +247,7 @@ final class KitEditingUITests: XCTestCase {
             !replacement.exists
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [replaced], timeout: 5), .completed, app.debugDescription)
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 5))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("100"))
@@ -183,8 +263,8 @@ final class KitEditingUITests: XCTestCase {
         let local = app.staticTexts[UIDevice.current.userInterfaceIdiom == .pad ? "On My iPad" : "On My iPhone"]
         // Files may restore our app folder directly or retain it behind the Browse tab.
         let atDestination = {
-            app.buttons["Strike Companion, Actions Menu"].exists ||
-                app.navigationBars.staticTexts["Strike Companion"].exists
+            app.buttons["Strike Remapper, Actions Menu"].exists ||
+                app.navigationBars.staticTexts["Strike Remapper"].exists
         }
         let pickerReady = NSPredicate { _, _ in atDestination() || local.exists || app.buttons["Browse"].exists }
         expectation(for: pickerReady, evaluatedWith: nil); waitForExpectations(timeout: 30)
@@ -192,7 +272,7 @@ final class KitEditingUITests: XCTestCase {
         if !atDestination() {
             XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
             local.tap()
-            let companion = app.staticTexts["Strike Companion"].firstMatch
+            let companion = app.staticTexts["Strike Remapper"].firstMatch
             XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
             companion.tap()
         }
@@ -215,6 +295,18 @@ final class KitEditingUITests: XCTestCase {
         screenshot("Exported copy verified")
         app.buttons["import-kit"].tap()
         let file = app.cells.containing(.staticText, identifier: name).firstMatch
+        let files = app.collectionViews["File View"].firstMatch
+        XCTAssertTrue(files.waitForExistence(timeout: 10), app.debugDescription)
+        // Files virtualizes the grid; retained synthetic exports can put this UUID offscreen.
+        // Reveal only the named copy in the selected folder. Never resubmit the export.
+        for upward in [false, true] {
+            for _ in 0..<12 {
+                if file.exists { break }
+                if upward { files.swipeUp() }
+                else { files.swipeDown() }
+            }
+            if file.exists { break }
+        }
         XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
         screenshot("Select exported copy")
         // Let XCTest reveal/activate the actual image in icon view; coordinate taps can miss
@@ -224,7 +316,7 @@ final class KitEditingUITests: XCTestCase {
         else { file.tap() } // List view has one directly activatable row.
         XCTAssertTrue(app.alerts["Replace the edited kit?"].waitForExistence(timeout: 10))
         app.alerts.buttons["Discard edits and open kit"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 5))
         snare.tap()
         XCTAssertTrue(app.buttons["kit-edit-aLevel"].label.contains("72"))

@@ -16,6 +16,32 @@ final class CompanionUITests: XCTestCase {
         return app
     }
 
+    func testTerminationAcknowledgementMatcherRejectsUnrelatedFailures() {
+        let expected = "Failed to terminate net.cooberlab.strike-companion.ios:10129: Failed to terminate net.cooberlab.strike-companion.ios:0"
+        XCTAssertTrue(SimulatorTerminationAcknowledgement.matches(expected))
+        for other in ["App must be stopped before relaunch", "Failed to terminate net.cooberlab.strike-companion.ios:10129",
+                      expected + " (still running)", expected.replacingOccurrences(of: ":10129:", with: ":0:"),
+                      expected.replacingOccurrences(of: "strike-companion.ios", with: "another-app"),
+                      "Cold-launch song restoration failed", "Prefix " + expected] {
+            XCTAssertFalse(SimulatorTerminationAcknowledgement.matches(other), other)
+        }
+    }
+
+    func testRenamedWelcomeOffersKitEditorAndSetlistPerformance() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        app.stopForUITestRelaunch()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Strike Remapper"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["import"].exists)
+        app.buttons["welcome-kit"].tap()
+        XCTAssertTrue(app.buttons["kit-demo"].waitForExistence(timeout: 5))
+        app.buttons["close-inspector"].tap()
+        app.buttons["demo"].tap()
+        XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
+    }
+
     func testRunningOrderSearchNavigationAndPerformanceView() {
         let app = launchDemo()
         XCTAssertEqual(app.staticTexts["song-title"].label, "Soundcheck")
@@ -65,6 +91,9 @@ final class CompanionUITests: XCTestCase {
         #if compiler(<6.3)
         throw XCTSkip("Xcode 16/26 file-URL automation does not deliver documents. The Xcode 27 CI job runs this test; model import contracts run on both.")
         #else
+        // Three cold launches, including two document handoffs. Hosted launch
+        // setup alone can exceed 100 seconds; retain the builder's 300s ceiling.
+        executionTimeAllowance = 300
         let app = launchDemo()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: file) }
@@ -84,6 +113,7 @@ final class CompanionUITests: XCTestCase {
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 10))
         app.alerts.buttons["OK"].tap()
         XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertTrue(imported.waitForExistence(timeout: 10), "Invalid Open In must retain the imported song")
         XCTAssertEqual(try Data(contentsOf: file), invalid)
         #endif
     }
@@ -146,7 +176,7 @@ final class CompanionUITests: XCTestCase {
         app.buttons["next"].tap()
         app.buttons["kit-inspector"].tap()
         app.buttons["kit-demo"].tap()
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
@@ -183,7 +213,7 @@ final class CompanionUITests: XCTestCase {
         try bytes.write(to: source)
         app.stopForUITestRelaunch()
         app.open(source)
-        let snare = app.descendants(matching: .any).matching(identifier: "kit-zone-S1H").firstMatch
+        let snare = app.kitZone("S1H")
         XCTAssertTrue(snare.waitForExistence(timeout: 10))
         snare.tap()
         XCTAssertTrue(app.staticTexts["kit-layer-a"].waitForExistence(timeout: 5))
@@ -200,14 +230,38 @@ final class CompanionUITests: XCTestCase {
 
 @MainActor
 extension XCUIApplication {
+    func kitZone(_ zone: String) -> XCUIElement {
+        // matching(identifier:) also searches label/value via XCElementSnapshot.identifiers.
+        // Hosted Xcode 27 can stall fetching those values from the complete SwiftUI tree.
+        // Match only the explicit accessibilityIdentifier; retain Any for legacy/wide layouts.
+        descendants(matching: .any).matching(NSPredicate(format: "identifier == %@", "kit-zone-" + zone)).firstMatch
+    }
+
     func stopForUITestRelaunch() {
         guard state != .notRunning else { return }
         // Hosted XCTest has failed foreground termination with stale PID errors.
         // Complete backgrounding and explicit termination before a new launch.
         if state == .runningForeground { XCUIDevice.shared.press(.home) }
-        // A hosted Files session can report a stale foreground state even after
-        // Home is visible. Require the final stopped state, not a transient one.
-        if state != .notRunning { terminate() }
+        // The previous test's process may already be exiting while XCTest still
+        // reports its old PID. Let the stopped state arrive before requesting
+        // termination; never retry a failed terminate or launch over a live app.
+        let alreadyStopped = wait(for: .notRunning, timeout: 5)
+        // Files can report stale foreground state even after Home is visible.
+        // Require the final stopped state, not an intermediate background flag.
+        if !alreadyStopped && state != .notRunning {
+            #if compiler(>=6.3)
+            let options = XCTExpectedFailure.Options()
+            options.isStrict = false
+            options.issueMatcher = { SimulatorTerminationAcknowledgement.matches($0.compactDescription) }
+            // Match only the SDK's exact old-PID -> PID-zero acknowledgement error.
+            // The actual stopped-state assertion below is OUTSIDE this scope.
+            XCTExpectFailure("Xcode stale-PID termination acknowledgement; process exit is verified separately", options: options) {
+                terminate()
+            }
+            #else
+            terminate()
+            #endif
+        }
         let stopped = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             self.state == .notRunning
         }, object: nil)
@@ -267,5 +321,14 @@ extension XCUIApplication {
             return
         }
         control.tap()
+    }
+}
+
+
+/// Scope only the observed XCTest acknowledgement diagnostic, never an app assertion.
+enum SimulatorTerminationAcknowledgement {
+    static func matches(_ description: String) -> Bool {
+        let pattern = #"^Failed to terminate net\.cooberlab\.strike-companion\.ios:[1-9][0-9]*: Failed to terminate net\.cooberlab\.strike-companion\.ios:0$"#
+        return description.range(of: pattern, options: .regularExpression) == description.startIndex..<description.endIndex
     }
 }
