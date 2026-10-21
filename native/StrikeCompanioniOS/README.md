@@ -132,7 +132,7 @@ in exported JSON as a pad map, with at most 128 names of 80 characters each.
 
 **Stop** retains the take. Leaving MIDI tools, backgrounding the app or losing the
 input closes the input port. Background/disconnect/overflow/limits mark an active
-take partial; returning never starts recording again. Limits are 50,000 events,
+take partial; reported input-driver errors do too. Returning never starts recording again. Limits are 50,000 events,
 20 minutes and a bounded input queue. MIDI-1 group-zero channel data is supported;
 system/SysEx are ignored. Unsupported channel data stops with a partial take.
 Times measure monotonic callback arrival and are not latency-calibrated.

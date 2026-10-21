@@ -73,7 +73,9 @@ not calibrated physical strike timing. No pause/resume is part of this milestone
 
 Stop drains retained input and closes the port. Background/inactive state and source
 removal stop with partial status; later notifications cannot downgrade a normally
-stopped take. No automatic reconnect or recording restart. A new recording needs
+stopped take. Reported Core MIDI I/O errors also stop an active take when they
+match the selected source's parent device or cannot be attributed safely; errors
+from a known unrelated device are ignored. No automatic reconnect or recording restart. A new recording needs
 explicit discard of any retained take; a failed open keeps it. Done retains the take
 in memory and stops input. Exports are bounded to 8 MiB and use version-1
 `drum-midi-session` JSON, validated by the existing web toolkit in

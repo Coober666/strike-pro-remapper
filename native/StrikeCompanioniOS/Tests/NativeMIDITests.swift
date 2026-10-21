@@ -6,6 +6,7 @@ import CoreMIDI
 private final class FakeMIDIInput: NativeMIDIInputDriver {
     var changed: (() -> Void)?
     var disconnected: (() -> Void)?
+    var failed: ((Int32) -> Void)?
     let synthetic = true
     var available = [NativeMIDIInput(id: 71, name: "Test drums")]
     var box: DrumMIDIMailbox?
@@ -25,6 +26,24 @@ private final class FakeMIDIInput: NativeMIDIInputDriver {
 }
 
 final class NativeMIDITests: XCTestCase {
+    func testDriverErrorNotificationSnapshotAndActiveDeviceRouting() {
+        var notification = MIDIIOErrorNotification(messageID: .msgIOError,
+            messageSize: UInt32(MemoryLayout<MIDIIOErrorNotification>.size), driverDevice: 7, errorCode: -50)
+        let failure = withUnsafePointer(to: &notification) {
+            NativeMIDIIOFailure.snapshot(UnsafeRawPointer($0).assumingMemoryBound(to: MIDINotification.self))
+        }
+        XCTAssertEqual(failure, NativeMIDIIOFailure(device: 7, code: -50))
+        XCTAssertTrue(failure!.affects(endpoint: 1, device: 7))
+        XCTAssertFalse(failure!.affects(endpoint: 1, device: 8), "An unrelated device must not stop the selected input")
+        XCTAssertFalse(failure!.affects(endpoint: 0, device: 7), "A stopped input ignores later errors")
+        XCTAssertTrue(failure!.affects(endpoint: 1, device: 0))
+        var short = MIDINotification(messageID: .msgIOError, messageSize: UInt32(MemoryLayout<MIDINotification>.size))
+        let unknown = withUnsafePointer(to: &short) { NativeMIDIIOFailure.snapshot($0) }
+        XCTAssertEqual(unknown?.code, OSStatus(kMIDIUnknownError))
+        XCTAssertTrue(unknown!.affects(endpoint: 1, device: 7))
+        short.messageID = .msgSetupChanged
+        XCTAssertNil(withUnsafePointer(to: &short) { NativeMIDIIOFailure.snapshot($0) })
+    }
     func testCompleteChannelMessagesAndZeroVelocityNoteOff() {
         for channel: UInt8 in 0..<16 {
             for kind: UInt8 in 8..<15 {
@@ -154,14 +173,15 @@ final class NativeMIDITests: XCTestCase {
         XCTAssertEqual(model.take?.durationMs, 1000)
         XCTAssertEqual(model.take?.captureStatus, "complete")
         let oldData = try model.exported()
-        driver.available = []; driver.changed?(); model.background()
+        driver.available = []; driver.changed?(); model.background(); driver.failed?(-50)
         XCTAssertEqual(try model.exported(), oldData, "Disconnect/background after Stop cannot downgrade a complete take")
+        XCTAssertNil(model.errorMessage, "A stopped take ignores later driver errors")
         model.record()
         XCTAssertEqual(driver.opens, 1, "Retained work requires explicit discard")
     }
     @MainActor
     func testBackgroundDisconnectOverflowAndIdleDurationRetainPartialWithoutReopening() throws {
-        for failure in ["background", "disconnect", "removed-and-returned", "overflow", "events", "duration"] {
+        for failure in ["background", "disconnect", "removed-and-returned", "driver", "overflow", "events", "duration"] {
             var time = 1.0
             let driver = FakeMIDIInput()
             let subject = NativeMIDIModel(driver: driver, clock: { time }, usesTimer: false)
@@ -172,6 +192,7 @@ final class NativeMIDITests: XCTestCase {
             case "background": subject.background()
             case "disconnect": driver.available = []; driver.changed?()
             case "removed-and-returned": driver.disconnected?()
+            case "driver": driver.failed?(-50)
             case "overflow": driver.box?.fail(); subject.poll()
             case "events":
                 subject.poll()
@@ -187,6 +208,7 @@ final class NativeMIDITests: XCTestCase {
             XCTAssertEqual(subject.take?.captureStatus, "partial", failure)
             XCTAssertLessThanOrEqual(subject.take!.durationMs, DrumMIDITake.maximumDuration)
             XCTAssertNoThrow(try subject.exported())
+            if failure == "driver" { XCTAssertTrue(subject.errorMessage?.contains("-50") == true) }
             driver.available = [NativeMIDIInput(id: 71, name: "Returned")]; driver.changed?()
             XCTAssertEqual(driver.opens, 1, "No automatic reconnect")
         }

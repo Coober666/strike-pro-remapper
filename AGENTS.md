@@ -1316,6 +1316,11 @@ copied tuples. Parse UMP widths before skipping payloads; system/SysEx are ignor
 unsupported MIDI2/nonzero-group channel data stops partial rather than merging groups.
 Stop decoding immediately at unsupported channel data, retaining only its valid prefix.
 Trim BOM as well as Foundation whitespace from names to match web JSON validation.
+Copy Core MIDI I/O error payloads before dispatching to the main actor. Track the
+selected source's parent device using input metadata only. A reported I/O error
+stops partial for that device or unknown identity; ignore known unrelated devices
+and errors after Stop. Synthetic notification buffers and injected failures cover
+routing, partial retention and completed-take preservation without creating clients.
 Bound each callback's word/packet work as well as queued messages. Each recording
 gets a new mailbox; stop closes it before disposing the input port and drains the
 retained prefix. NativeMIDIModel stops partial on overflow, 50k/20-minute limits,

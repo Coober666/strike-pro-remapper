@@ -5,10 +5,32 @@ struct NativeMIDIInput: Identifiable, Equatable {
     let id: Int32
     let name: String
 }
+
+/// Copy notification payloads before leaving Core MIDI's callback thread.
+struct NativeMIDIIOFailure: Equatable, Sendable {
+    let device: MIDIDeviceRef
+    let code: OSStatus
+
+    static func snapshot(_ notification: UnsafePointer<MIDINotification>) -> Self? {
+        guard notification.pointee.messageID == .msgIOError else { return nil }
+        guard notification.pointee.messageSize >= MemoryLayout<MIDIIOErrorNotification>.size else {
+            return Self(device: 0, code: OSStatus(kMIDIUnknownError))
+        }
+        let error = UnsafeRawPointer(notification).assumingMemoryBound(to: MIDIIOErrorNotification.self).pointee
+        return Self(device: error.driverDevice, code: error.errorCode)
+    }
+
+    func affects(endpoint: MIDIEndpointRef, device activeDevice: MIDIDeviceRef) -> Bool {
+        // Unknown device identity cannot establish that the active take is unaffected.
+        endpoint != 0 && (device == 0 || activeDevice == 0 || device == activeDevice)
+    }
+}
+
 @MainActor
 protocol NativeMIDIInputDriver: AnyObject {
     var changed: (() -> Void)? { get set }
     var disconnected: (() -> Void)? { get set }
+    var failed: ((Int32) -> Void)? { get set }
     var synthetic: Bool { get }
     func inputs() throws -> [NativeMIDIInput]
     func start(_ id: Int32, mailbox: DrumMIDIMailbox) throws
@@ -23,10 +45,12 @@ extension NativeMIDIInputDriver { func close() { stop() } }
 final class CoreMIDIInputDriver: NativeMIDIInputDriver {
     var changed: (() -> Void)?
     var disconnected: (() -> Void)?
+    var failed: ((Int32) -> Void)?
     let synthetic = false
     private var client = MIDIClientRef()
     private var port = MIDIPortRef()
     private var endpoint = MIDIEndpointRef()
+    private var activeDevice = MIDIDeviceRef()
     private var mailbox: DrumMIDIMailbox?
 
     private func check(_ status: OSStatus) throws {
@@ -38,11 +62,14 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
     private func prepare() throws {
         guard client == 0 else { return }
         try check(MIDIClientCreateWithBlock("Strike Remapper input" as CFString, &client) { [weak self] notification in
+            let failure = NativeMIDIIOFailure.snapshot(notification)
             let removed: MIDIObjectRef? = notification.pointee.messageID == .msgObjectRemoved
                 ? UnsafeRawPointer(notification).assumingMemoryBound(to: MIDIObjectAddRemoveNotification.self).pointee.child : nil
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let removed, removed == self.endpoint { self.disconnected?() }
+                if let failure {
+                    if failure.affects(endpoint: self.endpoint, device: self.activeDevice) { self.failed?(failure.code) }
+                } else if let removed, removed == self.endpoint { self.disconnected?() }
                 else { self.changed?() }
             }
         })
@@ -76,6 +103,10 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
                 [NSLocalizedDescriptionKey: "The selected MIDI input is no longer available. Refresh and choose it again."])
         }
         self.mailbox = mailbox
+        var entity = MIDIEntityRef()
+        if MIDIEndpointGetEntity(source, &entity) == noErr, entity != 0 {
+            _ = MIDIEntityGetDevice(entity, &activeDevice)
+        }
         do {
             try check(MIDIInputPortCreateWithProtocol(client, "Strike Remapper receive" as CFString, ._1_0, &port) { list, _ in
                 Self.receive(list, into: mailbox)
@@ -112,7 +143,7 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
             if endpoint != 0 { _ = MIDIPortDisconnectSource(port, endpoint) }
             _ = MIDIPortDispose(port)
         }
-        endpoint = 0; port = 0
+        endpoint = 0; port = 0; activeDevice = 0
     }
     func close() {
         stop()
@@ -126,6 +157,7 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
 final class SyntheticMIDIInputDriver: NativeMIDIInputDriver {
     var changed: (() -> Void)?
     var disconnected: (() -> Void)?
+    var failed: ((Int32) -> Void)?
     let synthetic = true
     private var timer: Timer?
     private var mailbox: DrumMIDIMailbox?

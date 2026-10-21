@@ -33,6 +33,12 @@ final class NativeMIDIModel: ObservableObject {
             self?.stop(partial: true, reason: "Input disconnected. Partial take retained. Refresh and choose an input to record again.")
             self?.selectedInput = nil
         }
+        self.driver.failed = { [weak self] code in
+            guard let self, self.isRecording else { return }
+            self.stop(partial: true, reason: "Input driver failed. Partial take retained. Refresh and choose an input to record again.")
+            self.selectedInput = nil
+            self.errorMessage = "MIDI input driver error (\(code)). Your partial take is retained for export."
+        }
     }
     static func live() -> NativeMIDIModel {
         #if DEBUG
