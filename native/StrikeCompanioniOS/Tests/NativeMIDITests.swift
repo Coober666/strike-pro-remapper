@@ -208,6 +208,8 @@ final class NativeMIDITests: XCTestCase {
             XCTAssertEqual(subject.take?.captureStatus, "partial", failure)
             XCTAssertLessThanOrEqual(subject.take!.durationMs, DrumMIDITake.maximumDuration)
             XCTAssertNoThrow(try subject.exported())
+            let reasons = ["overflow": "supported data", "events": "50,000", "duration": "20-minute"]
+            if let reason = reasons[failure] { XCTAssertTrue(subject.status.contains(reason), "\(failure): \(subject.status)") }
             if failure == "driver" { XCTAssertTrue(subject.errorMessage?.contains("-50") == true) }
             driver.available = [NativeMIDIInput(id: 71, name: "Returned")]; driver.changed?()
             XCTAssertEqual(driver.opens, 1, "No automatic reconnect")
