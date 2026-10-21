@@ -11,6 +11,8 @@ enum Stage {
 struct MobileCompanionView: View {
     @ObservedObject var model: MobileCompanionModel
     @StateObject private var inspector = KitInspectorModel()
+    @StateObject private var midi = NativeMIDIModel.live()
+    @State private var showingMIDI = false
     @State private var showingInspector = false
     @State private var showingSongs = false
     @State private var showingImportError = false
@@ -55,6 +57,9 @@ struct MobileCompanionView: View {
                         }
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button { showingMIDI = true } label: { Image(systemName: "waveform.path") }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .accessibilityLabel("MIDI tools").accessibilityIdentifier("midi-tools")
                         Button { showingInspector = true } label: { Image(systemName: "circle.grid.3x3") }
                             .frame(minWidth: 44, minHeight: 44)
                             .accessibilityLabel("Kit editor").accessibilityIdentifier("kit-inspector")
@@ -89,10 +94,15 @@ struct MobileCompanionView: View {
             case .failure(let error): model.report(error)
             }
         }
-        .fullScreenCover(isPresented: $showingInspector) {
-            KitInspectorView(model: inspector) { showingInspector = false }
+        .fullScreenCover(isPresented: Binding(get: { showingInspector || showingMIDI }, set: {
+            if !$0 { showingInspector = false; showingMIDI = false }
+        })) {
+            if showingMIDI { NativeMIDIView(model: midi) { showingMIDI = false } }
+            else { KitInspectorView(model: inspector) { showingInspector = false } }
         }
         .onOpenURL { url in
+            midi.leave()
+            showingMIDI = false
             if url.pathExtension.lowercased() == "skt" {
                 showingInspector = true
                 Task { await inspector.open(url) }

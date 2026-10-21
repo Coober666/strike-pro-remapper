@@ -28,7 +28,7 @@ A corrupt or unsupported saved session opens the welcome screen with a warning.
 
 Kit references are displayed as text. A setlist does not include kits or sounds.
 The companion does not check kit availability, follow kit paths, access cards,
-connect to the editor, or send MIDI.
+connect to the editor, or send MIDI. MIDI tools receives only an explicitly selected input.
 
 The welcome screen offers **Edit a kit** and **Import setlist**. Existing Companion
 installs update in place: the bundle identifier, document types and private
@@ -115,6 +115,40 @@ record of your physical rack, and selection never changes kit bytes or sends MID
 The full native editor is being developed toward direct iPad-to-Strike operation.
 Native MIDI input and direct module storage are separate acceptance gates; neither
 is provided by the drum map. See [the implementation plan](../../docs/NATIVE_STRIKE_EDITOR_PLAN.md).
+
+## MIDI tools (0.7)
+
+Open **MIDI tools** in the toolbar. Connect a MIDI device, tap **Refresh inputs**,
+choose one input, then **Record**. Launch and Refresh never open an input port.
+This screen is silent and receives only: no audio playback, MIDI output or kit edits.
+Notes show channel, number, hit count and velocity range/mean. Note On with velocity
+zero counts as Note Off. Hi-hat CC4 is shown separately for each channel; its
+open/closed direction depends on the module.
+
+**Learn next hit** captures the first new positive Note On. Check the channel/note,
+tap the boxed **Pad name** field, enter your own name and choose **Apply name**;
+Cancel discards the candidate. The whole 44-point field accepts tap-to-focus.
+Names belong to this take and never change stored kit settings. They are included
+in exported JSON as a pad map, with at most 128 names of 80 characters each.
+
+**Stop** retains the take. Leaving MIDI tools, backgrounding the app or losing the
+input closes the input port. Background/disconnect/overflow/limits mark an active
+take partial; reported input-driver errors do too. Returning never starts recording again. Limits are 50,000 events,
+20 minutes and a bounded input queue. MIDI-1 group-zero channel data is supported;
+system/SysEx are ignored. Unsupported channel data stops with a partial take.
+Times measure monotonic callback arrival and are not latency-calibrated.
+
+After Stop, **Export capture JSON** saves a version-1 drum MIDI session through
+Files, compatible with the web MIDI toolkit's import/analysis. Export cancellation
+and failure retain the take. A new recording requires explicit discard confirmation;
+a failed input open preserves the previous take. Takes and learned names stay in
+memory only, so export before terminating the app. There is no native capture
+import, pause/resume, saved profile store or kit auto-selection yet.
+
+This milestone has synthetic model/packet and simulator tests. Direct physical
+USB from iPad to Strike, cable removal, audio coexistence and module storage each
+need separate attended acceptance. MIDI reception does not prove kit transfer.
+See [the native editor plan](../../docs/NATIVE_STRIKE_EDITOR_PLAN.md).
 
 ## Simulator build and tests
 

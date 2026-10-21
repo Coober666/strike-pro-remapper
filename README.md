@@ -244,6 +244,13 @@ Accessibility text sizes use Zones automatically. The large-text UI check also v
 that Done dismisses the editor after zone navigation. The welcome screen offers kit
 editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
+**MIDI tools** adds an explicitly selected native input, silent channel-message capture,
+per-channel note/velocity and hi-hat CC4 views, and confirmed pad Learn names for the take.
+Learn uses a full-width, 44-point name field with explicit tap-to-focus before Apply.
+Recording stops on backgrounding, disconnection or reported driver errors and retains a partial take without
+reconnecting. Stop before exporting JSON compatible with the web MIDI toolkit;
+captures stay in memory and need export before app termination. No MIDI output or
+kit mutation occurs. Direct iPad/Strike USB remains a separate hardware check.
 Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
 it for replacement; Apply confirms the edit and Cancel discards it.

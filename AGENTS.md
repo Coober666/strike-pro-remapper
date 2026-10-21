@@ -1256,8 +1256,9 @@ parity. Do not start a separate full-editor iOS app. Keep the Mac setlist compan
 independent. The iPhone/iPad display and Files name is Strike Remapper. Preserve the existing
 net.cooberlab.strike-companion.ios bundle identifier, document types, internal
 Xcode product/scheme/module names, and StrikeCompanion/session-v1.json store path.
-The welcome screen offers Edit a kit alongside setlist import; both use the same app. Native MIDI input is the next
-development milestone; direct storage/deployment still requires separate evidence.
+The welcome screen offers Edit a kit alongside setlist import; both use the same app.
+MIDI tools adds input capture and export; physical direct USB and direct
+storage/deployment still require separate evidence.
 
 
 The largest accessibility-text UI check waits up to 10 seconds for Done to become
@@ -1301,3 +1302,48 @@ it performs three cold launches and hosted Xcode 27.1 spent over 100 seconds set
 up the final document launch before successfully presenting its rejection alert.
 Keep the alert dismissal, restored imported-song and unchanged-source assertions.
 Other non-provider tests retain their 180-second default; do not retry handoffs.
+
+
+## Native MIDI input 0.7
+
+MIDIRecording.swift owns pure MIDI-1 channel validation, bounded takes, portable
+web-compatible JSON and the locked 4096-message mailbox. NativeMIDIInput.swift
+owns one explicitly selected Core MIDI source via a MIDI-1 protocol input port.
+Do not enumerate destinations, create virtual endpoints, send/echo MIDI, start
+an audio session or touch kit bytes. Refresh enumerates inputs; launch never connects.
+Traverse variable-length MIDIEventList/MIDIEventPacket by original pointers, not
+copied tuples. Parse UMP widths before skipping payloads; system/SysEx are ignored,
+unsupported MIDI2/nonzero-group channel data stops partial rather than merging groups.
+Stop decoding immediately at unsupported channel data, retaining only its valid prefix.
+Trim BOM as well as Foundation whitespace from names to match web JSON validation.
+Copy Core MIDI I/O error payloads before dispatching to the main actor. Track the
+selected source's parent device using input metadata only. A reported I/O error
+stops partial for that device or unknown identity; ignore known unrelated devices
+and errors after Stop. Synthetic notification buffers and injected failures cover
+routing, partial retention and completed-take preservation without creating clients.
+Bound each callback's word/packet work as well as queued messages. Each recording
+gets a new mailbox; stop closes it before disposing the input port and drains the
+retained prefix. NativeMIDIModel stops partial on overflow, 50k/20-minute limits,
+source removal, driver failure and app inactive/background state. Stop when the
+50,000th message is retained, including if no further messages arrive. No auto reconnect;
+normal Stop cannot be downgraded by later disconnects. Failed new input open keeps
+the previous take; replacing it requires explicit discard. Done stops and retains
+memory-only work. Export the stopped take as <=8MiB drum-midi-session v1 JSON.
+Times are monotonic callback arrival, not physical/calibrated latency. No pause yet.
+Learn consumes only post-arm positive Note Ons, freezes the candidate, and requires
+Apply name. It labels channel/note pairs (128/80 UTF16 limit) in this take's exported
+padMap; never infer pads or mutate kit MIDI fields. No saved profile store yet.
+NativeMIDITests cover fake input lifecycle, packet pointer traversal, bounds,
+Learn and stale callbacks. NativeMIDIUITests enables its driver only with both a
+UUID STRIKE_UI_TEST_SESSION and STRIKE_UI_TEST_MIDI=1 in DEBUG; it uses no endpoints.
+tools/test_native_midi_export.py compiles Foundation data code and verifies the
+resulting bytes with web session/profile validators. No real devices are accessed.
+Active takes display recording; complete/partial describes stopped takes. Record
+and Stop labels provide separate 44pt targets. Cancelled Learn names clear before
+arming a new candidate. The rounded Learn name field has a full-width 44pt touch
+area; a simultaneous tap gesture requests its own FocusState without replacing
+native caret gestures. Older wide-iPad SwiftUI exposed a full-cell AX frame while
+a center tap on the unstyled field did not focus it. UI tests tap once, require
+the typed value, submit Return separately, then require explicit Apply.
+Direct physical iPad/Strike USB and disconnect acceptance
+remain unverified; do not assume an unlocked device, module or cable is available.

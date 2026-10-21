@@ -5,8 +5,9 @@ Native iPhone/iPad Strike Remapper (formerly Companion) now supports setlist vie
 The first standalone editing milestone adds confirmed per-pad settings, existing-reference
 assignments, undo/redo and verified export to a new `.skt` copy. Imported originals
 stay untouched; edits are memory-only until export. The native workspace adds a
-selectable standard drum map and zone switching. The next priority is direct native
-MIDI input, then proving module-storage access, toward iPad + Strike operation
+selectable standard drum map and zone switching. Native MIDI tools now provide
+input selection, bounded capture, note/CC4 monitoring, confirmed pad Learn and portable
+JSON export. Physical direct-iPad MIDI and module-storage access remain gates toward iPad + Strike operation
 without a computer. See [the native editor plan](docs/NATIVE_STRIKE_EDITOR_PLAN.md).
 Sound libraries, playback, kit-edit recovery and direct mobile storage remain future work.
 Physical iPad/Files-provider and module acceptance of native edited copies remain open. Historical viewer-first
