@@ -1340,5 +1340,10 @@ tools/test_native_midi_export.py compiles Foundation data code and verifies the
 resulting bytes with web session/profile validators. No real devices are accessed.
 Active takes display recording; complete/partial describes stopped takes. Record
 and Stop labels provide separate 44pt targets. Cancelled Learn names clear before
-arming a new candidate. Direct physical iPad/Strike USB and disconnect acceptance
+arming a new candidate. The rounded Learn name field has a full-width 44pt touch
+area; a simultaneous tap gesture requests its own FocusState without replacing
+native caret gestures. Older wide-iPad SwiftUI exposed a full-cell AX frame while
+a center tap on the unstyled field did not focus it. UI tests tap once, require
+the typed value, submit Return separately, then require explicit Apply.
+Direct physical iPad/Strike USB and disconnect acceptance
 remain unverified; do not assume an unlocked device, module or cable is available.

@@ -126,7 +126,8 @@ zero counts as Note Off. Hi-hat CC4 is shown separately for each channel; its
 open/closed direction depends on the module.
 
 **Learn next hit** captures the first new positive Note On. Check the channel/note,
-enter your own pad name and choose **Apply name**; Cancel discards the candidate.
+tap the boxed **Pad name** field, enter your own name and choose **Apply name**;
+Cancel discards the candidate. The whole 44-point field accepts tap-to-focus.
 Names belong to this take and never change stored kit settings. They are included
 in exported JSON as a pad map, with at most 128 names of 80 characters each.
 

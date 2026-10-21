@@ -32,7 +32,10 @@ final class NativeMIDIUITests: XCTestCase {
         XCTAssertTrue(candidate.waitForExistence(timeout: 5))
         XCTAssertTrue(candidate.label.contains("Channel 10, note 38, velocity 96"))
         let field = app.textFields["midi-pad-name"]
-        field.tap(); field.typeText("Snare\n")
+        XCTAssertGreaterThanOrEqual(field.frame.height, 44)
+        field.tap(); field.typeText("Snare")
+        XCTAssertEqual(field.value as? String, "Snare")
+        field.typeText("\n")
         app.buttons["midi-apply-name"].tap()
         XCTAssertTrue(app.staticTexts["Ch 10 / 38: Snare"].waitForExistence(timeout: 5))
         app.buttons["midi-stop"].tap()

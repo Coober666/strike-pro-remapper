@@ -75,6 +75,9 @@ struct NativeMIDIView: View {
                                 $0.channel == candidate.channel && $0.note == Int(candidate.data[1])
                             }) { Text("Current name: \(existing.label)").font(.footnote) }
                             TextField("Pad name", text: $padName).focused($naming).submitLabel(.done)
+                                .textFieldStyle(.roundedBorder).frame(minHeight: 44)
+                                .contentShape(Rectangle())
+                                .simultaneousGesture(TapGesture().onEnded { naming = true })
                                 .onSubmit { naming = false }.accessibilityIdentifier("midi-pad-name")
                             Button("Apply name") { naming = false; model.applyName(padName); if !model.learning { padName = "" } }
                                 .disabled(trimmedMIDIText(padName).isEmpty)
