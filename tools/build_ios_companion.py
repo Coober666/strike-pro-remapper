@@ -77,9 +77,9 @@ def failure_summary(text, limit=100):
     """Return the failing-test diagnostic lines of an xcodebuild log, in order and deduplicated."""
     lines = []
     for line in text.splitlines():
-        line = line.strip()
+        line = line.strip()[:2000]
         if any(marker in line for marker in FAILURE_MARKERS) and line not in lines:
-            lines.append(line[:2000])
+            lines.append(line)
             if len(lines) == limit:
                 break
     return lines
