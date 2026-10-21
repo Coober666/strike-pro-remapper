@@ -42,6 +42,9 @@ Receipt exclusions for .build/.swiftpm/xcuserdata apply only below each native i
 folder, so a worktree inside a parent .build still hashes all source files.
 Keep ordinary failure logs, screenshots and xcresult bundles, but omit verbose
 OS sysdiagnose capture, which can outlast the CI job after an automation failure.
+On failure the builder prints the log tail plus every failing-test diagnostic line
+(failure_summary in tools/build_ios_companion.py), so the job log names each failed
+assertion or timeout even when it occurred far from the end of the xcodebuild log.
 Files-picker UI checks allow 90 seconds for the OS service's first accessibility tree, then
 require dismissal, Import re-enablement and selected-song retention after Cancel.
 

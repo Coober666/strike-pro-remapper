@@ -68,6 +68,23 @@ def source_hashes(root):
             for path in sorted(inputs)}
 
 
+# xcodebuild prints the reason for each failed test far from the end of its log.
+FAILURE_MARKERS = (': error: -[', "' failed (", 'Assertion Failure:',
+                   'exceeded execution time allowance', 'Restarting after unexpected exit')
+
+
+def failure_summary(text, limit=100):
+    """Return the failing-test diagnostic lines of an xcodebuild log, in order and deduplicated."""
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if any(marker in line for marker in FAILURE_MARKERS) and line not in lines:
+            lines.append(line[:2000])
+            if len(lines) == limit:
+                break
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True, type=Path, help='New directory; never overwrites')
@@ -107,7 +124,11 @@ def main():
         if not unchanged:
             raise ValueError('Build inputs changed during testing; retain these logs and run again on stable inputs.')
         if completed.returncode:
-            print(log.read_text()[-10000:], file=sys.stderr)
+            text = log.read_text()
+            print(text[-10000:], file=sys.stderr)
+            summary = failure_summary(text)
+            print(f'Failure diagnostics from {log.name}:', file=sys.stderr)
+            print('\n'.join(summary) if summary else 'No test failure lines found; see the log and xcresult.', file=sys.stderr)
             raise SystemExit(completed.returncode)
     print(f'Passed {len(runs)} simulator runs. Evidence: {output}', flush=True)
 

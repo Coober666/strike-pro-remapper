@@ -85,5 +85,30 @@ class SourceReceiptTests(unittest.TestCase):
                 self.assertNotEqual(before, build_ios_companion.source_hashes(root))
 
 
+class FailureSummaryTests(unittest.TestCase):
+    def test_extracts_failure_reasons_from_anywhere_in_the_log(self):
+        reason = ("/tmp/UITests/CompanionUITests.swift:154: error: -[CompanionUITests.CompanionUITests "
+                  "testColdLaunchRestoresSongAndReadingPreferences] : XCTAssertTrue failed")
+        text = '\n'.join([
+            "Test Case '-[CompanionUITests.CompanionUITests testAdaptiveLayoutAndScrollReset]' passed (12.0 seconds).",
+            '    t =     3.10s Tap "next" Button',
+            '    ' + reason,
+            "Test Case '-[CompanionUITests.CompanionUITests testColdLaunchRestoresSongAndReadingPreferences]' failed (31.2 seconds).",
+            *['    t =     1.00s Find the "midi-count" StaticText'] * 500,
+            '    ' + reason,
+            "Test Case '-[CompanionUITests.CompanionUITests testFilePickerCancellationPreservesSong]' exceeded execution time allowance of 5 minutes.",
+            'Failing tests:'])
+        self.assertEqual(build_ios_companion.failure_summary(text), [
+            reason,
+            "Test Case '-[CompanionUITests.CompanionUITests testColdLaunchRestoresSongAndReadingPreferences]' failed (31.2 seconds).",
+            "Test Case '-[CompanionUITests.CompanionUITests testFilePickerCancellationPreservesSong]' exceeded execution time allowance of 5 minutes."])
+
+    def test_passing_log_has_no_diagnostics_and_output_is_bounded(self):
+        self.assertEqual(build_ios_companion.failure_summary(
+            "Test Case '-[A b]' passed (1.0 seconds).\n** TEST SUCCEEDED **"), [])
+        many = '\n'.join(f"Test Case '-[A test{index}]' failed (1.0 seconds)." for index in range(300))
+        self.assertEqual(len(build_ios_companion.failure_summary(many)), 100)
+
+
 if __name__ == '__main__':
     unittest.main()
