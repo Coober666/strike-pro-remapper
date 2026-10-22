@@ -174,3 +174,40 @@ reproduction claim; run 39702644297 remains failed and hosted validation is pend
 Downloaded bundle, recording and extracted frames are retained locally under
 `/private/tmp/strike-hosted87-failure-39702644297/`; no devices were accessed to
 inspect them and the failed run was not retried.
+
+## Issue #85 lifecycle isolation follow-up
+
+The remaining launch/PID and teardown evidence has a concrete lifecycle boundary:
+all UI classes reset portrait before stopping the previous app, and leave their app
+running for implicit XCTest teardown. Artifact `12309515705` ends its assertions at
+50.39 seconds with the reading-options menu still open, then reaches 231.35 seconds
+in teardown. Artifacts `12383204089`, `12383908287` and `12311876886` stall during
+launch, before any app-owned UI assertion. These are not reasons to extend waits.
+
+`NativeUITestCase` now registers one owned application per test, stops the previous
+process before portrait setup, and explicitly stops its app before implicit teardown.
+It asserts notRunning before restoring portrait. Cold relaunches reuse the same
+private session, retaining the restoration/import checks. Failures still run cleanup;
+pure matcher tests that never launch an app do not stop a process. The existing
+exact stale-PID matcher is unchanged; no additional diagnostic is suppressed.
+
+The build helper also separates the hosted model and UI bundles into serial
+test-without-building sessions after build-for-testing. This removes their shared
+test-session boundary, which was an unresolved variable in the earlier local
+model-plus-export failure. Both entire targets remain selected. The scheme guard
+refuses skipped/missing/new targets rather than silently losing coverage. Distinct
+models/ui xcresults and phase commands/statuses survive in a version-2 receipt;
+startup failures now retain a receipt too. Failed phases or changed inputs prevent
+later sessions. The existing 180/300-second test and 35-minute CI ceilings remain.
+
+One controlled current-source baseline at `0033c7e` (tracked files equal main
+`23f1eb2`) ran all 34 model tests followed by cancellation, export/reopen and Learn
+on the installed iPad. It passed without source changes. Its log/xcresult/receipt
+are retained at `/private/tmp/strike-issue85-baseline-20261022/`. That pass does not
+replace the earlier failed full run or establish that a lifecycle cause is proven.
+
+Thirteen deterministic helper contracts pass, including phase failure propagation,
+startup receipt/cleanup, source-drift interruption and refusal to omit test targets.
+Full new-source simulator and hosted matrix validation are pending at this commit.
+Do not describe a green rerun of unchanged source as a fix or claim all SDK failures
+are eliminated from a single new-source pass.

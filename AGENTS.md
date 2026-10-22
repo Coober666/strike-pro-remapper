@@ -1074,6 +1074,11 @@ and teardown failures remain unresolved. The hosted readiness follow-up uses
 cancellation-only public snapshots with real Button ancestry, a logged service
 fallback and unchanged 90-second budgets; never accept generic Other/sidebar Cell
 proxies. Do not infer an orientation, app-focus or readiness fix from a passing rerun.
+The #85 lifecycle follow-up builds once and runs every model/UI target in separate
+serial sessions with distinct xcresults and phase receipts; scheme target changes
+must not silently omit coverage. NativeUITestCase stops its owned app before
+portrait setup and at teardown, asserting notRunning before restoring orientation.
+Keep original test limits/assertions and failures; never retry a failed session.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

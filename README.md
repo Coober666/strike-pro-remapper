@@ -293,6 +293,10 @@ and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
 Native parity CI also runs when the Python editor or binary format implementation changes.
+Model and UI tests run in separate serial sessions after one build, retaining both
+result bundles and failed-phase receipts. UI tests explicitly stop their owned app
+before resetting orientation and at teardown, preserving strict cold-launch and
+document-retention checks.
 iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
 Modern CI pins Xcode 27.1, matching local verification, instead of the runner's floating default; Xcode 16.4 remains the compatibility check.
 Files cancellation UI regressions inspect public snapshots for real Cancel buttons,

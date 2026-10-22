@@ -2,13 +2,9 @@ import XCTest
 import UIKit
 
 @MainActor
-final class KitEditingUITests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+final class KitEditingUITests: NativeUITestCase {
     private func launchKit() -> XCUIApplication {
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
-        app.stopForUITestRelaunch()
+        let app = makeApplication()
         app.launch()
         app.buttons["demo"].tap()
         app.buttons["kit-inspector"].tap()
@@ -69,10 +65,7 @@ final class KitEditingUITests: XCTestCase {
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
     func testDrumMapSelectionZoneSwitchAndZonesFallback() {
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
-        app.stopForUITestRelaunch()
+        let app = makeApplication()
         app.launch()
         app.buttons["demo"].tap()
         app.buttons["kit-inspector"].tap()
@@ -109,11 +102,8 @@ final class KitEditingUITests: XCTestCase {
     }
 
     func testAccessibilityTextUsesCompleteZonesList() {
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        let app = makeApplication()
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        app.stopForUITestRelaunch()
         app.launch()
         app.buttons["kit-inspector"].tap()
         let demo = app.buttons["kit-demo"]

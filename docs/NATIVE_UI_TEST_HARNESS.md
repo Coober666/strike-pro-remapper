@@ -25,6 +25,14 @@ the helper's compatible installed runtime pair with --device. Each retains the
 35-minute job limit and existing per-test limits, source hashes, lifecycle cleanup
 and uniquely named device artifacts. Cold preview-runtime startup plus both full
 suites can exceed a combined job budget even while every completed test passes.
+Build once per device with build-for-testing, then run CompanionTests and
+CompanionUITests in separate serial test-without-building sessions. The scheme
+target guard rejects disabled, missing or additional test targets until the session
+plan includes them. Every test in both bundles remains selected. A failed build or
+model session blocks later sessions; never retry a failed session. Keep a separate
+models/ui xcresult and the shared simulator log. Version-2 receipts retain each
+phase's command/result/exit status, source hashes and completion state even when
+startup fails; source drift prevents the next session.
 Default simulator selection uses the newest installed iPhone/iPad runtime pair
 supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
 Keep import/rejection and source-byte UI assertions, plus selected-song retention
@@ -94,6 +102,14 @@ condition is the final stopped process, not an intermediate background flag.
 This keeps implicit foreground termination out of launch() after repeated hosted
 XCTest PID acknowledgement failures. Cold-launch restoration requires a stopped process before launch;
 its song/reading assertions and document source-byte checks remain unchanged.
+All three UI test classes inherit NativeUITestCase. Create the one owned app with
+makeApplication(), retaining its private session across deliberate cold relaunches.
+Stop the previous process before resetting portrait. Teardown stops that owned app,
+requires notRunning, then restores portrait, including after a failed assertion.
+Do not leave an open menu/keyboard or landscape process for implicit XCTest cleanup.
+Pure matcher tests that never create an app must not terminate another process.
+This removes cross-test state and makes cleanup observable; it does not establish
+that an orientation leak was the root cause of a historical SDK failure.
 Read enabled/frame attributes from one throwing snapshot, treating a disappearing
 Files match as not ready. Separate exists/isEnabled/frame queries can hard-fail if
 the restored folder replaces its tab bar between them. Keep the hittability check.

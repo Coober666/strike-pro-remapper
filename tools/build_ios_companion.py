@@ -12,6 +12,38 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
+
+
+TEST_SESSIONS = (('models', 'CompanionTests'), ('ui', 'CompanionUITests'))
+
+
+def validate_test_targets(root):
+    """Never silently omit a test target when splitting the test sessions."""
+    scheme = root / 'native/StrikeCompanioniOS/StrikeCompanion.xcodeproj/xcshareddata/xcschemes/StrikeCompanion.xcscheme'
+    references = ET.parse(scheme).findall('./TestAction/Testables/TestableReference')
+    names = [item.get('BlueprintName', '') for reference in references
+             if (item := reference.find('BuildableReference')) is not None]
+    expected = sorted(target for _, target in TEST_SESSIONS)
+    if len(names) != len(references) or sorted(names) != expected or any(item.get('skipped', 'NO') != 'NO' for item in references):
+        raise ValueError('Every scheme test target must have an enabled session; update the session plan for changed targets.')
+
+
+def test_steps(root, device, output, index):
+    """Build once, then give hosted model tests and UI tests separate sessions."""
+    common = ['-project', str(root / 'native/StrikeCompanioniOS/StrikeCompanion.xcodeproj'),
+              '-scheme', 'StrikeCompanion', '-destination', f'platform=iOS Simulator,id={device}',
+              '-derivedDataPath', str(output / 'DerivedData')]
+    limits = ['-parallel-testing-enabled', 'NO', '-test-timeouts-enabled', 'YES',
+              '-collect-test-diagnostics', 'never', '-default-test-execution-time-allowance', '180',
+              '-maximum-test-execution-time-allowance', '300']
+    steps = [('build', ['xcodebuild', 'build-for-testing', *common, 'CODE_SIGNING_ALLOWED=NO'], None)]
+    for phase, target in TEST_SESSIONS:
+        result = output / f'simulator-{index}-{phase}.xcresult'
+        command = ['xcodebuild', 'test-without-building', *common, *limits,
+                   f'-only-testing:{target}', '-resultBundlePath', str(result), 'CODE_SIGNING_ALLOWED=NO']
+        steps.append((phase, command, result.name))
+    return steps
 
 
 def simulator_inventory():
@@ -93,6 +125,7 @@ def main():
     if sys.platform != 'darwin':
         parser.error('Use macOS with full Xcode and installed iOS simulators.')
     root = Path(__file__).resolve().parent.parent
+    validate_test_targets(root)
     devices = args.device or simulator_ids()
     booted = {item['udid'] for group in simulator_inventory()['devices'].values()
               for item in group if item['state'] == 'Booted'}
@@ -104,32 +137,44 @@ def main():
     runs = []
     for index, device in enumerate(devices, 1):
         log = output / f'simulator-{index}.log'
-        result = output / f'simulator-{index}.xcresult'
-        command = ['xcodebuild', 'test', '-project', str(root / 'native/StrikeCompanioniOS/StrikeCompanion.xcodeproj'),
-                   '-scheme', 'StrikeCompanion', '-destination', f'platform=iOS Simulator,id={device}',
-                   '-derivedDataPath', str(output / 'DerivedData'), '-resultBundlePath', str(result),
-                   '-parallel-testing-enabled', 'NO', '-test-timeouts-enabled', 'YES',
-                   '-collect-test-diagnostics', 'never',
-                   '-default-test-execution-time-allowance', '180',
-                   '-maximum-test-execution-time-allowance', '300', 'CODE_SIGNING_ALLOWED=NO']
+        run = {'device': device, 'exit_code': None, 'completed': False,
+               'log': log.name, 'phase': 'startup', 'phases': []}
+        runs.append(run)
         print(f'Testing simulator {device}; log: {log}', flush=True)
-        with log.open('w') as stream, ready_simulator(device, stream, device in booted):
-            completed = subprocess.run(command, cwd=root, stdout=stream, stderr=subprocess.STDOUT)
-        runs.append({'device': device, 'exit_code': completed.returncode, 'log': log.name, 'result': result.name})
-        unchanged = hashes == source_hashes(root)
-        receipt = {'xcode': version, 'base_revision': revision, 'source_sha256': hashes,
-                   'inputs_unchanged': unchanged, 'runs': runs,
-                   'scope': 'Synthetic simulator tests; physical devices and VoiceOver not accepted.'}
-        (output / 'test-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        try:
+            with log.open('w') as stream, ready_simulator(device, stream, device in booted):
+                for phase, command, result in test_steps(root, device, output, index):
+                    run['phase'] = phase
+                    print(f'Simulator {device}: {phase}', flush=True)
+                    print(f'\n=== {phase}: {json.dumps(command)} ===', file=stream, flush=True)
+                    completed = subprocess.run(command, cwd=root, stdout=stream, stderr=subprocess.STDOUT)
+                    run['exit_code'] = completed.returncode
+                    run['phases'].append({'phase': phase, 'exit_code': completed.returncode,
+                                          'result': result, 'command': command})
+                    if hashes != source_hashes(root):
+                        raise ValueError('Build inputs changed during testing; no subsequent session was started.')
+                    if completed.returncode:
+                        break
+            run['completed'] = len(run['phases']) == len(TEST_SESSIONS) + 1 and run['exit_code'] == 0
+        except BaseException as error:
+            run['error_type'] = type(error).__name__
+            raise
+        finally:
+            unchanged = hashes == source_hashes(root)
+            receipt = {'version': 2, 'xcode': version, 'base_revision': revision, 'source_sha256': hashes,
+                       'inputs_unchanged': unchanged,
+                       'test_targets': [target for _, target in TEST_SESSIONS], 'runs': runs,
+                       'scope': 'Synthetic simulator tests; physical devices and VoiceOver not accepted.'}
+            (output / 'test-receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
         if not unchanged:
             raise ValueError('Build inputs changed during testing; retain these logs and run again on stable inputs.')
-        if completed.returncode:
+        if run['exit_code']:
             text = log.read_text()
             print(text[-10000:], file=sys.stderr)
             summary = failure_summary(text)
             print(f'Failure diagnostics from {log.name}:', file=sys.stderr)
             print('\n'.join(summary) if summary else 'No test failure lines found; see the log and xcresult.', file=sys.stderr)
-            raise SystemExit(completed.returncode)
+            raise SystemExit(run['exit_code'])
     print(f'Passed {len(runs)} simulator runs. Evidence: {output}', flush=True)
 
 
