@@ -292,6 +292,21 @@ extension XCUIApplication {
     }
 
     func cancelFilesPicker() {
+        func tapControl(_ control: XCUIElement) {
+            // The running Files service is an extension, not a launchable app.
+            // XCUIElement.tap() can try to activate it and fail FBSApplicationLibrary
+            // before delivery. Use the actual validated button's current center
+            // through the foreground host; never guess a Cancel/Recents position.
+            guard let snapshot = try? control.snapshot(), snapshot.isEnabled,
+                  !snapshot.frame.isEmpty, !snapshot.frame.isInfinite,
+                  frame.contains(snapshot.frame), control.isHittable else {
+                XCTFail("Files control stopped being actionable before its single tap. \(debugDescription)")
+                return
+            }
+            let center = CGPoint(x: snapshot.frame.midX, y: snapshot.frame.midY)
+            coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: center.x - frame.minX, dy: center.y - frame.minY)).tap()
+        }
         func cancelControl() -> XCUIElement? {
             actionableFilesControl { $0.buttons["Cancel"].firstMatch }
         }
@@ -302,7 +317,7 @@ extension XCUIApplication {
         let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 90), .completed, debugDescription)
         if let control = cancelControl() {
-            control.tap()
+            tapControl(control)
             return
         }
         // A restored folder can hide Cancel. Use the actual bottom tab, not a
@@ -311,7 +326,7 @@ extension XCUIApplication {
             XCTFail("No actionable Files Cancel button or Recents tab. \(debugDescription)")
             return
         }
-        recents.tap()
+        tapControl(recents)
         let command = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             cancelControl() != nil
         }, object: nil)
@@ -320,7 +335,7 @@ extension XCUIApplication {
             XCTFail("Files did not expose an actionable Cancel button. \(debugDescription)")
             return
         }
-        control.tap()
+        tapControl(control)
     }
 }
 
