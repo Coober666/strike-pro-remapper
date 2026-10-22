@@ -24,7 +24,7 @@ export default defineConfig({
     },
     {
       name: 'ipad-webkit',
-      testMatch: ['**/factory-controller.spec.js', '**/wifi-editor.spec.js', '**/workflow-polish.spec.js', '**/zz-recovery-touch.spec.js', '**/midi-toolkit.spec.js', '**/wifi-midi.spec.js', '**/zz-setlists.spec.js', '**/zzz-release-polish.spec.js'],
+      testMatch: ['**/zzzz-accessibility.spec.js', '**/factory-controller.spec.js', '**/wifi-editor.spec.js', '**/workflow-polish.spec.js', '**/zz-recovery-touch.spec.js', '**/midi-toolkit.spec.js', '**/wifi-midi.spec.js', '**/zz-setlists.spec.js', '**/zzz-release-polish.spec.js'],
       use: {
         ...devices['iPad Pro 11'],
         browserName: 'webkit',

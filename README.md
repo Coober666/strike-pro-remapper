@@ -20,6 +20,11 @@ everything it doesn't touch.
 > [Safety](#safety) and [Format status](#format-status) for exactly what is
 > hardware-confirmed and how your files are protected.
 
+Keyboard and accessibility polish includes named pad/FX controls, focus retained
+after parameter edits, native Kit FX dialog navigation, clearer secondary text,
+and announced action/error feedback. See the [installation and accessibility
+review](docs/INSTALL_ACCESSIBILITY_2026-10-14.md) for tested scope and remaining checks.
+
 ## Quick start
 
 **Start with the [October 14 tested beta](docs/BETA_CANDIDATE_2026-10-14.md):** exact

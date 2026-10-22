@@ -1,19 +1,19 @@
 # October 14 beta candidate
 
-This is the tested unsigned beta at revision
-`d56baecb53a1d537f13c8646f07317f488aee3d2`. It includes the combined work in
-PRs #66, #67 and #68. It is available for controlled testing; it is not a published
+This is the verified merged-main unsigned beta at revision
+`45c210d5a0772f5c5ad34be73becec968e88e924`. It includes the combined work in
+PRs #66, #67 and #68, all merged October 14. It is available for controlled testing; it is not a published
 stable release. Later documentation commits do not change the downloads pinned here.
 
 ## Download and open
 
 Sign in to GitHub and choose the artifact for your computer from
-[this successful build](https://github.com/Coober666/strike-pro-remapper/actions/runs/38624534354).
+[this successful build](https://github.com/Coober666/strike-pro-remapper/actions/runs/38628752928).
 
 | Computer | Download | What to open |
 | --- | --- | --- |
-| Windows 10/11 x64 | [Windows beta artifact](https://github.com/Coober666/strike-pro-remapper/actions/runs/38624534354/artifacts/11924331931) | Extract both ZIP layers, keep the whole `Strike Remapper` folder, then open `Strike Remapper.exe`. Python/Tk/MIDI support is included. |
-| Mac or Linux | [Source beta artifact](https://github.com/Coober666/strike-pro-remapper/actions/runs/38624534354/artifacts/11923642271) | Extract both ZIP layers. Use Python 3.10+ with Tk: Mac `launch-host.command`, or `python3 launch_editor.py` from the application folder. See [source setup](BETA_START.md) and [Tk/terminal help](HOST_LAUNCHER.md#first-run-help). |
+| Windows 10/11 x64 | [Windows beta artifact](https://github.com/Coober666/strike-pro-remapper/actions/runs/38628752928/artifacts/11924998329) | Extract both ZIP layers, keep the whole `Strike Remapper` folder, then open `Strike Remapper.exe`. Python/Tk/MIDI support is included. |
+| Mac or Linux | [Source beta artifact](https://github.com/Coober666/strike-pro-remapper/actions/runs/38628752928/artifacts/11924419832) | Extract both ZIP layers. Use Python 3.10+ with Tk: Mac `launch-host.command`, or `python3 launch_editor.py` from the application folder. See [source setup](BETA_START.md) and [Tk/terminal help](HOST_LAUNCHER.md#first-run-help). |
 | iPad or iPhone browser | Use one of the host downloads above | Enable Wi-Fi on the host before starting, then scan its pairing QR on the same trusted network. Open the HTTP address. The host serves the editor; see [mobile setup](WIFI_EDITOR.md). |
 
 GitHub's outer artifact ZIP contains an application ZIP and its checksum sidecar.
@@ -27,17 +27,17 @@ library selection, pairing and Stop. Windows detailed help is in `Help/README.tx
 ### Exact application ZIPs and SHA-256
 
 Windows filename:
-`strike-remapper-windows-x64-d56baecb53a1d537f13c8646f07317f488aee3d2.zip`
+`strike-remapper-windows-x64-45c210d5a0772f5c5ad34be73becec968e88e924.zip`
 
 ```text
-9a5099b14797531fef7cd36a9a2e649427001468d935abbc7d85efc08f69c61b
+b929daf929e5c029b9ac4f99dfea6b769210ab848b4c447b52a1624edca364f0
 ```
 
 Source filename:
-`strike-remapper-d56baecb53a1d537f13c8646f07317f488aee3d2.zip`
+`strike-remapper-45c210d5a0772f5c5ad34be73becec968e88e924.zip`
 
 ```text
-8fcede67162b0cde1d2869db8a6ce01df622daf3c72e3c1aa868c5edc343f53b
+eeb64ff25ccbf857f1ce0bd372a5cb31ace9bec5a61d6ddbe8ae524b6bbac559
 ```
 
 Compare the inner application ZIP with its sidecar using Windows

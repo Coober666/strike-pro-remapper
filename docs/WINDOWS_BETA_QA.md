@@ -27,6 +27,11 @@ passed outside that sandbox. Build and smoke checks run automatically in CI.
 
 ## Still needed before a broad release
 
+The October 14 [installation review](INSTALL_ACCESSIBILITY_2026-10-14.md) provides
+a PowerShell acceptance harness that needs no installed Python, Node or Git. It
+passed on the current computer; Windows Sandbox was unavailable, so the independent
+clean-machine gate below remains open.
+
 - Another Windows machine with no Python installed (the local test removed Python
   from the process environment; it did not uninstall Python from this computer).
 - Physical Strike and generic-module MIDI capture, factory activation, and SD
