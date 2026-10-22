@@ -140,3 +140,29 @@ it performs three cold launches and hosted Xcode 27.1 spent over 100 seconds set
 up the final document launch before successfully presenting its rejection alert.
 Keep the alert dismissal, restored imported-song and unchanged-source assertions.
 Other non-provider tests retain their 180-second default; do not retry handoffs.
+
+
+## October 22 diagnosis: delayed typing and Files extension activation
+
+For #88, run 39697106912's Xcode 16.4 iPad recording showed `Snare`
+with the caret and keyboard still present at test time 32 seconds, after the
+assertion had read `Sn` at 31.32 seconds. The single synthesized event contains
+all five characters. This establishes delayed delivery/observation in that run;
+it does not establish lost focus or a production field defect. After one
+`typeText("Snare")`, wait at most five seconds for that exact value, then retain
+the strict equality assertion and separate Return/explicit Apply actions. Never
+resend text, retry taps or accept a prefix. Keep before/after state and screenshot
+attachments, including public snapshot focus/attributes and keyboard count/frame.
+`hasFocus` is UI focus; do not describe it as a guaranteed keyboard-focus flag.
+See docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md for the source evidence and limits.
+
+For #85, run 39677340058 attempt 2's iPhone failure was in XCTest's attempt to
+activate `com.apple.DocumentManagerUICore.Service` when tapping its real Cancel
+button. The running Files extension is not a launchable app; FBSApplicationLibrary
+returned nil. In `cancelFilesPicker` only, deliver the single Cancel/Recents tap
+through the foreground host's coordinate space at the freshly validated real
+button's center. Require its enabled snapshot, full onscreen frame and hittability;
+never guess a position or use generic Other proxies. This specific exception
+avoids extension activation and does not change the Files reopening rule above.
+Keep picker dismissal, enabled Import and selected-song/edited-value assertions.
+No retry or broader launch-error suppression is justified by this failure.
