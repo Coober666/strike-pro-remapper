@@ -1,5 +1,31 @@
 import Foundation
 import CoreMIDI
+import Darwin
+
+/// Core MIDI timestamps and every take/Learn boundary use the same Mach host clock.
+struct NativeMIDIHostClock: Sendable {
+    private let secondsPerTick: Double
+    private let readTicks: @Sendable () -> UInt64
+
+    init(numer: UInt32, denom: UInt32, readTicks: @escaping @Sendable () -> UInt64) {
+        precondition(numer > 0 && denom > 0)
+        secondsPerTick = Double(numer) / Double(denom) / 1_000_000_000
+        self.readTicks = readTicks
+    }
+    static let live: Self = {
+        var timebase = mach_timebase_info_data_t()
+        precondition(mach_timebase_info(&timebase) == KERN_SUCCESS)
+        return Self(numer: timebase.numer, denom: timebase.denom, readTicks: { mach_absolute_time() })
+    }()
+    func seconds(_ ticks: UInt64) -> Double {
+        // Convert before multiplying, avoiding an overflowing integer timebase product.
+        Double(ticks) * secondsPerTick
+    }
+    func now() -> Double { seconds(readTicks()) }
+    func packetSeconds(_ timestamp: MIDITimeStamp, fallback: Double) -> Double {
+        timestamp == 0 ? fallback : seconds(timestamp)
+    }
+}
 
 struct NativeMIDIInput: Identifiable, Equatable {
     let id: Int32
@@ -52,6 +78,9 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
     private var endpoint = MIDIEndpointRef()
     private var activeDevice = MIDIDeviceRef()
     private var mailbox: DrumMIDIMailbox?
+    private let clock: NativeMIDIHostClock
+
+    init(clock: NativeMIDIHostClock = .live) { self.clock = clock }
 
     private func check(_ status: OSStatus) throws {
         guard status == noErr else {
@@ -108,15 +137,19 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
             _ = MIDIEntityGetDevice(entity, &activeDevice)
         }
         do {
+            let clock = clock
             try check(MIDIInputPortCreateWithProtocol(client, "Strike Remapper receive" as CFString, ._1_0, &port) { list, _ in
-                Self.receive(list, into: mailbox)
+                Self.receive(list, into: mailbox, clock: clock)
             })
             endpoint = source
             try check(MIDIPortConnectSource(port, source, nil))
             guard identity(source) == id else { throw CocoaError(.fileReadUnknown) }
         } catch { stop(); throw error }
     }
-    nonisolated static func receive(_ list: UnsafePointer<MIDIEventList>, into mailbox: DrumMIDIMailbox) {
+    nonisolated static func receive(_ list: UnsafePointer<MIDIEventList>, into mailbox: DrumMIDIMailbox,
+                                    clock: NativeMIDIHostClock = .live) {
+        // A zero timestamp means now. Sample once so one callback has one fallback time.
+        let arrival = clock.now()
         // Walk the original variable-length list by pointer; copying packet tuples truncates large packets.
         guard list.pointee.numPackets <= DrumMIDIMailbox.capacity else { mailbox.fail(); return }
         let raw = UnsafeRawPointer(list).advanced(by: MemoryLayout<MIDIEventList>.offset(of: \.packet)!)
@@ -128,7 +161,7 @@ final class CoreMIDIInputDriver: NativeMIDIInputDriver {
             remaining -= count
             let words = UnsafeRawPointer(packet).advanced(by: MemoryLayout<MIDIEventPacket>.offset(of: \.words)!)
                 .assumingMemoryBound(to: UInt32.self)
-            let uptime = ProcessInfo.processInfo.systemUptime
+            let uptime = clock.packetSeconds(packet.pointee.timeStamp, fallback: arrival)
             let supported = DrumMIDIUMP.decode(UnsafeBufferPointer(start: words, count: count)) {
                 mailbox.push($0, uptime: uptime)
             }
@@ -161,11 +194,14 @@ final class SyntheticMIDIInputDriver: NativeMIDIInputDriver {
     let synthetic = true
     private var timer: Timer?
     private var mailbox: DrumMIDIMailbox?
+    private let clock: NativeMIDIHostClock
+    init(clock: NativeMIDIHostClock = .live) { self.clock = clock }
     func inputs() throws -> [NativeMIDIInput] { [NativeMIDIInput(id: 1, name: "Synthetic drum input")] }
     func start(_ id: Int32, mailbox: DrumMIDIMailbox) throws {
         self.mailbox = mailbox
+        let clock = clock
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
-            let now = ProcessInfo.processInfo.systemUptime
+            let now = clock.now()
             for bytes: [UInt8] in [[0x99, 38, 96], [0x99, 38, 0], [0xb9, 4, 64]] {
                 if let message = DrumMIDIMessage(bytes) { mailbox.push(message, uptime: now) }
             }

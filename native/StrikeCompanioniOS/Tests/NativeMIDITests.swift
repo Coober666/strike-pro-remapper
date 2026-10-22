@@ -26,6 +26,106 @@ private final class FakeMIDIInput: NativeMIDIInputDriver {
 }
 
 final class NativeMIDITests: XCTestCase {
+    private func receive(_ packets: [(MIDITimeStamp, [UInt32])], into box: DrumMIDIMailbox,
+                         clock: NativeMIDIHostClock) throws {
+        let storage = UnsafeMutableRawPointer.allocate(byteCount: 8192, alignment: MemoryLayout<MIDIEventList>.alignment)
+        defer { storage.deallocate() }
+        let list = storage.bindMemory(to: MIDIEventList.self, capacity: 1)
+        var packet = MIDIEventListInit(list, ._1_0)
+        for (timestamp, words) in packets {
+            packet = try XCTUnwrap(words.withUnsafeBufferPointer {
+                MIDIEventListAdd(list, 8192, packet, timestamp, $0.count, $0.baseAddress!)
+            })
+        }
+        CoreMIDIInputDriver.receive(UnsafePointer(list), into: box, clock: clock)
+    }
+    func testHostClockAppliesTimebaseWithoutIntegerOverflow() {
+        let clock = NativeMIDIHostClock(numer: 125, denom: 3, readTicks: { 24_000_000 })
+        XCTAssertEqual(clock.now(), 1, accuracy: 0.000_000_001)
+        XCTAssertEqual(clock.seconds(48_000_000), 2, accuracy: 0.000_000_001)
+        XCTAssertEqual(clock.packetSeconds(24_000_000, fallback: 9), 1, accuracy: 0.000_000_001)
+        XCTAssertEqual(clock.packetSeconds(0, fallback: 9), 9)
+        let largest = clock.seconds(UInt64.max)
+        XCTAssertTrue(largest.isFinite)
+        XCTAssertEqual(largest, Double(UInt64.max) / 24_000_000, accuracy: 0.001)
+    }
+    @MainActor
+    func testPacketTimestampsZeroFallbackAndMonotonicExportShareTakeClock() throws {
+        let clock = NativeMIDIHostClock(numer: 125, denom: 3, readTicks: { 252_000_000 }) // 10.5 seconds
+        var time = clock.seconds(240_000_000)
+        let driver = FakeMIDIInput()
+        let model = NativeMIDIModel(driver: driver, clock: { time }, usesTimer: false)
+        model.refresh(); model.selectedInput = 71; model.record()
+        try receive([(240_000_000, [0x20992660]), (246_000_000, [0x20892600]),
+                     (0, [0x20992864, 0x20b90440]), (243_000_000, [0x20892800])],
+                    into: XCTUnwrap(driver.box), clock: clock)
+        time = clock.seconds(264_000_000)
+        model.stop()
+        let events = try XCTUnwrap(model.take?.events)
+        XCTAssertEqual(events.count, 5)
+        for (event, expected) in zip(events, [0.0, 250, 500, 500, 500]) {
+            XCTAssertEqual(event.t, expected, accuracy: 0.000_001)
+        }
+        XCTAssertEqual(model.take?.captureStatus, "complete")
+        XCTAssertEqual(try XCTUnwrap(model.take?.durationMs), 1000, accuracy: 0.000_001)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: model.exported()) as? [String: Any])
+        let exported = try XCTUnwrap(json["events"] as? [[String: Any]])
+        XCTAssertEqual(exported.count, 5)
+        XCTAssertEqual(try XCTUnwrap(exported[1]["t"] as? Double), 250, accuracy: 0.000_001)
+        XCTAssertEqual(try XCTUnwrap(exported[4]["t"] as? Double), 500, accuracy: 0.000_001)
+    }
+    func testOneCallbackRetainsDistinctPacketTimesAndOneZeroFallback() throws {
+        let box = DrumMIDIMailbox()
+        let clock = NativeMIDIHostClock(numer: 125, denom: 3, readTicks: { 72_000_000 })
+        try receive([(24_000_000, [0x20992660]), (48_000_000, [0x20892600]),
+                     (0, [0x20992864, 0x20b90440])], into: box, clock: clock)
+        let batch = box.drain()
+        XCTAssertFalse(batch.failed)
+        XCTAssertEqual(batch.entries.count, 4)
+        for (entry, expected) in zip(batch.entries, [1.0, 2, 3, 3]) {
+            XCTAssertEqual(entry.uptime, expected, accuracy: 0.000_000_001)
+        }
+        XCTAssertEqual(batch.entries.map(\.message.data), [[0x99, 38, 96], [0x89, 38, 0], [0x99, 40, 100], [0xb9, 4, 64]])
+    }
+    @MainActor
+    func testLearnRejectsDelayedPreArmPacketBeforeExportClampAndFreezesNewHit() throws {
+        let clock = NativeMIDIHostClock(numer: 125, denom: 3, readTicks: { 288_000_000 })
+        var time = clock.seconds(240_000_000)
+        let driver = FakeMIDIInput()
+        let model = NativeMIDIModel(driver: driver, clock: { time }, usesTimer: false)
+        model.refresh(); model.selectedInput = 71; model.record()
+        time = clock.seconds(264_000_000); model.armLearn() // 11 seconds
+        // The later controller forces export's monotonic clamp past the arm boundary.
+        // Learn must still inspect the delayed hit's original packet timestamp.
+        try receive([(270_000_000, [0x20b90440]), (258_000_000, [0x20992660]),
+                     (271_000_000, [0x20992800])], into: XCTUnwrap(driver.box), clock: clock)
+        model.poll()
+        XCTAssertNil(model.candidate)
+        XCTAssertEqual(model.take?.events.count, 3)
+        try receive([(272_000_000, [0x20992964]), (273_000_000, [0x20992a64])],
+                    into: XCTUnwrap(driver.box), clock: clock)
+        time = clock.now(); model.poll()
+        XCTAssertEqual(model.candidate?.data, [0x99, 41, 100])
+        XCTAssertTrue(model.take!.padMap.mappings.isEmpty, "Learn still requires Apply")
+        model.applyName("Snare")
+        XCTAssertEqual(model.take?.padMap.mappings, [DrumMIDIPadName(channel: 10, note: 41, label: "Snare")])
+        model.stop()
+    }
+    @MainActor
+    func testPacketTimestampBeyondTakeLimitStopsPartialAndRetainsPrefix() throws {
+        let clock = NativeMIDIHostClock(numer: 125, denom: 3, readTicks: { 288_000_000 })
+        let driver = FakeMIDIInput()
+        let model = NativeMIDIModel(driver: driver, clock: { 10 }, usesTimer: false)
+        model.refresh(); model.selectedInput = 71; model.record()
+        try receive([(264_000_000, [0x20992660]), (29_064_000_000, [0x20992864])],
+                    into: XCTUnwrap(driver.box), clock: clock)
+        model.poll()
+        XCTAssertFalse(model.isRecording)
+        XCTAssertEqual(model.take?.captureStatus, "partial")
+        XCTAssertEqual(model.take?.events.map(\.data), [[0x99, 38, 96]])
+        XCTAssertLessThanOrEqual(try XCTUnwrap(model.take?.durationMs), DrumMIDITake.maximumDuration)
+        XCTAssertNoThrow(try model.exported())
+    }
     func testDriverErrorNotificationSnapshotAndActiveDeviceRouting() {
         var notification = MIDIIOErrorNotification(messageID: .msgIOError,
             messageSize: UInt32(MemoryLayout<MIDIIOErrorNotification>.size), driverDevice: 7, errorCode: -50)

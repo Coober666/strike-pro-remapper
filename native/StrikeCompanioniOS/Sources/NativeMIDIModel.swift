@@ -24,7 +24,7 @@ final class NativeMIDIModel: ObservableObject {
     private var activeInput: Int32?
     private var summaries: [String: DrumMIDINoteSummary] = [:]
 
-    init(driver: (any NativeMIDIInputDriver)? = nil, clock: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }, usesTimer: Bool = true) {
+    init(driver: (any NativeMIDIInputDriver)? = nil, clock: @escaping () -> Double = { NativeMIDIHostClock.live.now() }, usesTimer: Bool = true) {
         self.driver = driver ?? CoreMIDIInputDriver()
         self.clock = clock
         self.usesTimer = usesTimer
