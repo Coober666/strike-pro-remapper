@@ -71,11 +71,19 @@ points rather than returning false. Keep the final visibility assertion. The thr
 UI tests have a 300-second allowance for cold hosted providers; other tests default
 to 180 seconds and the builder caps every test at 300 seconds. Do not skip assertions
 or retry file mutations to accommodate a slow provider.
-For cancellation, prefer the real Cancel button in the running Files service's
-accessibility tree (com.apple.DocumentManagerUICore.Service), then the host's actual
-Button. Xcode 27 can expose the close control only as a misleading Other proxy in
-the host while the service retains its correct Button/frame. Require a valid frame
-inside the screen and hittability before choosing a control. If Cancel is hidden,
+For cancellation, inspect one public host snapshot per poll and walk its children
+locally for an actual Cancel Button beneath an actual NavigationBar. If the host
+has no actionable candidate, log the Files service state and inspect one service
+snapshot only when it is running; an actual service Cancel Button is also allowed.
+Keep host bounds for both roots. A missing host snapshot cannot establish bounds
+for a service tap. Xcode 27 can expose a misleading Other proxy in the host; reject
+it even if it says Cancel. Use exact label predicates for identifier-less controls,
+optionally scoped by the observed NavigationBar identifier/label, then resolve a
+fresh real Button and require its enabled/full onscreen frame and hittability.
+Do not run broad exists preflights against an incomplete remote tree. Keep compact
+per-poll root/state/candidate/choice diagnostics and a failure screenshot, rather
+than repeatedly retrieving the complete AX debug tree. Global export Open handling
+is separate and unchanged. If Cancel is hidden,
 navigate only through the actual Recents TabBar button, then wait for actionable
 Cancel. Never use generic Recents/Cancel Other proxies or More as readiness evidence:
 More opens sorting options and can leave a covered Cancel with an invalid hit point.
@@ -170,3 +178,19 @@ never guess a position or use generic Other proxies. This specific exception
 avoids extension activation and does not change the Files reopening rule above.
 Keep picker dismissal, enabled Import and selected-song/edited-value assertions.
 No retry or broader launch-error suppression is justified by this failure.
+
+
+## Hosted cancellation readiness follow-up
+
+Run 39702644297 / artifact 12395717027 failed before any Cancel tap: the initial
+90-second predicate timed out. The recording shows no picker at 50 seconds, an
+incomplete popover shell at 60–80 seconds, then a full Recents picker at 90 seconds.
+Broad Cancel/Recents `exists` lookups consumed the budget in two polling cycles.
+The final host AX tree (requested after the timeout) exposed the real Cancel Button
+under `DOCSidebarView`, plus a misleading Other Cancel; Recents was a sidebar Cell,
+not a TabBar Button. The artifact did not capture per-poll service state/root or
+when AX first exposed Cancel. Repeated-query overhead is plausible, not proven.
+The cancellation-only snapshot-first candidate above retains the 90-second budgets,
+300-second test ceilings, one-shot actions and dismissal/state-retention assertions.
+A passing same-native run elsewhere does not establish a fix. See the diagnosis
+note for the recorded evidence and validation limits.

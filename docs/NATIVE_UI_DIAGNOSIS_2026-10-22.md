@@ -99,5 +99,78 @@ attachments were exported and inspected: the successful name was `Snare`;
 limitation. `python3 tools/test_ios_build.py` passed all eight contracts;
 `git diff --check` passed.
 
-Hosted Xcode 16.4 iPad validation remains required before closing #88. These local
-passes do not resolve the first-launch/PID/teardown failures above.
+At that initial local checkpoint, hosted Xcode 16.4 iPad validation was still
+pending. Later run 39702644297 passed both Xcode 16.4 lanes for `f576f00`, including
+the strict Learn-name workflow; its Xcode 27.1 iPad lane failed Files readiness as
+documented below. The new snapshot-first candidate still requires hosted matrix
+validation. These local passes do not resolve the first-launch/PID/teardown failures.
+
+
+## Hosted readiness follow-up: run 39702644297
+
+[#87's Xcode 27.1 iPad job](https://github.com/Coober666/strike-pro-remapper/actions/runs/39702644297/job/119575255695)
+failed `testFilePickerCancellationPreservesSong` at the initial 90-second readiness
+assertion, before `tapControl`. Artifact `12395717027` has archive SHA-256
+`df797180b53fe3b209db4f82acd3cdd8135608279327a0313c17029be2f87718`.
+Its receipt identifies source `f77ac678a9b043ef0b1f715485f745d18a4b695c`
+(PR merge ref) and Xcode 27.1 (27A9275). The workflow branch head was `f576f00`.
+
+Import was synthesized once at 21.91 seconds. Video at 24/50 seconds shows no
+picker; 60/70/80 seconds shows a partial blank popover with an unfinished close
+control; 90/113/146 seconds shows the complete Recents picker and X close. The
+initial readiness checks began at 24.36 seconds. Two polling cycles consumed the
+budget in blocking/retried Cancel/Recents `exists` queries; no candidate `Find`,
+enabled/frame snapshot or hittability check completed before the failure.
+
+The failure's host snapshots were requested at 123.29 and 146.51 seconds. That final
+host tree (pid 9821) exposed a real Button labelled Cancel, with no logged identifier,
+frame `(50,372,36,36)` under NavigationBar `DOCSidebarView`. It also exposed a misleading
+Other labelled Cancel with a 1-point-wide frame. Recents was the selected sidebar
+Cell `DOC.sidebar.item.Recents`; there was no Recents TabBar Button in that tree.
+The recording alone does not prove when the real button became queryable through
+AX. Per-poll service state and root provenance were not captured, so whether the
+service state guard skipped its query is unknown. This failure does not test the
+host-coordinate tap or post-cancellation assertions.
+
+The follow-up changes cancellation discovery only: one throwing snapshot per queried
+root, host first, followed by local traversal for real navigation-bar Cancel Buttons
+or actual TabBar Recents Buttons. A running-service fallback is explicit and logged.
+Exact label predicates retain identifier-less controls. A candidate must resolve to
+a fresh actual live Button with enabled/full onscreen frame and hittability before
+its single host-coordinate tap. Generic Other and sidebar Cell proxies remain
+rejected. The selected control is retained across the readiness result, avoiding an
+extra discovery pass. Poll diagnostics report root/state/candidate count/choice;
+failures keep a screenshot without fetching an unbounded debug tree. Both existing
+90-second waits, per-test ceilings, dismissal and retained-song/edit assertions stay.
+Global export Open handling and production app behavior are unchanged.
+
+This is a candidate correction, not a proven cause or fix. A #69 hosted iPad job
+passed with the same native tree, so that pass and the #87 failure must both remain
+visible. Repeated-query overhead is plausible; the artifact cannot isolate it from
+late OS-provider/AX readiness. The candidate received root and independent review,
+including a guard that host bounds themselves must be nonempty, non-null and finite.
+
+Exactly one focused `testFilePickerCancellationPreservesSong` execution passed on
+each installed iPad/iPhone simulator with Xcode 27.1 (27A9275), iOS 27.0. The iPad
+completed in 17.30 seconds; the iPhone completed in 17.30 seconds. Both retained the
+90-second readiness waits, 180/300-second allowances, no verbose OS diagnostics,
+serial execution and no signing. Compact logs explicitly identify each queried
+root/state/candidate count and selected control. On iPad the host had no real
+candidate; the second poll selected the running service's real Cancel Button.
+On iPhone, the service's actual TabBar Recents Button was selected on poll 2;
+poll 3 then selected the host's real navigation-bar Cancel Button. Both paths
+required dismissal, enabled Import and selected-song retention after the one-shot
+actions.
+
+Logs, xcresults, commands and native-input SHA-256 hashes are retained locally at
+`/private/tmp/strike-files-snapshot-candidate-20261022/`. Its receipt records base
+`f576f007c8d381926f45f567cce0ebf9877121ed` plus the reviewed test-source edit,
+`inputs_unchanged: true` for both runs, and no outer timeout. No source or docs were
+edited while either runtime check executed. Both owned simulators were shut down.
+`python3 tools/test_ios_build.py` passed all eight contracts; `git diff --check`
+passed. This is focused new-source validation, not a full-matrix or slow-provider
+reproduction claim; run 39702644297 remains failed and hosted validation is pending.
+
+Downloaded bundle, recording and extracted frames are retained locally under
+`/private/tmp/strike-hosted87-failure-39702644297/`; no devices were accessed to
+inspect them and the failed run was not retried.
