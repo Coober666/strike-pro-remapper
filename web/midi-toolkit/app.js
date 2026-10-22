@@ -1,4 +1,4 @@
-import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, matchesFocus, summarize, compare, demoSession, exportCSV, report} from './core.js';
+import {MAX_EVENTS, MAX_DURATION, MAX_FILE_BYTES, newSession, validateSession, message, matchesFocus, summarize, compare, demoSession, exportCSV, report, triggerAdvice} from './core.js';
 import {listSessions, readSession, readSavedSession, saveSession, deleteSession, readSessions, restoreSessions} from './storage.js';
 import {sessionTags, matchesSearch, EXERCISES} from './metadata.js';
 import {validateArchive, archiveJSON, MAX_ARCHIVE_BYTES} from './organization.js';
@@ -10,6 +10,7 @@ let current = newSession(), savedId = null, dirty = false, mode = 'ready', acces
 let elapsed = 0, started = 0, playhead = 0, playing = false, playStart = 0, playFrom = 0, reference = null;
 let lastDraw = 0, drawNeeded = true, storageBusy = false;
 let savedRevision=null;
+let coachSnapshot=null;
 const setStatus = (text, error=false) => { $('status').textContent=text; $('status').classList.toggle('error', error); };
 const active = () => ['recording','paused','syncing'].includes(mode);
 const hostMode = () => $('capture-source').value === 'host';
@@ -45,6 +46,14 @@ function controls() {
   $('compare').disabled = active() || storageBusy;
   for (const id of ['name','session-tags','session-notes']) $(id).disabled=storageBusy;
   $('exercise').disabled=busy || active();
+  $('coach-review').disabled=busy || active() || !current.events.length;
+  if (coachSnapshot && (coachSnapshot.session !== current || coachSnapshot.events !== current.events.length ||
+      coachSnapshot.reference !== reference || coachSnapshot.focus !== focus || coachSnapshot.exercise !== current.exercise ||
+      coachSnapshot.padMap !== current.padMap || coachSnapshot.status !== current.captureStatus || active())) {
+    coachSnapshot=null;
+    $('coach-result').textContent='The take or analysis context changed. Review again for current observations.';
+    $('coach-notice').textContent='';
+  }
   const annotationsValid=metadataValid();
   for (const id of ['save','save-copy','json','report']) $(id).disabled ||= !annotationsValid;
   $('backup-export').disabled=active() || busy || !backupSelection.size;
@@ -280,6 +289,7 @@ $('save').onclick=() => saveCurrent();
 $('save-copy').onclick=() => saveCurrent(true);
 $('compare').onchange=async () => {
   const id=$('compare').value;
+  reference=null; controls(); renderComparison();
   try { const loaded=id ? await readSession(id) : null; if ($('compare').value === id) { reference=loaded; focusSignature=''; render(); } }
   catch (e) { reference=null; renderComparison(); setStatus(e.message,true); }
 };
@@ -291,6 +301,28 @@ function download(body,type,suffix) {
 $('json').onclick=() => download(JSON.stringify(validateSession(current),null,2),'application/json','.json');
 $('csv').onclick=() => download(exportCSV(current),'text/csv;charset=utf-8','.csv');
 $('report').onclick=() => download(report(current,reference,focus),'text/plain;charset=utf-8','-report.txt');
+$('coach-review').onclick=() => {
+  if (active()) return;
+  const review=triggerAdvice(current,reference,focus), root=$('coach-result'); root.replaceChildren();
+  const text=(parent,tag,value) => { const el=document.createElement(tag); el.textContent=value; parent.append(el); return el; };
+  text(root,'p',review.scope); text(root,'p',review.limits);
+  if (!review.notes.length) text(root,'p','No note-on hits in this analysis focus.');
+  for (const n of review.notes.slice(0,128)) {
+    const detail=document.createElement('details'); detail.open=!!focus || review.notes.length===1;
+    text(detail,'summary',`${n.label || 'Unnamed note'} · ${n.key} · ${n.hits} hits · ${n.sufficient ? '20-hit review minimum met' : 'More hits needed'}`);
+    text(detail,'h3','Observed'); for (const line of n.observations) text(detail,'p',line);
+    text(detail,'h3','Next check'); for (const line of n.next) text(detail,'p',line);
+    text(detail,'h3','Reference'); text(detail,'p',n.comparison); root.append(detail);
+  }
+  if (review.notes.length > 128) text(root,'p','Showing the first 128 channel/note pairs; export the report for all.');
+  text(root,'h3','Adjacent different-note events');
+  text(root,'p','Same channel, at most 12 ms apart, at least 3 occurrences. Intentional simultaneous playing and multiple zones can do this. Repeat an isolated-pad exercise and check routing before considering crosstalk settings.');
+  if (!review.correlations.length) text(root,'p','None met this review threshold; this does not rule out crosstalk.');
+  for (const p of review.correlations.slice(0,20)) text(root,'p',`${p.keys.join(' + ')}: ${p.count} adjacent pairs; gap ${p.minMs.toFixed(1)}-${p.maxMs.toFixed(1)} ms.`);
+  if (review.correlations.length > 20) text(root,'p',`Showing 20 of ${review.correlations.length} candidate pairs; narrow the analysis focus for others.`);
+  coachSnapshot={session:current,events:current.events.length,reference,focus,exercise:current.exercise,padMap:current.padMap,status:current.captureStatus};
+  $('coach-notice').textContent='Review ready. The exported report includes these observations.';
+};
 function stopReplay() { playing=false; controls(); }
 $('play').onclick=() => {
   if (playing) { stopReplay(); return; }

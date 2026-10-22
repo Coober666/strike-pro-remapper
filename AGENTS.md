@@ -240,6 +240,25 @@ WebKit MIDI is simulated and does not establish physical mobile compatibility.
 
 ## Host lifecycle and recovery
 
+Trigger Coach lives in core.js as pure triggerAdvice/coachReport functions and
+the toolkit's explicit Review action. No MIDI outputs or module-setting writes.
+20 hits, 30 ms repeats and 12 ms adjacent same-channel different-note events are
+transparent review heuristics, never fault classifiers or statistical confidence.
+Reset intervals/pairs at pauses; Note On zero is Note Off. Bound pair display to
+20 and UI notes to 128; reports retain all note rows. Partial/synthetic/sparse
+evidence must stay labeled. Comparison eligibility requires matching nonempty
+exercise, complete non-demo takes and 20 hits each, without proving technique.
+Invalidate displayed review when context changes. Pure and browser MIDI tests
+cover this; physical validation and module-specific advice remain separate.
+
+Beta delivery uses tools/prepare_release.py and the manual beta-draft workflow.
+Accept only this repository's successful main push CI with all five required jobs.
+Verify source/Windows sidecars, exact manifest inventories, payload hashes and
+clean revision identity before copying unchanged ZIPs to an exclusive folder.
+The local command never mutates GitHub. The workflow can create a new draft
+prerelease only; never publish automatically or overwrite releases/reuse tags.
+Keep the write token out of artifact preparation. See docs/BETA_DELIVERY.md.
+
 `launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
 It starts only one service, defaults to localhost, and uses the existing paired handler
 when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
@@ -997,7 +1016,7 @@ MIDI ports or discovering cards. This is not physical hardware or clean-OS accep
 The launcher Open editor starts then opens; Try a demo starts and opens synthetic MIDI.
 Wi-Fi demo pairing uses an exact view=demo flag, never a user-provided redirect URL.
 Manual updates only. Source entry points remain supported. No automatic activation.
-Windows builds also generate Help/*.txt from an explicit public-guide allowlist in
+Windows builds also generate Help/*.txt, including Trigger Coach, from an explicit public-guide allowlist in
 tools/package_help.py, copying two selected screenshots. The text keeps command blocks
 intact, points included-guide links at packaged filenames, and uses revision-specific
 repository links for omitted evidence. Do not package private captures or whole evidence

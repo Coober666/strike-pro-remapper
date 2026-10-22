@@ -4,6 +4,67 @@ import {validateArchive, archiveJSON} from '../web/midi-toolkit/organization.js'
 import {matchesSearch} from '../web/midi-toolkit/metadata.js';
 import {emptyProfile, validateProfile, assignPad, padLabel, readProfiles, writeProfiles} from '../web/midi-toolkit/profiles.js';
 import {newSession, validateSession, summarize, compare, message, demoSession, exportCSV, report, MAX_EVENTS, MAX_DURATION} from '../web/midi-toolkit/core.js';
+import {triggerAdvice, coachReport} from '../web/midi-toolkit/core.js';
+
+function coachTake(count=24, gap=500, velocity=125) {
+  const s=newSession('Review','Test input'); s.exercise='soft';
+  s.events=Array.from({length:count},(_,i) => ({t:i*gap,data:[0x99,38,velocity]}));
+  s.durationMs=count*gap; return s;
+}
+test('coach uses counted observations with explicit review minimum, no mutation', () => {
+  const s=coachTake(), before=JSON.stringify(s), r=triggerAdvice(s).notes[0];
+  assert.equal(r.hits,24); assert.equal(r.top,24); assert.equal(r.rapid,0); assert.equal(r.sufficient,true);
+  assert.match(r.next.join(' '),/soft and firm/); assert.match(coachReport(s),/not statistical confidence/);
+  assert.equal(JSON.stringify(s),before);
+  const sparse=triggerAdvice(coachTake(19,10)).notes[0];
+  assert.equal(sparse.sufficient,false); assert.match(sparse.next.join(' '),/Collect at least 20/);
+  assert.doesNotMatch(sparse.next.join(' '),/sensitivity|retrigger/);
+});
+test('coach separates channels, excludes note-offs and resets rapid gaps at pauses', () => {
+  const s=coachTake(0); s.events=[{t:0,data:[0x99,38,80]},{t:0,data:[0x98,38,80]},
+    {t:1,data:[0x99,38,0]},{t:2,data:[0x89,38,80]},{t:3,data:[0x99,38,80]}];
+  s.segments=[0,4]; s.durationMs=4;
+  const r=triggerAdvice(s); assert.equal(r.notes.length,2); assert.equal(r.notes.find(n => n.key==='10:38').rapid,0);
+  assert.equal(r.correlations.length,0);
+  s.segments=[0]; assert.equal(triggerAdvice(s,null,'10:38').notes[0].rapid,1);
+});
+test('coach labels rolls, partial and synthetic takes without diagnosing triggers', () => {
+  const s=coachTake(24,10,80); s.exercise='rolls';
+  assert.match(coachReport(s),/Short intervals are expected in rolls/);
+  s.captureStatus='partial'; assert.match(triggerAdvice(s).notes[0].next.join(' '),/Repeat a complete take/);
+  s.synthetic=true; assert.match(coachReport(s),/not hardware evidence/);
+  assert.match(coachReport(s),/cannot prove missed physical hits/);
+});
+test('adjacent different-note review stays bounded and does not label a groove crosstalk', () => {
+  const s=coachTake(0); s.durationMs=5000;
+  for (let i=0;i<6;i++) s.events.push({t:i*500,data:[0x99,38,80]},{t:i*500+5,data:[0x99,42,70]});
+  const r=triggerAdvice(s,null,'10:38'); assert.equal(r.correlations[0].count,6);
+  assert.equal(r.correlations[0].minMs,5); assert.match(coachReport(s),/Intentional simultaneous playing/);
+  assert.equal(triggerAdvice(s,null,'9:38').correlations.length,0);
+  s.segments=Array.from({length:s.events.length},(_,i) => i);
+  assert.equal(triggerAdvice(s).correlations.length,0);
+});
+test('coach comparison requires matching exercise and sufficient complete real takes', () => {
+  const a=coachTake(), b=coachTake(30,500,85);
+  assert.match(triggerAdvice(a,b).notes[0].comparison,/Both takes meet/);
+  assert.match(triggerAdvice(a,b).notes[0].comparison,/40.0/);
+  for (const change of [s=>s.synthetic=true,s=>s.captureStatus='partial',s=>s.exercise='hard',s=>s.exercise='']) {
+    const other=structuredClone(b); change(other);
+    assert.match(triggerAdvice(a,other).notes[0].comparison,/Exploratory comparison only/);
+  }
+  assert.match(triggerAdvice(a,coachTake(2)).notes[0].comparison,/Exploratory/);
+  assert.match(report(a,b),/Trigger Coach/);
+  assert.match(coachReport(a,null,'9:38'),/No note-on hits/);
+});
+test('dense maximum-size takes retain full counts while bounding pair output', () => {
+  const s=coachTake(0);
+  s.events=Array.from({length:MAX_EVENTS},(_,i) => ({t:0,data:[0x99,i%128,80]}));
+  const review=triggerAdvice(s);
+  assert.equal(review.notes.reduce((sum,n)=>sum+n.hits,0),MAX_EVENTS);
+  assert.equal(review.correlations.length,128);
+  assert.match(coachReport(s),/Showing 20 of 128 candidate pairs/);
+  assert.equal(triggerAdvice(s,null,'10:38').correlations.length,2);
+});
 test('partial host captures retain their status across import and exports', () => {
   const value=demoSession(); value.captureStatus='partial';
   assert.equal(validateSession(value).captureStatus,'partial');

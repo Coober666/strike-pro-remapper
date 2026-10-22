@@ -239,6 +239,15 @@ contain the full received data, with partial status where applicable. Imported s
 stay in the browser; host-captured events travel from the paired host to that browser.
 No session is uploaded to an external service.
 
+## Trigger Coach review
+
+After stopping a take, choose **Review this take**. Expand a channel/note for
+counted velocity and timing patterns, sample sufficiency and a suggested next
+exercise. The current analysis focus and saved reference apply. Export report
+includes the same observations. Changes to the take or analysis context invalidate
+the displayed review. See [Trigger Coach](TRIGGER_COACH.md) for the transparent
+thresholds, comparison requirements and limits; these are not fault diagnoses.
+
 ## Verification
 
 `npm run test:midi` checks deterministic parsing, statistics, channel separation,

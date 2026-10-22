@@ -42,13 +42,14 @@ and stable-release publication remain separate gates.
 
 The integrated MIDI toolkit adds local generic MIDI capture, saved browser sessions,
 visual replay, velocity/controller measurements, session comparison and portable exports.
-It is the measurement foundation for #30, not Trigger Coach advice. Real Mac/Strike
+It supplies the measurement foundation for #30; the first Coach review now builds
+on it with explicit evidence limits and follow-up exercises. Real Mac/Strike
 CoreMIDI capture is verified, including notes and hi-hat CC4. Idle ownership,
 pause/resume, lease expiry and reopen checks also passed. See the bounded
 [October 14 evidence](docs/MAC_HARDWARE_ACCEPTANCE_2026-10-14.md).
 The Wi-Fi toolkit adds paired host input capture, host timestamps and retained-take
 recovery; other OS drivers, physical disconnection and newest mobile workflows still
-need testing. Module-specific recommendations remain deferred.
+need testing. Specific module-setting values remain deferred.
 The setup/profile follow-on adds read-only host diagnostics, confirmed MIDI Learn,
 portable user-named profiles and capture snapshots of pad names. No factory maps are
 assumed. Diagnostics and learning have simulated coverage; Mac/Strike input access
@@ -86,7 +87,13 @@ and physical module/mobile acceptance remain separate gates.
 - #57: Raspberry Pi host spike remains hardware-unverified.
 - #55: direct iPad USB research remains deferred; the native kit inspector does not access USB.
 - #29: Kit Balance Assistant has a local sample-based MVP: bounded RMS/peak measurements, same-group and A/B warnings, audition and explicit one-Undo level adjustments. Physical listening acceptance remains open.
-- #30: MIDI measurement foundation is integrated; evidence-based Trigger Coach advice remains.
+- #30: initial Trigger Coach review adds counted patterns, evidence sufficiency,
+  follow-up exercises and bounded comparisons. Physical validation and any
+  module-specific setting advice remain. See [the guide](docs/TRIGGER_COACH.md).
+
+The manual [beta delivery workflow](docs/BETA_DELIVERY.md) prepares verified CI
+packages as a draft prerelease with clear download names and setup instructions.
+Public release, signing and independent OS/device acceptance remain separate.
 
 The physical iPad → Intel Mac → Strike save/deploy/playback record is in
 [WIFI_EDITOR.md](docs/WIFI_EDITOR.md). No newer polish or launcher behavior inherits that
