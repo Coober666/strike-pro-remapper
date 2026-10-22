@@ -174,3 +174,92 @@ reproduction claim; run 39702644297 remains failed and hosted validation is pend
 Downloaded bundle, recording and extracted frames are retained locally under
 `/private/tmp/strike-hosted87-failure-39702644297/`; no devices were accessed to
 inspect them and the failed run was not retried.
+
+## Issue #85 lifecycle isolation follow-up
+
+The remaining launch/PID and teardown evidence has a concrete lifecycle boundary:
+all UI classes reset portrait before stopping the previous app, and leave their app
+running for implicit XCTest teardown. Artifact `12309515705` ends its assertions at
+50.39 seconds with the reading-options menu still open, then reaches 231.35 seconds
+in teardown. Artifacts `12383204089`, `12383908287` and `12311876886` stall during
+launch, before any app-owned UI assertion. These are not reasons to extend waits.
+
+`NativeUITestCase` now registers one owned application per test, stops the previous
+process before portrait setup, and explicitly stops its app before implicit teardown.
+It asserts notRunning before restoring portrait. Cold relaunches reuse the same
+private session, retaining the restoration/import checks. Failures still run cleanup;
+pure matcher tests that never launch an app do not stop a process. The existing
+exact stale-PID matcher is unchanged; no additional diagnostic is suppressed.
+
+The build helper also separates the hosted model and UI bundles into serial
+test-without-building sessions after build-for-testing. This removes their shared
+test-session boundary, which was an unresolved variable in the earlier local
+model-plus-export failure. Both entire targets remain selected. The scheme guard
+refuses skipped/missing/new targets rather than silently losing coverage. Distinct
+models/ui xcresults and phase commands/statuses survive in a version-2 receipt;
+startup failures now retain a receipt too. Failed phases or changed inputs prevent
+later sessions. The existing 180/300-second test and 35-minute CI ceilings remain.
+
+One controlled current-source baseline at `0033c7e` (tracked files equal main
+`23f1eb2`) ran all 34 model tests followed by cancellation, export/reopen and Learn
+on the installed iPad. It passed without source changes. Its log/xcresult/receipt
+are retained at `/private/tmp/strike-issue85-baseline-20261022/`. That pass does not
+replace the earlier failed full run or establish that a lifecycle cause is proven.
+
+Fourteen deterministic helper contracts cover phase failure propagation,
+startup receipt/cleanup, source-drift interruption and refusal to omit test targets.
+Build errors are included in the failure summary even when the final log lines
+only name failed compiler commands.
+
+The first follow-up at `6729ea8` exposed an isolation mistake: synchronous
+tearDownWithError is nonisolated, producing warnings locally and compile errors
+on hosted Xcode 16.4. Artifact `12400531925` retains that build failure and source
+receipt; no model/UI phase ran there. A subsequent async override at `13f0e57`
+compiled locally, but Xcode16.4 correctly rejected sending non-Sendable XCTestCase
+through super.tearDown (artifact `12400947983`). Cleanup now uses XCTest's public
+addTeardownBlock with an explicitly async main-actor closure capturing only the app
+and test name. Superclass hooks remain unchanged; no executor assumptions,
+unchecked Sendable or diagnostic suppression are used. Registration follows the
+initial successful stop, so a setup termination failure cannot be retried in cleanup.
+
+The local `6729ea8` iPad run passed the 34 models and the setlist UI class, then
+the signed-value editing test exceeded its unchanged 180-second limit after typing
+`-17`. Its thread samples show the app main thread idle and XCTest waiting for
+animation quiescence; its screenshot shows keyboard language suggestions for the
+numeric field. A temporary display-awake assertion did not release that wait.
+An initial sandbox display query had no valid display handle and cannot establish
+pre-intervention sleep state; do not attribute this failure to display sleep.
+The run was interrupted after the recorded timeout because its synchronous
+teardown source was already superseded; the receipt marks it incomplete with
+unchanged inputs. Logs, xcresults, samples and screenshot remain at
+`/private/tmp/strike-issue85-new-20261022/`. The iPhone phase did not start.
+
+NumericValueField now opts out of autocorrection, spelling checks, capitalization
+and smart dashes because its contents are literal signed integers. This retains
+ordinary keyboard entry/Done/Apply and exact signed-value assertions; it does not
+disable animations or XCTest idle waits. The keyboard configuration is a concrete
+input correction, not proof that all historic animation stalls have one cause.
+The `13f0e57` local run also hit the unchanged 180-second limit in running-order
+search after Return; its valid display query confirms the display was awake during
+the stall. Its screenshot, log, xcresults and incomplete unchanged-input receipt
+remain at `/private/tmp/strike-issue85-13f0e57-20261022/`. This demonstrates that
+lifecycle isolation and numeric keyboard traits alone do not resolve all of #85.
+
+The public teardown-block candidate `cbca730` completed its local iPhone run:
+34 model tests passed; 16 of 17 UI tests passed, without animation-notification
+timeouts. The export/reopen test failed at its local-location assertion (61.548s),
+before any export request. Browse appeared before its restored app-folder title;
+the test committed at22.67s to waiting only for On My iPhone. Its failure tree
+contains the real Strike Remapper Actions Menu Button under the Files navigation
+bar and an enabled Open button; the screenshot shows the correct app folder.
+This establishes a navigation race, not missing files or an export-write failure.
+Its completed failed xcresult/log and unchanged-source receipt remain at
+`/private/tmp/strike-issue85-cbca730-20261022/`; failure blocked the iPad phase.
+
+The navigation wait now accepts either Locations or the restored app folder before
+choosing the current path. It replaces the old local-only 30-second wait, without
+adding time, tapping again or changing the destination, export/reopen or value
+assertions. Subsequent source validation must exercise the entire workflow.
+See issue #85 and its linked PR for subsequent exact-source validation results.
+Do not describe a green rerun of unchanged source as a fix or claim all SDK failures
+are eliminated from a single new-source pass.

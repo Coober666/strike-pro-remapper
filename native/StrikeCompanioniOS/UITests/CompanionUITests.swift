@@ -2,14 +2,44 @@ import XCTest
 import UIKit
 
 @MainActor
-final class CompanionUITests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+class NativeUITestCase: XCTestCase {
+    private var ownsApplication = false
 
-    private func launchDemo() -> XCUIApplication {
-        XCUIDevice.shared.orientation = .portrait
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        continueAfterFailure = false
+    }
+
+    func makeApplication() -> XCUIApplication {
+        XCTAssertFalse(ownsApplication, "A test must reuse its owned application for cold relaunches")
+        ownsApplication = true
         let app = XCUIApplication()
         app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        // Stop the previous process before rotating. Rotating a foreground app
+        // from the previous test can start layout/keyboard work during relaunch.
         app.stopForUITestRelaunch()
+        XCUIDevice.shared.orientation = .portrait
+        let testName = name
+        // Release menus, keyboards and landscape state before XCTest's implicit
+        // teardown, including after a failed assertion. An async main-actor block
+        // avoids sending the non-Sendable XCTestCase through super.tearDown().
+        // Register after initial stop succeeds: never retry a failed termination.
+        addTeardownBlock { @MainActor [app, testName] () async throws in
+            print("UI cleanup starting: \(testName), app state=\(app.state.rawValue)")
+            app.stopForUITestRelaunch()
+            XCTAssertEqual(app.state, .notRunning, "The test must release its app before teardown")
+            print("UI cleanup stopped app: \(testName)")
+            XCUIDevice.shared.orientation = .portrait
+        }
+        return app
+    }
+}
+
+@MainActor
+final class CompanionUITests: NativeUITestCase {
+
+    private func launchDemo() -> XCUIApplication {
+        let app = makeApplication()
         app.launch()
         app.buttons["demo"].tap()
         XCTAssertTrue(app.staticTexts["song-title"].waitForExistence(timeout: 5))
@@ -28,10 +58,7 @@ final class CompanionUITests: XCTestCase {
     }
 
     func testRenamedWelcomeOffersKitEditorAndSetlistPerformance() {
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
-        app.stopForUITestRelaunch()
+        let app = makeApplication()
         app.launch()
         XCTAssertTrue(app.navigationBars["Strike Remapper"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["import"].exists)

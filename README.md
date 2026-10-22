@@ -275,7 +275,8 @@ captures stay in memory and need export before app termination. No MIDI output o
 kit mutation occurs. Direct iPad/Strike USB remains a separate hardware check.
 Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
-it for replacement; Apply confirms the edit and Cancel discards it.
+it for replacement; numeric entry disables spelling correction and smart dashes
+so signed values stay literal. Apply confirms the edit and Cancel discards it.
 **Export new copy** creates a uniquely named kit in a chosen Files
 folder, verifies its bytes and never replaces an existing file. Imported originals
 stay untouched. Kit edits remain in memory until export; export before closing the
@@ -293,6 +294,10 @@ and module playback remain separate checks.
 The [0.5 simulator record](docs/IOS_COMPANION_05_SIMULATOR_ACCEPTANCE_2026-10-18.md)
 covers kit-copy editing, original-file preservation and local Files export/reopen.
 Native parity CI also runs when the Python editor or binary format implementation changes.
+Model and UI tests run in separate serial sessions after one build, retaining both
+result bundles and failed-phase receipts. UI tests explicitly stop their owned app
+before resetting orientation and at teardown, preserving strict cold-launch and
+document-retention checks.
 iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
 Modern CI pins Xcode 27.1, matching local verification, instead of the runner's floating default; Xcode 16.4 remains the compatibility check.
 Files cancellation UI regressions inspect public snapshots for real Cancel buttons,
@@ -305,6 +310,8 @@ Cancellation taps use the validated control's center through the host to avoid
 XCTest trying to launch the Files extension. [Failure diagnosis](docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md)
 also records delayed MIDI Learn text delivery and remaining hosted launch failures.
 Folder export waits for Files' Open button to become actionable before submitting once.
+After Browse, navigation waits for either Locations or the restored app folder
+before choosing its path, so a late folder restore cannot strand the export check.
 Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.

@@ -2,14 +2,11 @@ import XCTest
 import UIKit
 
 @MainActor
-final class NativeMIDIUITests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+final class NativeMIDIUITests: NativeUITestCase {
     private func launch() -> XCUIApplication {
-        XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
-        app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
+        let app = makeApplication()
         app.launchEnvironment["STRIKE_UI_TEST_MIDI"] = "1"
-        app.stopForUITestRelaunch(); app.launch()
+        app.launch()
         app.buttons["midi-tools"].tap()
         return app
     }
