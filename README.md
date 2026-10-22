@@ -20,12 +20,23 @@ everything it doesn't touch.
 > [Safety](#safety) and [Format status](#format-status) for exactly what is
 > hardware-confirmed and how your files are protected.
 
+Keyboard and accessibility polish includes named pad/FX controls, focus retained
+after parameter edits, native Kit FX dialog navigation, clearer secondary text,
+and announced action/error feedback. See the [installation and accessibility
+review](docs/INSTALL_ACCESSIBILITY_2026-10-14.md) for tested scope and remaining checks.
+
 ## Quick start
 
 **Start with the [October 14 tested beta](docs/BETA_CANDIDATE_2026-10-14.md):** exact
 Windows/source downloads, checksums, what to open, and a ten-minute first test.
 The pinned CI artifacts require GitHub sign-in and expire November 13; they are
 controlled beta downloads, not a published stable release.
+
+Maintainers can prepare a draft beta with clearly named downloads, checksums and
+first-run instructions using the [beta delivery workflow](docs/BETA_DELIVERY.md).
+It promotes verified CI packages unchanged; publication is a separate step.
+Promotion requires passing Linux/macOS tests and both Windows backup test lanes
+alongside browser, host and package checks.
 
 **Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
 in show order, add song notes, make song-specific kit copies, preview numbered filenames,
@@ -46,6 +57,11 @@ tabs cannot silently overwrite or delete a newer saved session. Capture directly
 computer** from a paired iPad/iPhone: the USB host records and timestamps the take,
 and the browser receives it live. Host capture needs the optional MIDI input package;
 see [setup, recovery and limits](docs/MIDI_TOOLKIT.md).
+**Trigger Coach** reviews received velocity patterns, rapid repeats and adjacent
+different-note events, with explicit evidence limits and suggested follow-up
+exercises. Focus on one pad, compare a saved baseline, and export the observations.
+It never diagnoses missed physical hits or writes trigger settings. See
+[the Coach guide](docs/TRIGGER_COACH.md).
 **Host setup check** reports missing MIDI support, driver errors and visible inputs.
 The launcher demo retains host MIDI access after Wi-Fi pairing; the host accepts
 parallel toolkit asset loads over the LAN.

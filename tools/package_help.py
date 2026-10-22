@@ -10,6 +10,7 @@ GUIDES = {
     'HOST_LAUNCHER.md': 'Host-and-recovery.txt',
     'WIFI_EDITOR.md': 'iPad-and-iPhone.txt',
     'MIDI_TOOLKIT.md': 'MIDI-toolkit.txt',
+    'TRIGGER_COACH.md': 'Trigger-coach.txt',
     'SETLISTS.md': 'Setlists.txt',
     'KIT_BALANCE.md': 'Kit-balance.txt',
     'HANDS_ON_ACCEPTANCE.md': 'Device-checks.txt',
@@ -72,6 +73,7 @@ def write_help(folder, revision, root=ROOT):
         'Start with Windows-start.txt. For iPad/iPhone pairing, use iPad-and-iPhone.txt.\n'
         'Host-and-recovery.txt covers stopping, recovery, backups and upgrades.\n'
         'MIDI-toolkit.txt covers recording, browser storage, profiles and exports.\n'
+        'Trigger-coach.txt explains observations, review thresholds and next exercises.\n'
         'Device-checks.txt describes tests still requiring people or real hardware.\n'
         'Source-start.txt is for the separate Python source package.\n\n'
         f'Build revision: {revision}\n'

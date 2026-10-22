@@ -3968,6 +3968,7 @@ body.viewer-mode .connection-bar, body.viewer-mode #save-state, body.viewer-mode
 body.viewer-mode [data-factory-card] { display:none !important; }
 #sin-modal, #relink-modal, #kitfx-modal, #trig-modal, #similar-modal { display:none; position:fixed; inset:0; z-index:200; background:#000a; align-items:center; justify-content:center; }
 #sin-modal.open, #relink-modal.open, #kitfx-modal.open, #trig-modal.open, #similar-modal.open { display:flex; }
+#kitfx-modal { width:100%; height:100%; max-width:none; max-height:none; margin:0; border:0; padding:0; color:inherit; }
 .sim-row { display:flex; align-items:center; gap:8px; padding:5px 6px; border-bottom:1px solid #222b3a; font-size:.76rem; }
 .sim-row:hover { background:#101826; }
 .sim-row .sim-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -4027,7 +4028,7 @@ body.viewer-mode [data-factory-card] { display:none !important; }
 :root {
   --bg: #0c0f0e; --bg-deep: #080a09; --panel: #171b18; --raised: #222824;
   --field: #101310; --border: #303832; --border-lt: #434c45;
-  --text: #eee9dd; --text-2: #a6aca5; --text-3: #6f7771;
+  --text: #eee9dd; --text-2: #a6aca5; --text-3: #969e96;
   --accent: #c9a35e; --accent-dim: #a98549; --accent-soft: #c9a35e20;
   --info: #6d98a8; --ok: #84b89b; --danger: #ce6d5f;
   --r-sm: 4px; --r-md: 6px; --r-lg: 9px;
@@ -4442,7 +4443,7 @@ body[data-workspace="layout"] #advanced-panel { display: flex; }
 .advanced-tool-output.visible { display: block; }
 .audition-inline { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .audition-inline .tb-btn { padding: 2px 6px; font-size: .58rem; }
-.audition-sub { color: #5f675f; font: .5rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.audition-sub { color: #969e96; font: .5rem/1 Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
 .center-hdr { min-height: 46px; gap: 7px; padding: 7px 10px 6px; }
 .map-title { display: flex; flex-direction: column; margin-right: 5px; color: var(--text); font-family: Bahnschrift, "Arial Narrow", sans-serif; font-size: .78rem; letter-spacing: .04em; text-transform: none; }
 .map-title small { margin-bottom: 2px; color: #6f7771; font: .52rem/1 Consolas, monospace; letter-spacing: .13em; text-transform: uppercase; }
@@ -4632,6 +4633,11 @@ body[data-workspace="sounds"] #inst-panel { display: flex; flex-direction: colum
 
 :where(button, input, select, a, [tabindex]):focus-visible { outline: 2px solid #dfbd72; outline-offset: 3px; }
 .map-pad:focus-visible { outline: none; filter: drop-shadow(0 0 4px #dfbd72); }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.start-sec, .start-eyebrow, .start-count span, .start-card small, .start-card kbd,
+.start-kit span, .start-kit em, .browser-toolbar label, .det-zone-id .zlbl { color:#969e96; }
+.start-card:focus-visible, .start-kit:focus-visible { outline:2px solid #dfbd72; outline-offset:3px; }
+.kit-list button.kit-item { display:block; width:100%; text-align:left; font:inherit; }
 .map-touch-tools { display: flex; gap: 6px; padding: 6px 10px; flex-wrap: wrap; flex-shrink: 0; }
 .map-touch-tools button { min-height: 36px; min-width: 36px; color: #c7cdbf; background: #1c231e; border: 1px solid #475048; border-radius: 4px; }
 .map-touch-tools button[aria-pressed="true"] { color: #f1d48c; border-color: #a98b48; }
@@ -4817,6 +4823,7 @@ body:has(#balance-dialog[open]) { overflow:hidden; }
   <div style="flex:1;"></div>
 
   <span id="msg"></span>
+  <span id="editor-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
   <span id="kit-size-badge" style="display:none;font-size:.72rem;color:#668;flex-shrink:0;"></span>
   <span id="dirty-badge" style="display:none;">&#9679; Unsaved</span>
   <div style="position:relative;display:inline-flex;gap:2px;flex-shrink:0;">
@@ -5079,7 +5086,7 @@ body:has(#balance-dialog[open]) { overflow:hidden; }
       <button class="btn-secondary" style="font-size:.7rem;padding:4px 8px;flex-shrink:0;" onclick="toggleImportForm()" title="Import your own WAV files">&#43; WAV</button>
     </div>
     <div class="browser-toolbar">
-      <select id="inst-sort" onchange="savePref('instSort',this.value);instSort=this.value;renderInstruments()">
+      <select id="inst-sort" aria-label="Sort instruments" onchange="savePref('instSort',this.value);instSort=this.value;renderInstruments()">
         <option value="az">A–Z</option>
         <option value="used">Most used</option>
         <option value="recent">Recently added</option>
@@ -5587,7 +5594,7 @@ function handleMidiMessage(e) {
         break;
       }
     }
-    setMsg(`MIDI note ${note} vel ${velocity}${matched ? '' : ' — no pad matched'}`);
+    setMsg(`MIDI note ${note} vel ${velocity}${matched ? '' : ' — no pad matched'}`, false, false);
   }
 }
 
@@ -7244,13 +7251,15 @@ setInterval(async () => {
   } catch {}
 }, 1500);
 
-function setMsg(txt, err=false) {
+function setMsg(txt, err=false, announce=true) {
   const el = document.getElementById('msg');
   el.textContent = txt;
   el.className = err ? 'err' : '';
   el.onclick = null;
   el.title = '';
   el.style.cursor = '';
+  // Per-hit MIDI feedback stays visual; user actions and failures are announced.
+  if (announce) document.getElementById('editor-announcement').textContent = txt;
 }
 
 function setDirtyState(dirty, cnt, labels) {
@@ -7688,8 +7697,8 @@ function renderKitList() {
   el.innerHTML = kits.map((k,i) => {
     const badge  = SOURCE_BADGE[k.source] || '';
     const active = state_kitPath && k.path === state_kitPath ? ' active' : '';
-    return `<div class="kit-item${active}" onclick="openKit(${i})" title="${escHtml(k.path)}">`
-      + `<span class="kit-src">${badge}</span>${escHtml(k.name)}</div>`;
+    return `<button class="kit-item${active}" onclick="openKit(${i})" title="${escHtml(k.path)}">`
+      + `<span class="kit-src" aria-hidden="true">${badge}</span>${escHtml(k.name)}</button>`;
   }).join('');
 }
 
@@ -8202,10 +8211,37 @@ function rackParamSlider(padId, param, label, value, lo, hi, suffix='') {
   return `<div class="rack-param">
     <label>${label}</label>
     <input type="range" min="${lo}" max="${hi}" value="${Math.min(hi, Math.max(lo, value))}"
-      aria-label="${label}" oninput="this.nextElementSibling.value=this.value+'${suffix}'"
+      aria-label="${padId} Layer ${param.startsWith('la_') ? 'A' : 'B'} ${label}" oninput="this.nextElementSibling.value=this.value+'${suffix}'"
       onchange="setParam('${padId}','${param}',+this.value)">
     <output>${value}${suffix}</output>
   </div>`;
+}
+
+// Bind generated controls to their visible row labels after each render. Preserve
+// the actual focused control across a parameter response, not the request sender.
+function parameterFocus(root) {
+  const active = document.activeElement;
+  return root.contains(active) ? active.getAttribute('onchange') : null;
+}
+function labelParameterRows(root, focusChange=null, sectioned=false) {
+  let section = '';
+  root.querySelectorAll('.param-row').forEach(row => {
+    const label = row.querySelector('.param-lbl');
+    if (!label) return;
+    const controls = row.querySelectorAll('input, select');
+    if (!controls.length) { if (sectioned) section = label.textContent.trim(); return; }
+    controls.forEach(control => {
+      if (!control.hasAttribute('aria-label') && !control.hasAttribute('aria-labelledby')) {
+        const detail = controls.length > 1
+          ? control.title || (control.type === 'range' ? 'cutoff' : 'mode') : '';
+        control.setAttribute('aria-label', [section, label.textContent.trim(), detail].filter(Boolean).join(' '));
+      }
+    });
+  });
+  if (focusChange) {
+    [...root.querySelectorAll('[onchange]')].find(control =>
+      control.getAttribute('onchange') === focusChange && !control.disabled)?.focus({preventScroll:true});
+  }
 }
 
 function renderLayerRack() {
@@ -8276,7 +8312,11 @@ function renderLayerRack() {
 function renderPadDetail() {
   const el = document.getElementById('pad-detail');
   if (!el) return;
+  const focusChange = parameterFocus(el);
+  const rack = document.getElementById('layer-rack');
+  const rackFocus = parameterFocus(rack);
   renderLayerRack();
+  labelParameterRows(rack, rackFocus);
 
   if (!selectedGroup || !pads.length) {
     el.innerHTML = '<div class="det-empty">Click a pad or jack to view and edit</div>';
@@ -8555,19 +8595,19 @@ function renderPadDetail() {
     <summary>&#9654; Customize on map (${escHtml(primary.id)})</summary>
     <div class="cust-grid">
       <span>Label</span>
-      <input type="text" maxlength="6" value="${escHtml(effLbl)}"
+      <input type="text" aria-label="Map label" maxlength="6" value="${escHtml(effLbl)}"
         onchange="setPadOverride('${primary.id}','lbl',this.value.trim())">
       <span>Shape</span>
-      <select onchange="setPadOverride('${primary.id}','type',this.value)">${typeOpts}</select>
+      <select aria-label="Map shape" onchange="setPadOverride('${primary.id}','type',this.value)">${typeOpts}</select>
       <span>Size</span>
       <span class="cust-slider">
-        <input type="range" min="0.4" max="2.2" step="0.05" value="${curScale.toFixed(2)}"
+        <input type="range" aria-label="Map size" min="0.4" max="2.2" step="0.05" value="${curScale.toFixed(2)}"
           oninput="setPadSize('${editId}',+this.value);document.getElementById('cust-size-val').textContent=Math.round(this.value*100)+'%'">
         <span id="cust-size-val">${Math.round(curScale * 100)}%</span>
       </span>
       <span>Rotation</span>
       <span class="cust-slider">
-        <input type="range" min="-180" max="180" step="1" value="${curRot}"
+        <input type="range" aria-label="Map rotation" min="-180" max="180" step="1" value="${curRot}"
           oninput="setPadShape('${editId}','rot',+this.value);document.getElementById('cust-rot-val').textContent=this.value+'°'">
         <span id="cust-rot-val">${curRot}°</span>
       </span>
@@ -8583,14 +8623,14 @@ function renderPadDetail() {
 
   const otherPads = pads.filter(p => p.id !== primary.id);
   const copyHtml  = otherPads.length ? `<div class="copy-pad-row">
-    <label>Copy to:</label>
+    <label for="copy-pad-target">Copy to:</label>
     <select id="copy-pad-target">${otherPads.map(p =>
       `<option value="${p.id}">${escHtml(p.id)} — ${escHtml(p.label)}</option>`).join('')}</select>
     <button class="btn-secondary" style="font-size:.7rem;padding:3px 8px;white-space:nowrap;"
       onclick="copyPad('${primary.id}', document.getElementById('copy-pad-target').value)">Copy</button>
   </div>
   <div class="copy-pad-row">
-    <label>Swap with:</label>
+    <label for="swap-pad-target">Swap with:</label>
     <select id="swap-pad-target">${otherPads.map(p =>
       `<option value="${p.id}">${escHtml(p.id)} — ${escHtml(p.label)}</option>`).join('')}</select>
     <button class="btn-secondary" style="font-size:.7rem;padding:3px 8px;white-space:nowrap;"
@@ -8610,6 +8650,7 @@ function renderPadDetail() {
     </div>
     ${zoneHtml}${paramsHtml}${custHtml}${copyHtml}${hexHtml}
   </div>`;
+  labelParameterRows(el, focusChange);
 }
 
 // ── Assignment flow ───────────────────────────────────────────────────────────
@@ -8845,7 +8886,7 @@ function renderInstruments() {
   }
 
   if (!Object.keys(cats).length && !starredRels.length) {
-    el.innerHTML = '<p style="color:#666;font-size:.8rem;padding:8px">No instruments found.</p>';
+    el.innerHTML = '<p style="color:var(--text-2);font-size:.8rem;padding:8px">No instruments found.</p>';
     return;
   }
 
@@ -9355,6 +9396,13 @@ async function showKitFxModal() {
   if (d.error) { setMsg(d.error, true); return; }
   renderKitFx(d);
   document.getElementById('kitfx-modal').classList.add('open');
+  document.getElementById('kitfx-modal').showModal();
+}
+
+function closeKitFxModal() {
+  const dialog = document.getElementById('kitfx-modal');
+  dialog.close();
+  dialog.classList.remove('open');
 }
 
 async function kitFxSet(param, value) {
@@ -9390,6 +9438,8 @@ function kfxSection(label) {
 }
 
 function renderKitFx(d) {
+  const root = document.getElementById('kitfx-body');
+  const focusChange = parameterFocus(root);
   const rvOpts = [];
   const rvMax = Math.max(d.reverb_max_seen, d.reverb.type);
   for (let i = 0; i <= rvMax; i++) {
@@ -9439,7 +9489,8 @@ function renderKitFx(d) {
     ${kfxRow('Threshold', kfxNum('comp_threshold', eq.threshold_db, -90, 0, 'dB'))}
     ${kfxRow('Output',    kfxNum('comp_output',    eq.output_db,   -24, 24, 'dB'))}
     </div>
-    <div style="font-size:.65rem;color:#667;margin-top:6px;">Edits write to the loaded kit's KIT header — save the kit to persist. Per-pad send levels live in each pad's FX/Zone section.</div>`;
+    <div style="font-size:.65rem;color:var(--text-2);margin-top:6px;">Edits write to the loaded kit's KIT header - save the kit to persist. Per-pad send levels live in each pad's FX/Zone section.</div>`;
+  labelParameterRows(root, focusChange, true);
 }
 
 // ── Kit bundles ───────────────────────────────────────────────────────────────
@@ -11154,6 +11205,7 @@ async function exportSupportReport() {
       return;
     }
     if (!mod && e.key === ' ') {
+      if (e.target.closest('button, a, [role="button"], summary')) return;
       e.preventDefault();
       if (selectedPad) {
         const p = pads.find(p => p.id === selectedPad.id);
@@ -11539,15 +11591,15 @@ async function dismissAllAutosaves() {
 </div>
 
 <!-- Kit FX editor modal -->
-<div id="kitfx-modal" onclick="if(event.target===this)this.classList.remove('open')">
+<dialog id="kitfx-modal" aria-labelledby="kitfx-title" onkeydown="event.stopPropagation()" onclose="this.classList.remove('open')" onclick="if(event.target===this)closeKitFxModal()">
   <div class="sin-box" style="width:min(560px,94vw);">
-    <h3>&#x1F39A; Kit FX</h3>
+    <h3 id="kitfx-title">&#x1F39A; Kit FX</h3>
     <div id="kitfx-body" style="display:flex;flex-direction:column;"></div>
     <div style="display:flex;justify-content:flex-end;">
-      <button class="btn-secondary" onclick="document.getElementById('kitfx-modal').classList.remove('open')">Close</button>
+      <button class="btn-secondary" onclick="closeKitFxModal()">Close</button>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Explicit activation; no MIDI permission or sends until the user acts. -->
 <dialog id="factory-card-dialog" aria-labelledby="factory-card-title"

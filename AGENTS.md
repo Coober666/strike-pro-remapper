@@ -240,6 +240,27 @@ WebKit MIDI is simulated and does not establish physical mobile compatibility.
 
 ## Host lifecycle and recovery
 
+Trigger Coach lives in core.js as pure triggerAdvice/coachReport functions and
+the toolkit's explicit Review action. No MIDI outputs or module-setting writes.
+20 hits, 30 ms repeats and 12 ms adjacent same-channel different-note events are
+transparent review heuristics, never fault classifiers or statistical confidence.
+Reset intervals/pairs at pauses; Note On zero is Note Off. Bound pair display to
+20 and UI notes to 128; reports retain all note rows. Partial/synthetic/sparse
+evidence must stay labeled. Comparison eligibility requires matching nonempty
+exercise, complete non-demo takes and 20 hits each, without proving technique.
+Invalidate displayed review when context changes. Pure and browser MIDI tests
+cover this; physical validation and module-specific advice remain separate.
+
+Beta delivery uses tools/prepare_release.py and the manual beta-draft workflow.
+Accept only this repository's successful main push CI with all eight required jobs:
+both Linux/macOS test lanes, both Windows backup Python lanes, browser, Windows
+host and source/Windows packages. Match full matrix names, not a literal test job.
+Verify source/Windows sidecars, exact manifest inventories, payload hashes and
+clean revision identity before copying unchanged ZIPs to an exclusive folder.
+The local command never mutates GitHub. The workflow can create a new draft
+prerelease only; never publish automatically or overwrite releases/reuse tags.
+Keep the write token out of artifact preparation. See docs/BETA_DELIVERY.md.
+
 `launch_editor.py` is an optional Tk desktop window backed by `strike_remapper/host.py`.
 It starts only one service, defaults to localhost, and uses the existing paired handler
 when Wi-Fi is selected. It never takes over an occupied port or moves existing libraries.
@@ -258,7 +279,9 @@ library argument before hashing it, matching set_library_root(). Windows CI
 runs `tools/test_host_window.py` against real Tk widgets and a disposable loopback host;
 `STRIKE_REQUIRE_TK=1` makes unavailable Tk/display fail that job (other headless runs skip).
 Native WebKit downloads on macOS may decompose Unicode filenames: browser assertions
-compare NFC-normalized names. Release-polish paired tests log out in afterEach using
+compare NFC-normalized names. Wi-Fi editor tests wait for the redirected editor URL
+and visible session controls before interpreting a hidden boot overlay as readiness.
+Wi-Fi editor and release-polish paired tests log out in afterEach using
 the request context so failed assertions or aborted page routes cannot retain ownership.
 On macOS, the WebKit test project passes -NSAutomaticWindowAnimationsEnabled NO
 to its browser process. This avoids the sleeping-display animation thread hang in
@@ -283,6 +306,23 @@ snapshot current work before recovering another version. Never restore a recover
 to a removable-card save path automatically. Browser autosave is supplemental, uses
 `kitDirty`, and reports failures. Tests: `test_recovery_interruptions.py` and
 `test_host_launcher.py`, always with temporary libraries and loopback networking.
+
+## Accessibility and isolated installation checks
+
+Generated pad and Kit FX rows acquire accessible names from their visible labels
+through `labelParameterRows`. Parameter rerenders preserve the currently focused
+control by its stable onchange attribute, including layer rack controls; do not
+restore focus to a stale request sender. Kit FX uses a native dialog with its own
+keyboard scope. Let Space activate focused native controls before audition shortcuts.
+`setMsg` mirrors action/error feedback into a polite live region; per-hit MIDI
+feedback passes announce=false. Preserve these behaviors in generated viewer files.
+Regression coverage: tests/browser/zzzz-accessibility.spec.js (Chromium and WebKit).
+
+`tools/check_source_package.py` checks a real ZIP/sidecar, then runs paired startup,
+save/recovery and headless setup help in a fresh isolated Python process. Source CI
+runs this in a pinned unprivileged offline Linux container. The Python-free
+`tools/check_windows_clean.ps1` harness uses fresh temporary libraries and retains
+evidence. A successful developer-machine run is not clean-Windows-OS acceptance.
 
 **JS gotcha:** `togglePopover` is a native browser method on `HTMLElement` — the custom
 popover toggler is named `menuToggle(id)` to avoid the conflict.
@@ -980,7 +1020,7 @@ MIDI ports or discovering cards. This is not physical hardware or clean-OS accep
 The launcher Open editor starts then opens; Try a demo starts and opens synthetic MIDI.
 Wi-Fi demo pairing uses an exact view=demo flag, never a user-provided redirect URL.
 Manual updates only. Source entry points remain supported. No automatic activation.
-Windows builds also generate Help/*.txt from an explicit public-guide allowlist in
+Windows builds also generate Help/*.txt, including Trigger Coach, from an explicit public-guide allowlist in
 tools/package_help.py, copying two selected screenshots. The text keeps command blocks
 intact, points included-guide links at packaged filenames, and uses revision-specific
 repository links for omitted evidence. Do not package private captures or whole evidence

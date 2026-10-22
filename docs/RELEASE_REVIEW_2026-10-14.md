@@ -9,7 +9,21 @@ The [beta handoff](BETA_CANDIDATE_2026-10-14.md) pins the exact downloads, hashe
 install/upgrade steps, changes and first-test procedure. This review is a later
 documentation addition; it does not relabel those artifacts as a newer build.
 
-## Stack and integration
+## Integration completed October 14
+
+Jake authorized integration after review. PRs #66, #67 and #68 merged sequentially
+with merge commits `3addff4`, `d114159` and `45c210d`; dependent bases were retargeted
+to main with their expected diffs intact. Ancestry checks passed for all reviewed
+heads and the final tree exactly matches `ccdb40c`.
+
+[Main CI](https://github.com/Coober666/strike-pro-remapper/actions/runs/38628752928)
+passed all five jobs. Downloaded source and Windows ZIPs passed their sidecars and
+all 73 / 1,045 payload hashes. Extracted source pairing/assets and Windows
+GUI/demo/pairing/save/recovery/import/export/report checks passed. The beta handoff
+now pins these merged artifacts. Earlier review details below remain historical;
+physical acceptance and release publication were not completed by merging.
+
+## Stack and integration (pre-merge review)
 
 | Reference | Reviewed revision | Relationship |
 | --- | --- | --- |
@@ -49,7 +63,7 @@ Use merge commits to preserve the ancestry of this stack:
 
 If squash/rebase merging is chosen instead, rebase the dependent PRs deliberately;
 merely retargeting a stack with rewritten ancestry can leave misleading diffs.
-No merge, branch deletion or release publication was performed for this review.
+The original review performed no merges or publication; subsequent authorized integration is recorded above.
 
 ## Open issue reconciliation
 
