@@ -273,11 +273,15 @@ covers kit-copy editing, original-file preservation and local Files export/reope
 Native parity CI also runs when the Python editor or binary format implementation changes.
 iPhone and iPad run in separate jobs for each supported Xcode version, keeping full coverage within each device's CI budget.
 Modern CI pins Xcode 27.1, matching local verification, instead of the runner's floating default; Xcode 16.4 remains the compatibility check.
-Files cancellation UI regressions query the running Files service's real Cancel
-button before the host fallback, requiring valid visible hit targets. Files controls
-that disappear during a snapshot are polled again within the bounded wait. A restored
+Files cancellation UI regressions inspect public snapshots for real Cancel buttons,
+starting with the host and retaining an explicit running-service fallback. They
+resolve and validate the actual enabled, visible, hittable control before one tap;
+compact diagnostics retain slow-provider readiness evidence. A restored
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
 resumed-editor assertions remain required.
+Cancellation taps use the validated control's center through the host to avoid
+XCTest trying to launch the Files extension. [Failure diagnosis](docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md)
+also records delayed MIDI Learn text delivery and remaining hosted launch failures.
 Folder export waits for Files' Open button to become actionable before submitting once.
 Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.

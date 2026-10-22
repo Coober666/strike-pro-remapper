@@ -292,35 +292,157 @@ extension XCUIApplication {
     }
 
     func cancelFilesPicker() {
-        func cancelControl() -> XCUIElement? {
-            actionableFilesControl { $0.buttons["Cancel"].firstMatch }
+        enum Kind: String { case cancel = "Cancel", recents = "Recents" }
+        struct Candidate {
+            let kind: Kind
+            let identifier: String
+            let parentType: XCUIElement.ElementType?
+            let parentIdentifier: String
+            let parentLabel: String
         }
-        func recentsTab() -> XCUIElement? {
-            actionableFilesControl { $0.tabBars.buttons["Recents"].firstMatch }
+        struct Selection {
+            let kind: Kind
+            let control: XCUIElement
+            let hostFrame: CGRect
         }
-        let ready = NSPredicate { _, _ in cancelControl() != nil || recentsTab() != nil }
-        let picker = XCTNSPredicateExpectation(predicate: ready, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [picker], timeout: 90), .completed, debugDescription)
-        if let control = cancelControl() {
-            control.tap()
-            return
+        let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
+        var poll = 0
+        var diagnostics: [String] = []
+        func record(_ message: String) {
+            let line = "Files cancellation poll=\(poll) \(message)"
+            print(line)
+            diagnostics.append(line)
+            if diagnostics.count > 12 { diagnostics.removeFirst() }
         }
-        // A restored folder can hide Cancel. Use the actual bottom tab, not a
-        // generic Recents proxy or More, which opens sorting options on modern Files.
-        guard let recents = recentsTab() else {
-            XCTFail("No actionable Files Cancel button or Recents tab. \(debugDescription)")
-            return
+        func validFrame(_ frame: CGRect, inside bounds: CGRect) -> Bool {
+            !frame.isEmpty && !frame.isNull && !frame.isInfinite &&
+                frame.minX.isFinite && frame.minY.isFinite &&
+                frame.maxX.isFinite && frame.maxY.isFinite && bounds.contains(frame)
         }
-        recents.tap()
-        let command = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            cancelControl() != nil
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [command], timeout: 90), .completed, debugDescription)
-        guard let control = cancelControl() else {
-            XCTFail("Files did not expose an actionable Cancel button. \(debugDescription)")
-            return
+        func candidates(in snapshot: any XCUIElementSnapshot, service: Bool,
+                        hostFrame: CGRect, allowRecents: Bool) -> [Candidate] {
+            var matches: [Candidate] = []
+            func visit(_ node: any XCUIElementSnapshot, navigation: (any XCUIElementSnapshot)?,
+                       tabBar: (any XCUIElementSnapshot)?) {
+                let navigation = node.elementType == .navigationBar ? node : navigation
+                let tabBar = node.elementType == .tabBar ? node : tabBar
+                if node.elementType == .button && node.isEnabled && validFrame(node.frame, inside: hostFrame) {
+                    let kind: Kind? = node.label == "Cancel" && (navigation != nil || service) ? .cancel :
+                        (allowRecents && node.label == "Recents" && tabBar != nil ? .recents : nil)
+                    if let kind {
+                        let parent = kind == .cancel ? navigation : tabBar
+                        matches.append(Candidate(kind: kind, identifier: node.identifier,
+                                                 parentType: parent?.elementType,
+                                                 parentIdentifier: parent?.identifier ?? "",
+                                                 parentLabel: parent?.label ?? ""))
+                    }
+                }
+                for child in node.children { visit(child, navigation: navigation, tabBar: tabBar) }
+            }
+            visit(snapshot, navigation: nil, tabBar: nil)
+            return matches.filter { $0.kind == .cancel } + matches.filter { $0.kind == .recents }
         }
-        control.tap()
+        func resolve(_ candidate: Candidate, in root: XCUIApplication, hostFrame: CGRect) -> XCUIElement? {
+            var buttons = root.buttons
+            if let parentType = candidate.parentType {
+                var parents = root.descendants(matching: parentType)
+                if !candidate.parentIdentifier.isEmpty {
+                    parents = parents.matching(NSPredicate(format: "identifier == %@", candidate.parentIdentifier))
+                } else if !candidate.parentLabel.isEmpty {
+                    parents = parents.matching(NSPredicate(format: "label == %@", candidate.parentLabel))
+                }
+                buttons = parents.buttons
+            }
+            var predicate = NSPredicate(format: "label == %@", candidate.kind.rawValue)
+            if !candidate.identifier.isEmpty {
+                predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate,
+                    NSPredicate(format: "identifier == %@", candidate.identifier)])
+            }
+            let control = buttons.matching(predicate).firstMatch
+            // No exists preflight: it can block/retry against an incomplete remote
+            // tree. Resolve only a real button already found in the root snapshot.
+            guard let fresh = try? control.snapshot(), fresh.elementType == .button,
+                  fresh.label == candidate.kind.rawValue, fresh.isEnabled,
+                  validFrame(fresh.frame, inside: hostFrame), control.isHittable else { return nil }
+            return control
+        }
+        func inspect(_ snapshot: any XCUIElementSnapshot, root: XCUIApplication,
+                     name: String, state: XCUIApplication.State, hostFrame: CGRect,
+                     allowRecents: Bool) -> Selection? {
+            let matches = candidates(in: snapshot, service: name == "service", hostFrame: hostFrame,
+                                     allowRecents: allowRecents)
+            for candidate in matches {
+                if let control = resolve(candidate, in: root, hostFrame: hostFrame) {
+                    record("root=\(name) state=\(state.rawValue) candidates=\(matches.count) choice=\(candidate.kind.rawValue)")
+                    return Selection(kind: candidate.kind, control: control, hostFrame: hostFrame)
+                }
+            }
+            record("root=\(name) state=\(state.rawValue) candidates=\(matches.count) choice=none")
+            return nil
+        }
+        func available(allowRecents: Bool) -> Selection? {
+            poll += 1
+            let hostState = self.state
+            // One throwing snapshot per queried root, then walk children locally.
+            // Host-first preserves the real NavigationBar Cancel seen in run39702644297.
+            guard let host = try? snapshot() else {
+                record("root=host state=\(hostState.rawValue) snapshot=unavailable; service=not-queried-without-host-bounds")
+                return nil
+            }
+            guard validFrame(host.frame, inside: host.frame) else {
+                record("root=host state=\(hostState.rawValue) bounds=invalid; service=not-queried-without-host-bounds")
+                return nil
+            }
+            if let selection = inspect(host, root: self, name: "host", state: hostState,
+                                       hostFrame: host.frame, allowRecents: allowRecents) { return selection }
+            let serviceState = files.state
+            guard serviceState != .notRunning else {
+                record("root=service state=\(serviceState.rawValue) snapshot=not-queried")
+                return nil
+            }
+            guard let service = try? files.snapshot() else {
+                record("root=service state=\(serviceState.rawValue) snapshot=unavailable")
+                return nil
+            }
+            return inspect(service, root: files, name: "service", state: serviceState,
+                           hostFrame: host.frame, allowRecents: allowRecents)
+        }
+        func waitForControl(allowRecents: Bool) -> Selection? {
+            var selection: Selection?
+            let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                selection = available(allowRecents: allowRecents)
+                return selection != nil
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [ready], timeout: 90)
+            if result != .completed {
+                let screen = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                screen.name = "Files cancellation readiness failure"; screen.lifetime = .keepAlways
+                XCTContext.runActivity(named: "Files cancellation readiness diagnostics") { $0.add(screen) }
+            }
+            XCTAssertEqual(result, .completed, diagnostics.joined(separator: "\n"))
+            return result == .completed ? selection : nil
+        }
+        func tapControl(_ selection: Selection) {
+            // Revalidate the actual button immediately before its one host tap.
+            // The Files extension itself cannot reliably be activated by XCTest.
+            guard let fresh = try? selection.control.snapshot(), fresh.elementType == .button,
+                  fresh.label == selection.kind.rawValue, fresh.isEnabled,
+                  validFrame(fresh.frame, inside: selection.hostFrame), selection.control.isHittable else {
+                XCTFail("Files control stopped being actionable before its single tap. " + diagnostics.joined(separator: "\n"))
+                return
+            }
+            coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: fresh.frame.midX - selection.hostFrame.minX,
+                                     dy: fresh.frame.midY - selection.hostFrame.minY)).tap()
+        }
+        guard let selection = waitForControl(allowRecents: true) else { return }
+        tapControl(selection)
+        if selection.kind == .recents {
+            // Only an actual TabBar button may reveal Cancel. A Recents sidebar
+            // cell, generic Other, or More control is never an acceptable proxy.
+            guard let cancel = waitForControl(allowRecents: false) else { return }
+            tapControl(cancel)
+        }
     }
 }
 
