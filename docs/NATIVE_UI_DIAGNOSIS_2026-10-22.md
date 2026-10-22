@@ -214,8 +214,13 @@ only name failed compiler commands.
 The first follow-up at `6729ea8` exposed an isolation mistake: synchronous
 tearDownWithError is nonisolated, producing warnings locally and compile errors
 on hosted Xcode 16.4. Artifact `12400531925` retains that build failure and source
-receipt; no model/UI phase ran there. The cleanup now uses XCTest's async teardown
-on the test class's main actor, with no executor assumptions or diagnostic suppression.
+receipt; no model/UI phase ran there. A subsequent async override at `13f0e57`
+compiled locally, but Xcode16.4 correctly rejected sending non-Sendable XCTestCase
+through super.tearDown (artifact `12400947983`). Cleanup now uses XCTest's public
+addTeardownBlock with an explicitly async main-actor closure capturing only the app
+and test name. Superclass hooks remain unchanged; no executor assumptions,
+unchecked Sendable or diagnostic suppression are used. Registration follows the
+initial successful stop, so a setup termination failure cannot be retried in cleanup.
 
 The local `6729ea8` iPad run passed the 34 models and the setlist UI class, then
 the signed-value editing test exceeded its unchanged 180-second limit after typing
@@ -234,6 +239,11 @@ and smart dashes because its contents are literal signed integers. This retains
 ordinary keyboard entry/Done/Apply and exact signed-value assertions; it does not
 disable animations or XCTest idle waits. The keyboard configuration is a concrete
 input correction, not proof that all historic animation stalls have one cause.
+The `13f0e57` local run also hit the unchanged 180-second limit in running-order
+search after Return; its valid display query confirms the display was awake during
+the stall. Its screenshot, log, xcresults and incomplete unchanged-input receipt
+remain at `/private/tmp/strike-issue85-13f0e57-20261022/`. This demonstrates that
+lifecycle isolation and numeric keyboard traits alone do not resolve all of #85.
 See issue #85 and its linked PR for subsequent exact-source validation results.
 Do not describe a green rerun of unchanged source as a fix or claim all SDK failures
 are eliminated from a single new-source pass.

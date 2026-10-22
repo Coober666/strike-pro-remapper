@@ -3,7 +3,7 @@ import UIKit
 
 @MainActor
 class NativeUITestCase: XCTestCase {
-    private var ownedApplication: XCUIApplication?
+    private var ownsApplication = false
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -11,29 +11,27 @@ class NativeUITestCase: XCTestCase {
     }
 
     func makeApplication() -> XCUIApplication {
-        XCTAssertNil(ownedApplication, "A test must reuse its owned application for cold relaunches")
+        XCTAssertFalse(ownsApplication, "A test must reuse its owned application for cold relaunches")
+        ownsApplication = true
         let app = XCUIApplication()
-        ownedApplication = app
         app.launchEnvironment["STRIKE_UI_TEST_SESSION"] = UUID().uuidString
         // Stop the previous process before rotating. Rotating a foreground app
         // from the previous test can start layout/keyboard work during relaunch.
         app.stopForUITestRelaunch()
         XCUIDevice.shared.orientation = .portrait
-        return app
-    }
-
-    override func tearDown() async throws {
+        let testName = name
         // Release menus, keyboards and landscape state before XCTest's implicit
-        // teardown, including when a test assertion has failed.
-        if let app = ownedApplication {
-            print("UI cleanup starting: \(name), app state=\(app.state.rawValue)")
+        // teardown, including after a failed assertion. An async main-actor block
+        // avoids sending the non-Sendable XCTestCase through super.tearDown().
+        // Register after initial stop succeeds: never retry a failed termination.
+        addTeardownBlock { @MainActor [app, testName] () async throws in
+            print("UI cleanup starting: \(testName), app state=\(app.state.rawValue)")
             app.stopForUITestRelaunch()
             XCTAssertEqual(app.state, .notRunning, "The test must release its app before teardown")
-            print("UI cleanup stopped app: \(name)")
+            print("UI cleanup stopped app: \(testName)")
             XCUIDevice.shared.orientation = .portrait
-            ownedApplication = nil
         }
-        try await super.tearDown()
+        return app
     }
 }
 
