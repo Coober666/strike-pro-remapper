@@ -1254,7 +1254,15 @@ source removal, driver failure and app inactive/background state. Stop when the
 normal Stop cannot be downgraded by later disconnects. Failed new input open keeps
 the previous take; replacing it requires explicit discard. Done stops and retains
 memory-only work. Export the stopped take as <=8MiB drum-midi-session v1 JSON.
-Times are monotonic callback arrival, not physical/calibrated latency. No pause yet.
+NativeMIDIHostClock converts MIDIEventPacket.timeStamp through the dynamic Mach
+timebase; timestamp zero falls back to one host-clock sample per callback. Model
+start/duration/Stop/Learn and the synthetic driver share that Mach host clock.
+Convert ticks before multiplying to avoid integer overflow. Preserve original packet
+times for Learn's post-arm comparison even when exported events clamp out-of-order
+times monotonically. Synthetic tests cover distinct packets in one callback, zero
+fallback, non-unit timebase, delayed pre-arm hits, export clamping and duration bounds.
+Timing is not physical/calibrated latency; real Strike timestamp behavior is unverified.
+No pause yet.
 Learn consumes only post-arm positive Note Ons, freezes the candidate, and requires
 Apply name. It labels channel/note pairs (128/80 UTF16 limit) in this take's exported
 padMap; never infer pads or mutate kit MIDI fields. No saved profile store yet.

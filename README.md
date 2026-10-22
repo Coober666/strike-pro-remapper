@@ -262,6 +262,9 @@ editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
 **MIDI tools** adds an explicitly selected native input, silent channel-message capture,
 per-channel note/velocity and hi-hat CC4 views, and confirmed pad Learn names for the take.
+Native event timing uses Core MIDI packet timestamps, with host callback time when a
+packet has no timestamp. Timing is not latency-calibrated; physical Strike timestamp
+behavior still needs attended verification.
 Learn uses a full-width, 44-point name field with explicit tap-to-focus before Apply.
 Recording stops on backgrounding, disconnection or reported driver errors and retains a partial take without
 reconnecting. Stop before exporting JSON compatible with the web MIDI toolkit;
