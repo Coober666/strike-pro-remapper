@@ -92,6 +92,10 @@ the restored folder replaces its tab bar between them. Keep the hittability chec
 Folder export also waits for an enabled, hittable native Open button after the
 destination title appears: Browse can publish the title while Open is still disabled.
 Submit Open once, retaining the export-status and exact reopened-value assertions.
+Waits for elements drawn by the Files service during export/reopen navigation (On My
+iPhone/iPad, the app folder, the File View grid and the exported cell) use 30 seconds,
+matching the picker-ready wait. A hosted 16.4 iPhone run timed out at the former 10s
+folder wait while the same commit passed elsewhere (#85). App-owned waits are unchanged.
 Assert the editor is usable again.
 After cancellation, wait for the named dirty-replacement alert before tapping Discard,
 then require its dismissal before checking the new kit. Older SwiftUI can expose
