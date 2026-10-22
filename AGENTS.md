@@ -1068,6 +1068,10 @@ relaunch lifecycle, XCTest workarounds, per-test time limits, runtime pinning) l
 docs/NATIVE_UI_TEST_HARNESS.md. Read it before changing native UI tests, the
 mac-companion workflow or tools/build_ios_companion.py; never retry mutations, skip
 tests or weaken assertions to get a hosted run green.
+The October 22 failure evidence and targeted typing/Files cancellation harness
+changes are documented in docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md; hosted first-launch
+and teardown failures remain unresolved. Do not infer an orientation or app-focus
+fix from a passing rerun.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic
