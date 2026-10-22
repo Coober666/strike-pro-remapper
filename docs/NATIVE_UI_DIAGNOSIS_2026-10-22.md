@@ -244,6 +244,22 @@ search after Return; its valid display query confirms the display was awake duri
 the stall. Its screenshot, log, xcresults and incomplete unchanged-input receipt
 remain at `/private/tmp/strike-issue85-13f0e57-20261022/`. This demonstrates that
 lifecycle isolation and numeric keyboard traits alone do not resolve all of #85.
+
+The public teardown-block candidate `cbca730` completed its local iPhone run:
+34 model tests passed; 16 of 17 UI tests passed, without animation-notification
+timeouts. The export/reopen test failed at its local-location assertion (61.548s),
+before any export request. Browse appeared before its restored app-folder title;
+the test committed at22.67s to waiting only for On My iPhone. Its failure tree
+contains the real Strike Remapper Actions Menu Button under the Files navigation
+bar and an enabled Open button; the screenshot shows the correct app folder.
+This establishes a navigation race, not missing files or an export-write failure.
+Its completed failed xcresult/log and unchanged-source receipt remain at
+`/private/tmp/strike-issue85-cbca730-20261022/`; failure blocked the iPad phase.
+
+The navigation wait now accepts either Locations or the restored app folder before
+choosing the current path. It replaces the old local-only 30-second wait, without
+adding time, tapping again or changing the destination, export/reopen or value
+assertions. Subsequent source validation must exercise the entire workflow.
 See issue #85 and its linked PR for subsequent exact-source validation results.
 Do not describe a green rerun of unchanged source as a fix or claim all SDK failures
 are eliminated from a single new-source pass.

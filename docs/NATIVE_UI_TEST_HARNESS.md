@@ -121,6 +121,10 @@ Files match as not ready. Separate exists/isEnabled/frame queries can hard-fail 
 the restored folder replaces its tab bar between them. Keep the hittability check.
 Folder export also waits for an enabled, hittable native Open button after the
 destination title appears: Browse can publish the title while Open is still disabled.
+After choosing Browse, wait for either the actual local location or the actual app
+folder title before branching. The folder can restore after Browse appears; a
+local-location-only wait then times out while the correct destination is already
+open. Keep its existing 30-second budget, not a second or longer navigation wait.
 Submit Open once, retaining the export-status and exact reopened-value assertions.
 Waits for elements drawn by the Files service during export/reopen navigation (On My
 iPhone/iPad, the app folder, the File View grid and the exported cell) use 30 seconds,

@@ -310,6 +310,8 @@ Cancellation taps use the validated control's center through the host to avoid
 XCTest trying to launch the Files extension. [Failure diagnosis](docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md)
 also records delayed MIDI Learn text delivery and remaining hosted launch failures.
 Folder export waits for Files' Open button to become actionable before submitting once.
+After Browse, navigation waits for either Locations or the restored app folder
+before choosing its path, so a late folder restore cannot strand the export check.
 Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
 UI test relaunches leave the foreground and require a stopped process before restarting the app, retaining cold-launch restoration checks.

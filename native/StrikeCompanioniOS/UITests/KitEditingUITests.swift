@@ -262,8 +262,14 @@ final class KitEditingUITests: NativeUITestCase {
         // Locations, folders and listings below are drawn by the out-of-process Files
         // service, which can be slow on hosted simulators (#85). Give each the same 30s
         // budget as the picker itself; every assertion remains and nothing is retried.
+        // Browse may restore our folder after its tab appears. Keep both valid
+        // destinations in this wait instead of committing early to Locations.
+        let navigationReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            atDestination() || local.exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [navigationReady], timeout: 30), .completed, app.debugDescription)
         if !atDestination() {
-            XCTAssertTrue(local.waitForExistence(timeout: 30), app.debugDescription)
+            XCTAssertTrue(local.exists, app.debugDescription)
             local.tap()
             let companion = app.staticTexts["Strike Remapper"].firstMatch
             XCTAssertTrue(companion.waitForExistence(timeout: 30), app.debugDescription)
