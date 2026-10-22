@@ -269,11 +269,14 @@ final class KitEditingUITests: XCTestCase {
         let pickerReady = NSPredicate { _, _ in atDestination() || local.exists || app.buttons["Browse"].exists }
         expectation(for: pickerReady, evaluatedWith: nil); waitForExpectations(timeout: 30)
         if !atDestination() && !local.exists { app.buttons["Browse"].tap() }
+        // Locations, folders and listings below are drawn by the out-of-process Files
+        // service, which can be slow on hosted simulators (#85). Give each the same 30s
+        // budget as the picker itself; every assertion remains and nothing is retried.
         if !atDestination() {
-            XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(local.waitForExistence(timeout: 30), app.debugDescription)
             local.tap()
             let companion = app.staticTexts["Strike Remapper"].firstMatch
-            XCTAssertTrue(companion.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(companion.waitForExistence(timeout: 30), app.debugDescription)
             companion.tap()
         }
         // Browse can expose the destination title before Open becomes enabled.
@@ -296,7 +299,7 @@ final class KitEditingUITests: XCTestCase {
         app.buttons["import-kit"].tap()
         let file = app.cells.containing(.staticText, identifier: name).firstMatch
         let files = app.collectionViews["File View"].firstMatch
-        XCTAssertTrue(files.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(files.waitForExistence(timeout: 30), app.debugDescription)
         // Files virtualizes the grid; retained synthetic exports can put this UUID offscreen.
         // Reveal only the named copy in the selected folder. Never resubmit the export.
         for upward in [false, true] {
@@ -307,7 +310,7 @@ final class KitEditingUITests: XCTestCase {
             }
             if file.exists { break }
         }
-        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(file.waitForExistence(timeout: 30), app.debugDescription)
         screenshot("Select exported copy")
         // Let XCTest reveal/activate the actual image in icon view; coordinate taps can miss
         // hosted Files items after it scrolls or relays accessibility through another process.

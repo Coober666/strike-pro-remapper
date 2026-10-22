@@ -13,6 +13,26 @@ final class NativeMIDIUITests: XCTestCase {
         app.buttons["midi-tools"].tap()
         return app
     }
+
+    private func captureNameEntry(_ stage: String, app: XCUIApplication, field: XCUIElement) {
+        let snapshot = try? field.snapshot()
+        // Public snapshots expose UI focus. Preserve all returned attributes as
+        // well: keyboard focus is not a public iOS snapshot attribute on every SDK.
+        let keyboard = app.keyboards.firstMatch
+        let details = """
+        stage=\(stage)
+        value=\(String(describing: snapshot?.value))
+        hasFocus=\(String(describing: snapshot?.hasFocus))
+        fieldAttributes=\(String(describing: snapshot?.dictionaryRepresentation))
+        keyboardCount=\(app.keyboards.count)
+        keyboardFrame=\(keyboard.exists ? String(describing: keyboard.frame) : "absent")
+        \(app.debugDescription)
+        """
+        let text = XCTAttachment(string: details)
+        text.name = "MIDI Learn \(stage) state"; text.lifetime = .keepAlways; add(text)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "MIDI Learn \(stage) screen"; screenshot.lifetime = .keepAlways; add(screenshot)
+    }
     func testExplicitInputCaptureLearnStopAndRetainedTake() {
         let app = launch()
         XCTAssertFalse(app.buttons["midi-record"].isEnabled)
@@ -33,7 +53,18 @@ final class NativeMIDIUITests: XCTestCase {
         XCTAssertTrue(candidate.label.contains("Channel 10, note 38, velocity 96"))
         let field = app.textFields["midi-pad-name"]
         XCTAssertGreaterThanOrEqual(field.frame.height, 44)
-        field.tap(); field.typeText("Snare")
+        field.tap()
+        captureNameEntry("before typing", app: app, field: field)
+        field.typeText("Snare")
+        // Hosted Xcode 16.4 returned from typeText while delivery was still in
+        // progress: the failure read "Sn", but its video showed "Snare" a moment
+        // later. Observe completion only; never resend text or tap the field again.
+        let entered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            field.value as? String == "Snare"
+        }, object: nil)
+        let delivery = XCTWaiter.wait(for: [entered], timeout: 5)
+        captureNameEntry(delivery == .completed ? "after typing" : "incomplete typing", app: app, field: field)
+        XCTAssertEqual(delivery, .completed, "The single text-entry event must deliver the complete name")
         XCTAssertEqual(field.value as? String, "Snare")
         field.typeText("\n")
         app.buttons["midi-apply-name"].tap()
