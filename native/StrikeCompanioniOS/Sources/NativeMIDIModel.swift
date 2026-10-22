@@ -141,7 +141,8 @@ final class NativeMIDIModel: ObservableObject {
         take?.finish(milliseconds: (clock() - started) * 1000, partial: partial || failed)
         isRecording = false; activeInput = nil
         mailbox = nil; learning = false; candidate = nil
-        status = failed ? "Input limit reached. Partial take retained for export." : reason
+        // The mailbox keeps its failure flag, so a partial stop must keep its specific reason.
+        status = failed && !partial ? "Input limit reached. Partial take retained for export." : reason
     }
     func leave() { stop(); driver.close() }
     func background() {
