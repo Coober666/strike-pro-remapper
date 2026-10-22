@@ -7,8 +7,9 @@ Ordinary pushes and PRs cannot trigger it. The workflow must first be merged to 
 
 ## Maintainer procedure
 
-1. Finish review and merge the intended changes. Wait for all five jobs on that
-   main push: Python tests, browser tests, Windows host, source beta and Windows beta.
+1. Finish review and merge the intended changes. Wait for all eight jobs on that
+   main push: Python tests on Linux and macOS, source-backup tests on Windows
+   Python 3.10 and 3.11, browser tests, Windows host, source beta and Windows beta.
 2. In Actions, select **Prepare beta draft**, choose main, enter the numeric CI run
    ID and a new tag such as `beta-20261014.1`. Selecting Run workflow authorizes
    preparation of a draft only. Do not use a PR run or an expired artifact.
@@ -29,6 +30,11 @@ identities, checksum/payload failures and reused tags. Creation fails if a relea
 already exists. If upload is interrupted, inspect the incomplete draft and staging
 artifact before taking further action; there is no automatic retry or deletion.
 Before publishing, verify that any existing tag resolves to `BUILD.json`'s revision.
+
+Promotion explicitly requires both Python platform lanes and both Windows
+source-backup lanes, using their full matrix job names. Backup/restore behavior
+is part of the source release contract even though successful run status also
+requires those jobs. A missing, duplicated, failed or skipped lane blocks promotion.
 
 The separate prepare job has read permissions; only draft creation gets repository
 write permission. Inputs are passed through environment variables and argument

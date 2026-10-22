@@ -35,6 +35,8 @@ controlled beta downloads, not a published stable release.
 Maintainers can prepare a draft beta with clearly named downloads, checksums and
 first-run instructions using the [beta delivery workflow](docs/BETA_DELIVERY.md).
 It promotes verified CI packages unchanged; publication is a separate step.
+Promotion requires passing Linux/macOS tests and both Windows backup test lanes
+alongside browser, host and package checks.
 
 **Setlist Builder:** open it from Start or the Kits menu to arrange saved library kits
 in show order, add song notes, make song-specific kit copies, preview numbered filenames,

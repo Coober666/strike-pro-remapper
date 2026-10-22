@@ -252,7 +252,9 @@ Invalidate displayed review when context changes. Pure and browser MIDI tests
 cover this; physical validation and module-specific advice remain separate.
 
 Beta delivery uses tools/prepare_release.py and the manual beta-draft workflow.
-Accept only this repository's successful main push CI with all five required jobs.
+Accept only this repository's successful main push CI with all eight required jobs:
+both Linux/macOS test lanes, both Windows backup Python lanes, browser, Windows
+host and source/Windows packages. Match full matrix names, not a literal test job.
 Verify source/Windows sidecars, exact manifest inventories, payload hashes and
 clean revision identity before copying unchanged ZIPs to an exclusive folder.
 The local command never mutates GitHub. The workflow can create a new draft

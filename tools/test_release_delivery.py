@@ -8,9 +8,14 @@ import unittest
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prepare_release import JOBS, REPO, prepare, validate_run, verify_package
+from prepare_release import REPO, prepare, validate_run, verify_package
 
 SHA = 'a' * 40
+# Independent fixture: actual main CI run 39697035863, including matrix names.
+# Keep this separate from the validator's requirements so workflow drift fails.
+MAIN_JOB_NAMES = ('source-backup-windows (3.11)', 'source-backup-windows (3.10)',
+                  'windows-host', 'test (ubuntu-latest)', 'test (macos-latest)',
+                  'browser', 'source-beta', 'windows-beta')
 
 
 def package(root, kind, *, revision=SHA, changed=False, extra=False, corrupt=False):
@@ -34,16 +39,25 @@ class DeliveryTests(unittest.TestCase):
         run = {'repository': {'full_name': REPO}, 'path': '.github/workflows/ci.yml',
                'event': 'push', 'head_branch': 'main', 'status': 'completed',
                'conclusion': 'success', 'head_sha': SHA}
-        jobs = [{'name': n, 'conclusion': 'success'} for n in JOBS]
+        jobs = [{'name': n, 'conclusion': 'success'} for n in MAIN_JOB_NAMES]
         self.assertEqual(validate_run(run, jobs), SHA)
         for key, bad in [('event', 'pull_request'), ('head_branch', 'feature'),
                          ('path', 'other.yml'), ('conclusion', 'failure'),
                          ('repository', {'full_name': 'elsewhere/repo'}), ('head_sha', '../bad')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_run({**run, key: bad}, jobs)
-        for changed in [jobs[:-1], jobs + [jobs[0]], [{**j, 'conclusion': 'skipped'} for j in jobs]]:
-            with self.assertRaises(ValueError):
-                validate_run(run, changed)
+        for lane in jobs:
+            for change, changed in [
+                    ('missing', [j for j in jobs if j is not lane]),
+                    ('duplicate', jobs + [lane]),
+                    ('failed', [{**j, 'conclusion': 'failure'} if j is lane else j for j in jobs]),
+                    ('skipped', [{**j, 'conclusion': 'skipped'} if j is lane else j for j in jobs])]:
+                with self.subTest(lane=lane['name'], change=change), self.assertRaises(ValueError):
+                    validate_run(run, changed)
+        # A former non-matrix job must not substitute for either platform lane.
+        legacy = [j for j in jobs if not j['name'].startswith('test (')]
+        with self.assertRaises(ValueError):
+            validate_run(run, legacy + [{'name': 'test', 'conclusion': 'success'}])
 
     def test_identity_checksums_inventory_and_payload(self):
         with tempfile.TemporaryDirectory() as tmp:

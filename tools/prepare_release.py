@@ -10,7 +10,9 @@ import tempfile
 import zipfile
 
 REPO = 'Coober666/strike-pro-remapper'
-JOBS = {'test', 'browser', 'windows-host', 'source-beta', 'windows-beta'}
+JOBS = {'test (ubuntu-latest)', 'test (macos-latest)',
+        'source-backup-windows (3.10)', 'source-backup-windows (3.11)',
+        'browser', 'windows-host', 'source-beta', 'windows-beta'}
 
 
 def gh(*args):
