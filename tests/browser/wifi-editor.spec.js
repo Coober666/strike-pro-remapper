@@ -3,14 +3,22 @@ import {expect, test} from '@playwright/test';
 
 const host = 'http://127.0.0.1:8768';
 
-test.afterEach(async ({page}) => {
+async function pairEditor(page) {
+  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
+  // Pairing redirects asynchronously. Absence of the editor's boot overlay on
+  // the pairing page cannot establish that the editor is ready for mutations.
+  await expect(page).toHaveURL(host + '/');
+  await expect(page.locator('.wifi-session')).toBeVisible();
+  await expect(page.locator('#boot-screen')).toBeHidden();
+}
+
+test.afterEach(async ({page, context}) => {
   await page.unrouteAll({behavior:'ignoreErrors'});
-  await page.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
+  await context.request.post(host + '/wifi/logout', {headers:{Origin:host}});
 });
 
 test('lost save response is uncertain until reconnect reloads the host state', async ({page}) => {
-  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-  await expect(page.locator('#boot-screen')).toBeHidden();
+  await pairEditor(page);
   await page.evaluate(async p => { await openKit(p); closeStartScreen(); }, path.resolve('.build/browser-library/kits', "John's Test Kit.skt"));
   await page.evaluate(async () => { await api('/set_param', {pad_id:'S1H', param:'la_level', value:47}); setDirtyState(true, 1); });
   await page.route('**/wifi/editor', route => route.abort());
@@ -31,8 +39,7 @@ test('lost save response is uncertain until reconnect reloads the host state', a
 });
 
 test('returning from a suspended page refreshes changed host state before editing', async ({page}) => {
-  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-  await expect(page.locator('#boot-screen')).toBeHidden();
+  await pairEditor(page);
   await page.evaluate(async p => { await openKit(p); closeStartScreen(); }, path.resolve('.build/browser-library/kits', "John's Test Kit.skt"));
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', {configurable:true, get:() => true});
@@ -49,8 +56,7 @@ test('returning from a suspended page refreshes changed host state before editin
 });
 
 test('expired browser pairing returns to pairing and rejects an old link', async ({page, context}) => {
-  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-  await expect(page.locator('#boot-screen')).toBeHidden();
+  await pairEditor(page);
   const cookies = await context.cookies();
   await context.clearCookies();
   await page.evaluate(() => checkWifiAccess()).catch(() => {});
@@ -69,9 +75,7 @@ test('paired Wi-Fi editor loads, edits, saves and revokes its session', async ({
   await page.goto(host);
   await expect(page.getByRole('heading', {name:'Your kit. On your iPad.'})).toBeVisible();
   expect((await context.request.get(host + '/api/session')).status()).toBe(401);
-  await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-  await expect(page.locator('.wifi-session')).toBeVisible();
-  await expect(page.locator('#boot-screen')).toBeHidden();
+  await pairEditor(page);
   expect(page.url()).toBe(host + '/');
   // Open the isolated synthetic kit through the same function as the kit picker.
   await page.keyboard.press('Escape');
@@ -113,13 +117,11 @@ test('another device is view-only until an explicit handover reloads the current
   const secondContext = await browser.newContext();
   const second = await secondContext.newPage();
   try {
-    await page.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-    await expect(page.locator('#boot-screen')).toBeHidden();
+    await pairEditor(page);
     await page.evaluate(async name => { await api('/new_kit', {name}); }, 'Handover Kit ' + testInfo.project.name + ' ' + testInfo.retry);
     await page.reload();
     await expect(page.locator('#kit-name')).toContainText('Handover Kit');
-    await second.goto(host + '/wifi/pair#pair=browser-wifi-pairing');
-    await expect(second.locator('#boot-screen')).toBeHidden();
+    await pairEditor(second);
     await expect(second.locator('#wifi-access-status')).toContainText('View only');
     await expect(second.locator('#save-lib-btn')).toBeDisabled();
     const blocked = await second.evaluate(async () => {
@@ -148,8 +150,7 @@ test('another device is view-only until an explicit handover reloads the current
     await expect(second.locator('#boot-screen')).toBeHidden();
     await expect(second.locator('#wifi-access-status')).toContainText('Editing here');
   } finally {
-    await second.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
-    await page.evaluate(() => fetch('/wifi/logout', {method:'POST'})).catch(() => {});
+    await secondContext.request.post(host + '/wifi/logout', {headers:{Origin:host}});
     await secondContext.close();
   }
 });

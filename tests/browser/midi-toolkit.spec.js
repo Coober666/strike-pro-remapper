@@ -1,6 +1,7 @@
 import {expect, test} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {demoSession} from '../../web/midi-toolkit/core.js';
+import {emptyProfile, assignPad} from '../../web/midi-toolkit/profiles.js';
 
 async function fakeMidi(page, denied=false) {
   await page.addInitScript(denied => {
@@ -24,6 +25,37 @@ async function exportFile(page, id) {
   return readFile(await (await event).path(),'utf8');
 }
 const archive=sessions => ({format:'drum-midi-session-backup',version:1,sessions});
+test('Trigger Coach reviews focused takes, invalidates stale context and exports evidence',async ({page},testInfo) => {
+  await page.goto('/midi'); await page.locator('#demo').click();
+  await page.locator('#coach-review').click();
+  await expect(page.locator('#coach-result')).toContainText('Synthetic demo');
+  await expect(page.locator('#coach-result')).toContainText('Intentional simultaneous playing');
+  await page.locator('#analysis-focus').selectOption('10:38');
+  await expect(page.locator('#coach-result')).toContainText('Review again');
+  await page.locator('#coach-review').click();
+  await expect(page.locator('#coach-result')).toContainText('More hits needed');
+  await page.locator('#coach-result').screenshot({path:testInfo.outputPath('coach.png')});
+  const report=await exportFile(page,'report');
+  expect(report).toContain('Trigger Coach'); expect(report).toContain('Analysis focus: channel:note 10:38');
+  await page.locator('#exercise').selectOption('rolls');
+  await expect(page.locator('#coach-result')).toContainText('Review again');
+});
+test('Trigger Coach renders imported labels as text and marks partial evidence',async ({page}) => {
+  await page.goto('/midi');
+  const session=demoSession(); session.synthetic=false; session.captureStatus='partial';
+  session.padMap=assignPad(emptyProfile('Test'),10,42,'<img src=x onerror=alert(1)>');
+  await importSession(page,session);
+  await page.locator('#coach-review').click();
+  await expect(page.locator('#coach-result')).toContainText('Partial take');
+  await expect(page.locator('#coach-result')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('#coach-result')).toContainText('repeat a complete take');
+  await expect(page.locator('#coach-result img')).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#coach-result summary').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#coach-result details').first()).toHaveAttribute('open','');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 async function restoreFile(page,value) {
   await page.locator('#backup-import').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
 }
