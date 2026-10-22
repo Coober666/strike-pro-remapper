@@ -278,6 +278,9 @@ button before the host fallback, requiring valid visible hit targets. Files cont
 that disappear during a snapshot are polled again within the bounded wait. A restored
 folder uses the real Recents tab rather than the sorting menu; retained-edit and
 resumed-editor assertions remain required.
+Cancellation taps use the validated control's center through the host to avoid
+XCTest trying to launch the Files extension. [Failure diagnosis](docs/NATIVE_UI_DIAGNOSIS_2026-10-22.md)
+also records delayed MIDI Learn text delivery and remaining hosted launch failures.
 Folder export waits for Files' Open button to become actionable before submitting once.
 Reopen tests reveal the exact new copy in Files’ virtualized grid without repeating writes or deleting earlier exports.
 Replacement checks wait for the confirmation alert and require dismissal before inspecting the new kit.
