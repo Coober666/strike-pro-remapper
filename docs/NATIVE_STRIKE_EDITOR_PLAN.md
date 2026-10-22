@@ -68,8 +68,10 @@ The port requests MIDI 1.0; nonzero UMP groups and unconverted MIDI 2 channel da
 cannot be represented in the version-1 export and cause partial-stop. SysEx/system
 messages are ignored. A fresh mailbox per recording rejects old callbacks. The
 receive code traverses original variable-length packet pointers, including packets
-larger than the SDK's fixed tuple declaration. Timing uses monotonic callback arrival,
-not calibrated physical strike timing. No pause/resume is part of this milestone.
+larger than the SDK's fixed tuple declaration. Timing uses Core MIDI packet host
+timestamps, with callback host time for zero timestamps. Duration and Learn use the
+same monotonic Mach clock. Timing is not calibrated physical strike timing; physical
+Strike timestamp behavior remains unverified. No pause/resume is part of this milestone.
 
 Stop drains retained input and closes the port. Background/inactive state and source
 removal stop with partial status; later notifications cannot downgrade a normally

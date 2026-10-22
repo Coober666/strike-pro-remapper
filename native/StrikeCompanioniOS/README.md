@@ -136,7 +136,11 @@ input closes the input port. Background/disconnect/overflow/limits mark an activ
 take partial; reported input-driver errors do too. Returning never starts recording again. Limits are 50,000 events,
 20 minutes and a bounded input queue. MIDI-1 group-zero channel data is supported;
 system/SysEx are ignored. Unsupported channel data stops with a partial take.
-Times measure monotonic callback arrival and are not latency-calibrated.
+Times use each Core MIDI packet's host timestamp, falling back to callback arrival
+when the packet timestamp is zero. Recording duration and Learn arming use the same
+monotonic Mach host clock; exported event times remain nondecreasing. Timing is not
+latency-calibrated. Physical Strike driver timestamp behavior still needs attended
+verification.
 
 After Stop, **Export capture JSON** saves a version-1 drum MIDI session through
 Files, compatible with the web MIDI toolkit's import/analysis. Export cancellation

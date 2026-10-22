@@ -85,7 +85,8 @@ and physical module/mobile acceptance remain separate gates.
 - #56: Wi-Fi editing and touch changes implemented; physical mobile acceptance remains.
 - #35: card resilience has automated coverage; disposable-media interruption testing remains.
 - #57: Raspberry Pi host spike remains hardware-unverified.
-- #55: direct iPad USB research remains deferred; the native kit inspector does not access USB.
+- #55: native input-only MIDI capture is implemented; physical direct-iPad capture,
+  user/factory card visibility and safe new-copy deployment remain hardware gates.
 - #29: Kit Balance Assistant has a local sample-based MVP: bounded RMS/peak measurements, same-group and A/B warnings, audition and explicit one-Undo level adjustments. Physical listening acceptance remains open.
 - #30: initial Trigger Coach review adds counted patterns, evidence sufficiency,
   follow-up exercises and bounded comparisons. Physical validation and any

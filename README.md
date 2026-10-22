@@ -213,7 +213,9 @@ confirmed the changed sound on the module. The deployed kit matched the saved li
 copy byte-for-byte. See the [verification record and Mac card-recovery notes](docs/WIFI_EDITOR.md#hardware-verification-october-12-2026).
 See [full-editor setup and limitations](docs/WIFI_EDITOR.md). The separate
 [activation-only controller](docs/IPAD_FACTORY_CONTROLLER.md) remains available.
-The native app for a USB cable connected directly to an iPad is paused.
+The native app now offers input-only MIDI capture. Direct iPad/Strike USB capture,
+card access and deployment still need separate hardware acceptance; see
+[the native editor plan](docs/NATIVE_STRIKE_EDITOR_PLAN.md).
 
 **Kits that came from another Strike library.** Commercial and hand-me-down kits often
 reference sounds by names your card does not use, so matching on filename finds nothing.
@@ -262,8 +264,12 @@ editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
 **MIDI tools** adds an explicitly selected native input, silent channel-message capture,
 per-channel note/velocity and hi-hat CC4 views, and confirmed pad Learn names for the take.
+Native event timing uses Core MIDI packet timestamps, with host callback time when a
+packet has no timestamp. Timing is not latency-calibrated; physical Strike timestamp
+behavior still needs attended verification.
 Learn uses a full-width, 44-point name field with explicit tap-to-focus before Apply.
-Recording stops on backgrounding, disconnection or reported driver errors and retains a partial take without
+Recording stops when the app becomes inactive or enters the background, on disconnection
+or reported driver errors, and retains a partial take without
 reconnecting. Stop before exporting JSON compatible with the web MIDI toolkit;
 captures stay in memory and need export before app termination. No MIDI output or
 kit mutation occurs. Direct iPad/Strike USB remains a separate hardware check.
