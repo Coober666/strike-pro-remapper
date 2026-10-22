@@ -206,8 +206,34 @@ on the installed iPad. It passed without source changes. Its log/xcresult/receip
 are retained at `/private/tmp/strike-issue85-baseline-20261022/`. That pass does not
 replace the earlier failed full run or establish that a lifecycle cause is proven.
 
-Thirteen deterministic helper contracts pass, including phase failure propagation,
+Fourteen deterministic helper contracts cover phase failure propagation,
 startup receipt/cleanup, source-drift interruption and refusal to omit test targets.
-Full new-source simulator and hosted matrix validation are pending at this commit.
+Build errors are included in the failure summary even when the final log lines
+only name failed compiler commands.
+
+The first follow-up at `6729ea8` exposed an isolation mistake: synchronous
+tearDownWithError is nonisolated, producing warnings locally and compile errors
+on hosted Xcode 16.4. Artifact `12400531925` retains that build failure and source
+receipt; no model/UI phase ran there. The cleanup now uses XCTest's async teardown
+on the test class's main actor, with no executor assumptions or diagnostic suppression.
+
+The local `6729ea8` iPad run passed the 34 models and the setlist UI class, then
+the signed-value editing test exceeded its unchanged 180-second limit after typing
+`-17`. Its thread samples show the app main thread idle and XCTest waiting for
+animation quiescence; its screenshot shows keyboard language suggestions for the
+numeric field. A temporary display-awake assertion did not release that wait.
+An initial sandbox display query had no valid display handle and cannot establish
+pre-intervention sleep state; do not attribute this failure to display sleep.
+The run was interrupted after the recorded timeout because its synchronous
+teardown source was already superseded; the receipt marks it incomplete with
+unchanged inputs. Logs, xcresults, samples and screenshot remain at
+`/private/tmp/strike-issue85-new-20261022/`. The iPhone phase did not start.
+
+NumericValueField now opts out of autocorrection, spelling checks, capitalization
+and smart dashes because its contents are literal signed integers. This retains
+ordinary keyboard entry/Done/Apply and exact signed-value assertions; it does not
+disable animations or XCTest idle waits. The keyboard configuration is a concrete
+input correction, not proof that all historic animation stalls have one cause.
+See issue #85 and its linked PR for subsequent exact-source validation results.
 Do not describe a green rerun of unchanged source as a fix or claim all SDK failures
 are eliminated from a single new-source pass.

@@ -1077,8 +1077,10 @@ proxies. Do not infer an orientation, app-focus or readiness fix from a passing 
 The #85 lifecycle follow-up builds once and runs every model/UI target in separate
 serial sessions with distinct xcresults and phase receipts; scheme target changes
 must not silently omit coverage. NativeUITestCase stops its owned app before
-portrait setup and at teardown, asserting notRunning before restoring orientation.
+portrait setup and in async main-actor teardown, asserting notRunning before restoring orientation.
 Keep original test limits/assertions and failures; never retry a failed session.
+NumericValueField disables autocorrection, spell checking, capitalization and smart
+dashes for literal signed-integer input; preserve normal keyboard/focus behaviour.
 
 Initial physical iPhone 17 / iOS 26.6.2 acceptance (October 17): signed development
 install, launch, bundled demo, owner-confirmed Previous/Next and synthetic

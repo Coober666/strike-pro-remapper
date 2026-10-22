@@ -159,6 +159,12 @@ private struct NumericValueField: UIViewRepresentable {
         field.borderStyle = .roundedRect
         field.textAlignment = .right
         field.keyboardType = .numbersAndPunctuation
+        // These are literal signed integers, not prose. Keep keyboard language
+        // correction and punctuation substitution out of numeric entry.
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.autocapitalizationType = .none
+        field.smartDashesType = .no
         field.returnKeyType = .done
         field.font = UIFontMetrics(forTextStyle: .largeTitle).scaledFont(
             for: .monospacedDigitSystemFont(ofSize: 34, weight: .regular))

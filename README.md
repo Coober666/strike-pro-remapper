@@ -275,7 +275,8 @@ captures stay in memory and need export before app termination. No MIDI output o
 kit mutation occurs. Direct iPad/Strike USB remains a separate hardware check.
 Numeric settings offer a large text-entry field with Clear, a slider
 for larger changes, and ±1 buttons for fine adjustment. Tapping the number selects
-it for replacement; Apply confirms the edit and Cancel discards it.
+it for replacement; numeric entry disables spelling correction and smart dashes
+so signed values stay literal. Apply confirms the edit and Cancel discards it.
 **Export new copy** creates a uniquely named kit in a chosen Files
 folder, verifies its bytes and never replaces an existing file. Imported originals
 stay untouched. Kit edits remain in memory until export; export before closing the

@@ -22,7 +22,7 @@ class NativeUITestCase: XCTestCase {
         return app
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         // Release menus, keyboards and landscape state before XCTest's implicit
         // teardown, including when a test assertion has failed.
         if let app = ownedApplication {
@@ -33,7 +33,7 @@ class NativeUITestCase: XCTestCase {
             XCUIDevice.shared.orientation = .portrait
             ownedApplication = nil
         }
-        try super.tearDownWithError()
+        try await super.tearDown()
     }
 }
 

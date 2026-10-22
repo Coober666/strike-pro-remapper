@@ -197,6 +197,12 @@ class TestSessionTests(unittest.TestCase):
 
 
 class FailureSummaryTests(unittest.TestCase):
+    def test_build_errors_survive_when_the_log_tail_only_names_failed_commands(self):
+        reason = '/tmp/CompanionUITests.swift:28:22: error: main actor-isolated property cannot be referenced'
+        self.assertEqual(build_ios_companion.failure_summary('\n'.join([
+            reason, *['SwiftCompile normal arm64 other.swift'] * 500,
+            '** TEST BUILD FAILED **'])), [reason])
+
     def test_extracts_failure_reasons_from_anywhere_in_the_log(self):
         reason = ("/tmp/UITests/CompanionUITests.swift:154: error: -[CompanionUITests.CompanionUITests "
                   "testColdLaunchRestoresSongAndReadingPreferences] : XCTAssertTrue failed")

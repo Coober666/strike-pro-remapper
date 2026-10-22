@@ -101,7 +101,7 @@ def source_hashes(root):
 
 
 # xcodebuild prints the reason for each failed test far from the end of its log.
-FAILURE_MARKERS = (': error: -[', "' failed (", 'Assertion Failure:',
+FAILURE_MARKERS = (': error:', "' failed (", 'Assertion Failure:',
                    'exceeded execution time allowance', 'Restarting after unexpected exit')
 
 

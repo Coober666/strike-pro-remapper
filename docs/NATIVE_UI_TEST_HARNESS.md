@@ -104,8 +104,11 @@ XCTest PID acknowledgement failures. Cold-launch restoration requires a stopped 
 its song/reading assertions and document source-byte checks remain unchanged.
 All three UI test classes inherit NativeUITestCase. Create the one owned app with
 makeApplication(), retaining its private session across deliberate cold relaunches.
-Stop the previous process before resetting portrait. Teardown stops that owned app,
+Stop the previous process before resetting portrait. Async teardown stops that owned app,
 requires notRunning, then restores portrait, including after a failed assertion.
+Use XCTest's async teardown so app/device access stays on the main actor. The
+synchronous tearDownWithError override is nonisolated even on this test class;
+do not suppress its isolation diagnostics or assume the executor.
 Do not leave an open menu/keyboard or landscape process for implicit XCTest cleanup.
 Pure matcher tests that never create an app must not terminate another process.
 This removes cross-test state and makes cleanup observable; it does not establish
