@@ -33,11 +33,12 @@ remaining feature issues. This records software integration, not new hardware ev
 
 ## Next gates
 
-The [October 14 candidate review](docs/RELEASE_REVIEW_2026-10-14.md) reconciles all eight
-open issues and the #66 → #67 → #68 stack. Runtime candidate `d56baec` passed all ten
-CI checks and verification of the actual CI downloads. The [beta handoff](docs/BETA_CANDIDATE_2026-10-14.md)
-pins its downloads, hashes and first test. Merge/release integration and the physical
-acceptance sessions remain distinct gates.
+PRs #66, #67 and #68 are merged into main at `45c210d`. All five main CI jobs
+passed; the actual source and Windows downloads passed checksum, payload and
+extracted-app checks. The [beta handoff](docs/BETA_CANDIDATE_2026-10-14.md) pins those
+merged-build downloads and hashes. The [candidate review](docs/RELEASE_REVIEW_2026-10-14.md)
+preserves the integration evidence and open issue criteria. Physical acceptance
+and stable-release publication remain separate gates.
 
 The integrated MIDI toolkit adds local generic MIDI capture, saved browser sessions,
 visual replay, velocity/controller measurements, session comparison and portable exports.
@@ -66,8 +67,8 @@ and physical module/mobile acceptance remain separate gates.
 3. Exercise interrupted deployment and restoration using disposable media, then confirm
    the copied kit and both layers on the Strike.
 4. Finish distribution/signing after the launch and storage paths pass acceptance.
-   PR #67 supplies a tested unsigned Windows ZIP with Python/Tk/MIDI bundled; PRs #66
-   and #67 remain open, with #68 adding saved-work and import/export hardening.
+   Merged PR #67 supplies a tested unsigned Windows ZIP with Python/Tk/MIDI bundled;
+   #68 adds saved-work and import/export hardening.
    Test upgrades while preserving an external library.
 5. Invite a small outside beta to independently install, edit, save, deploy and restore.
 6. Add a focused general MIDI utility once the Strike workflow is dependable; do not
