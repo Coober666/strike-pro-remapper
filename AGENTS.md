@@ -279,7 +279,9 @@ library argument before hashing it, matching set_library_root(). Windows CI
 runs `tools/test_host_window.py` against real Tk widgets and a disposable loopback host;
 `STRIKE_REQUIRE_TK=1` makes unavailable Tk/display fail that job (other headless runs skip).
 Native WebKit downloads on macOS may decompose Unicode filenames: browser assertions
-compare NFC-normalized names. Release-polish paired tests log out in afterEach using
+compare NFC-normalized names. Wi-Fi editor tests wait for the redirected editor URL
+and visible session controls before interpreting a hidden boot overlay as readiness.
+Wi-Fi editor and release-polish paired tests log out in afterEach using
 the request context so failed assertions or aborted page routes cannot retain ownership.
 On macOS, the WebKit test project passes -NSAutomaticWindowAnimationsEnabled NO
 to its browser process. This avoids the sleeping-display animation thread hang in
