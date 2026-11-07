@@ -41,6 +41,18 @@ class SimulatorSelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'both an iPhone and iPad'):
             self.select({'com.apple.CoreSimulator.SimRuntime.iOS-27-0': pair('future')}, '26.2')
 
+    def test_device_specific_runtime_does_not_hide_complete_generic_pair(self):
+        groups = {
+            'com.apple.CoreSimulator.SimRuntime.iOS-27-1-iPhone19-3': pair('special')[:1],
+            'com.apple.CoreSimulator.SimRuntime.iOS-27-0': pair('generic'),
+        }
+        self.assertEqual(self.select(groups, '27.1'), ['genericiPhone', 'genericiPad'])
+
+    def test_device_specific_only_inventory_still_requires_complete_runtime_pair(self):
+        groups = {'com.apple.CoreSimulator.SimRuntime.iOS-27-1-iPhone19-3': pair('special')[:1]}
+        with self.assertRaisesRegex(ValueError, 'both an iPhone and iPad'):
+            self.select(groups, '27.1')
+
 
 class SimulatorLifecycleTests(unittest.TestCase):
     def test_preserves_preexisting_booted_simulator_on_failure(self):

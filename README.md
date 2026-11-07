@@ -264,6 +264,8 @@ editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
 The app includes a [Botanical Ink icon](docs/APP_ICON.md), with silver crossed
 drumsticks on graphite to match JakeLauncher.
+Native simulator selection ignores device-specific runtime names and still requires
+a complete iPhone/iPad pair supported by the selected Xcode SDK.
 **MIDI tools** adds an explicitly selected native input, silent channel-message capture,
 per-channel note/velocity and hi-hat CC4 views, and confirmed pad Learn names for the take.
 Native event timing uses Core MIDI packet timestamps, with host callback time when a
