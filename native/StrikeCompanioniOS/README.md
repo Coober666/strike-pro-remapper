@@ -3,6 +3,10 @@
 One native app for offline setlist performance and kit-copy editing, evolving from Strike Companion. It reads the same version-1
 JSON exported by Strike Remapper’s Setlist Builder. Requires iOS/iPadOS 17 or later.
 
+The bundled [Botanical Ink app icon](../../docs/APP_ICON.md) uses silver crossed
+drumsticks on graphite. The Xcode application target includes `Assets.xcassets`
+and selects its `AppIcon` set for Debug and Release builds.
+
 Import an export from **Files**, or use **Open in Strike Remapper** from another
 app. The entire document is validated by the existing Foundation-only
 `StrikeSetlists` local Swift package. Files are bounded to 1 MiB and 128 songs;

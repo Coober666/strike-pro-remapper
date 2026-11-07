@@ -60,7 +60,12 @@ def simulator_ids():
     for identifier, devices in inventory['devices'].items():
         prefix = 'com.apple.CoreSimulator.SimRuntime.iOS-'
         if identifier.startswith(prefix):
-            version = tuple(map(int, identifier.removeprefix(prefix).split('-')))
+            components = identifier.removeprefix(prefix).split('-')
+            # Device-specific runtimes are not general iOS version identifiers.
+            # Their presence must not hide a usable complete iPhone/iPad pair.
+            if not all(component.isdecimal() for component in components):
+                continue
+            version = tuple(map(int, components))
             version = (version + (0, 0, 0))[:3]
             if version <= sdk:
                 runtimes.append((version, devices))

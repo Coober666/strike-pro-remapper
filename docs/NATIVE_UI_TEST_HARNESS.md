@@ -35,6 +35,10 @@ phase's command/result/exit status, source hashes and completion state even when
 startup fails; source drift prevents the next session.
 Default simulator selection uses the newest installed iPhone/iPad runtime pair
 supported by the selected SDK; tests in `tools/test_ios_build.py` never access devices.
+Ignore device-specific runtime identifiers containing nonnumeric version segments
+such as `iOS-27-1-iPhone19-3`. They must not abort selection of an installed general
+iOS runtime pair. An inventory without a compatible complete pair still fails
+before building; this does not skip any model/UI tests or mix runtime groups.
 Keep import/rejection and source-byte UI assertions, plus selected-song retention
 model assertions. Reading options
 uses the standard labelled SwiftUI Menu with an icon-only presentation, avoiding
