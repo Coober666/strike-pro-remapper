@@ -1229,6 +1229,10 @@ physical-device, MIDI or module acceptance.
 
 ## Native product identity
 
+`native/StrikeCompanioniOS/Assets.xcassets/AppIcon.appiconset` supplies the Botanical Ink
+icon. Keep the catalog in the application resource phase and `AppIcon` selected
+for both Debug and Release. Artwork provenance and the prompt are in docs/APP_ICON.md.
+
 The owner chose one native Strike Remapper app with performance and editing views,
 evolving the existing iPhone/iPad Companion. The full Strike Remapper web app is
 the feature target; current native builds are partial implementations, not feature

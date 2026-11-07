@@ -262,6 +262,8 @@ Accessibility text sizes use Zones automatically. The large-text UI check also v
 that Done dismisses the editor after zone navigation. The welcome screen offers kit
 editing and setlist import together under the Strike Remapper name. Existing
 Companion installs retain their bundle identity, document associations and saved setlist.
+The app includes a [Botanical Ink icon](docs/APP_ICON.md), with silver crossed
+drumsticks on graphite to match JakeLauncher.
 **MIDI tools** adds an explicitly selected native input, silent channel-message capture,
 per-channel note/velocity and hi-hat CC4 views, and confirmed pad Learn names for the take.
 Native event timing uses Core MIDI packet timestamps, with host callback time when a
